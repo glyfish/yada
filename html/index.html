@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>VanJS Hello World</title>
+
+    <!-- Load VanJS UMD build -->
+    <script src="https://cdn.jsdelivr.net/gh/vanjs-org/van/public/van-1.5.5.nomodule.min.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 2rem;
+            max-width: 400px;
+            margin: auto;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <h2>VanJS Hello World</h2>
+    <div id="app"></div>
+
+    <script>
+        // After loading van.global.js, `van` is defined and contains `tags`
+        console.log("Is van defined? ->", typeof van);  // should log "object"
+
+        // Destructure helper methods from van.tags
+        const { div } = van.tags;
+        const { add } = van;
+
+        // Render "Hello World" into #app
+        add(document.getElementById("app"),
+            div("Hello World")
+        );
+    </script>
+</body>
+</html>
