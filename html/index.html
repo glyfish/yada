@@ -81,7 +81,7 @@
                         button({ onclick: handleSubmit }, "Submit")
                     ),
                     h3("YADA Response"),
-                   div(
+                    div(
                        { class: "markdown-output", style: () => markdownHTML.val ? "display:block" : "display:none" },
                        div({ innerHTML: () => marked.parse(markdownHTML.val) })
                    )                
