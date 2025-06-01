@@ -80,7 +80,7 @@
                     div({ class: "button-wrapper" },
                         button({ onclick: handleSubmit }, "Submit")
                     ),
-                    h3("YADA Response"),
+                    h3({ style: () => markdownHTML.val ? "display:block" : "display:none" }, "YADA Response"),
                     div(
                        { class: "markdown-output", style: () => markdownHTML.val ? "display:block" : "display:none" },
                        div({ innerHTML: () => marked.parse(markdownHTML.val) })
