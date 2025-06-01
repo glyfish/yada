@@ -2,37 +2,92 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
-    <title>VanJS Hello World</title>
-
-    <!-- Load VanJS UMD build -->
-    <script src="https://cdn.jsdelivr.net/gh/vanjs-org/van/public/van-1.5.5.nomodule.min.js"></script>
-
+    <title>YADA</title>
     <style>
         body {
             font-family: Arial, sans-serif;
             padding: 2rem;
-            max-width: 400px;
+            max-width: 800px;
             margin: auto;
-            text-align: center;
+        }
+        h2 {
+            text-align: left;
+        }
+        .input-container {
+            margin-top: 1rem;
+        }
+        .input-container textarea {
+            width: 100%;
+            padding: 0.5rem;
+            font-size: 1rem;
+            box-sizing: border-box;
+            margin-bottom: 0.5rem;
+            overflow: hidden;
+        }
+        .input-container .button-wrapper {
+            text-align: right;
+        }
+        .input-container .button-wrapper button {
+            padding: 0.5rem 1rem;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+        .markdown-output {
+            margin-top: 1.5rem;
+            padding: 1rem;
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 4px;
         }
     </style>
 </head>
+
 <body>
-    <h2>VanJS Hello World</h2>
+    <h2>YADA</h2>
     <div id="app"></div>
 
-    <script>
-        // After loading van.global.js, `van` is defined and contains `tags`
-        console.log("Is van defined? ->", typeof van);  // should log "object"
+    <script type="module">
+        import van from "./vendor/van-1.5.5.min.js";
+        import { marked } from "./vendor/marked.esm.js";
 
-        // Destructure helper methods from van.tags
-        const { div } = van.tags;
-        const { add } = van;
+        const { div, textarea, button, h3 } = van.tags;
+        const { add, state } = van;
 
-        // Render "Hello World" into #app
+        const textValue = state("");
+        const markdownHTML = state("");
+        
+        const handleSubmit = () => {
+            markdownHTML.val = "# Example Document\n\n"
+                             + "This is a **markdown** example generated on submit.\n\n"
+                             + "- Item 1\n"
+                             + "- Item 2\n"
+                             + "\n"
+                             + "Thanks!";
+        };
+
         add(document.getElementById("app"),
-            div("Hello World")
-        );
-    </script>
+            div(
+                div({ class: "input-container" },
+                    textarea({
+                        rows: 4,
+                        placeholder: "Ask something...",
+                        oninput: e => {
+                            e.target.style.height = 'auto';
+                            e.target.style.height = e.target.scrollHeight + 'px';
+                            textValue.val = e.target.value;
+                        }
+                    }),
+                    div({ class: "button-wrapper" },
+                        button({ onclick: handleSubmit }, "Submit")
+                    ),
+                    h3("YADA Response"),
+                   div(
+                       { class: "markdown-output", style: () => markdownHTML.val ? "display:block" : "display:none" },
+                       div({ innerHTML: () => marked.parse(markdownHTML.val) })
+                   )                
+                )
+            )
+        );    
+</script>
 </body>
 </html>
