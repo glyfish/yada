@@ -56,13 +56,18 @@
         const textValue = state("");
         const markdownHTML = state("");
         
-        const handleSubmit = () => {
-            markdownHTML.val = "# Example Document\n\n"
-                             + "This is a **markdown** example generated on submit.\n\n"
-                             + "- Item 1\n"
-                             + "- Item 2\n"
-                             + "\n"
-                             + "Thanks!";
+        const handleSubmit = async () => {
+            try {
+                const response = await fetch("/api/request", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ input: textValue.val })
+                });
+                const data = await response.json();
+                markdownHTML.val = data.result;
+            } catch (err) {
+                alert(`Error: ${err.message}`);
+            }
         };
 
         add(document.getElementById("app"),
