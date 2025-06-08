@@ -19,4 +19,4 @@ async def generate_markdown(req: RequestPayload):
 html_path = os.path.join(os.path.dirname(__file__), "../html")
 app.mount("/", StaticFiles(directory=html_path, html=True), name="html")
 
-# To run: uvicorn backend.main:app --reload
+# uvicorn api.main:app --reload --port 8000
