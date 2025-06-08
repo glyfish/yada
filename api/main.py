@@ -10,13 +10,13 @@ app = FastAPI()
 class RequestPayload(BaseModel):
     input: str
 
-html_path = os.path.join(os.path.dirname(__file__), "../html")
-app.mount("/", StaticFiles(directory=html_path, html=True), name="html")
-
 @app.post("/api/request")
 async def generate_markdown(req: RequestPayload):
     # For now, return a hardcoded markdown string
-    print(req.input)
     return {"result": f"# You sent:\n\n{req.input}\n"}
+
+
+html_path = os.path.join(os.path.dirname(__file__), "../html")
+app.mount("/", StaticFiles(directory=html_path, html=True), name="html")
 
 # To run: uvicorn backend.main:app --reload
