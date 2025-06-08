@@ -3,6 +3,9 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import BaseMessage, HumanMessage
 from langgraph.graph import END
 
+from apps.agentic.core.messages import WorkerState
+
+
 def load_api_key(filepath="../.chatgpt_key"):
     with open(filepath, "r") as file:
         return file.read().strip()
@@ -33,11 +36,47 @@ def log_output(x):
     return x
 
 
-def build_llm():
-    """Build an LLM with a custom model name."""
-    return ChatOpenAI(model="gpt-4", temperature=0.5)
+def build_llm(model="gpt-4") -> ChatOpenAI:
+    """
+    Build an LLM with a custom model name.
+    """
+
+    return ChatOpenAI(model=model, temperature=0.5)
 
 
 def get_last_message(state) -> BaseMessage:
-    """Get the last message from a list of messages."""
+    """
+    Get the last message from a list of messages.
+    """
+
+    if not isinstance(state, dict) or "messages" not in state:
+        raise ValueError("Invalid state format. Expected a dictionary with 'messages' key.")
+    if not state["messages"]:
+        raise ValueError("No messages found in the state.")
+    if not isinstance(state["messages"], list):
+        raise ValueError("Messages should be a list of BaseMessage objects.")
+    if len(state["messages"]) == 0:
+        raise ValueError("No messages found in the state.")
+    if not isinstance(state["messages"][-1], BaseMessage):
+        raise ValueError("The last message is not a BaseMessage object.")
+    
     return state["messages"][-1]
+
+
+def should_continue(state: WorkerState):
+    messages = state["messages"]
+    if not messages or len(messages) == 0:
+        return END
+    if not isinstance(messages, list):
+        raise ValueError("Messages should be a list of BaseMessage objects.")
+    if len(messages) < 2:
+        raise ValueError("At least two messages are required to determine continuation.")
+    
+    ai_message = messages[-1]
+    
+    # Check if it's an AI message with tool calls
+    if hasattr(ai_message, "tool_calls") and len(ai_message.tool_calls) > 0:
+        return "tool"
+    
+    return END
+
