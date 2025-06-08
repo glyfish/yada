@@ -1,4 +1,8 @@
 # Byte-compiled / optimized / DLL files
+.chatgpt_key
+.langsmith_key
+.tavily_key
+
 __pycache__/
 *.py[cod]
 *$py.class
