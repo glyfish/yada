@@ -6,7 +6,7 @@ from langgraph.graph import END
 from apps.agentic.core.messages import WorkerState
 
 
-def load_api_key(filepath="../.chatgpt_key"):
+def load_api_key(filepath=".chatgpt_key"):
     with open(filepath, "r") as file:
         return file.read().strip()
 
@@ -16,14 +16,14 @@ def set_chatgpt_env():
 
 
 def set_langsmith_env(project_name="pr-crushing-rowing-30", tracing=False):
-    os.environ["LANGSMITH_API_KEY"] = load_api_key("../.langsmith_key")
+    os.environ["LANGSMITH_API_KEY"] = load_api_key(".langsmith_key")
     os.environ["LANGCHAIN_TRACING_V2"] = "true" if tracing else "false"
     os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
     os.environ["LANGCHAIN_PROJECT"] = "pr-crushing-rowing-30"
 
 
 def set_tavily_env():
-    os.environ["TAVILY_API_KEY"] = load_api_key("../.tavily_key")
+    os.environ["TAVILY_API_KEY"] = load_api_key(".tavily_key")
 
 
 def log_input(x):
@@ -42,25 +42,6 @@ def build_llm(model="gpt-4") -> ChatOpenAI:
     """
 
     return ChatOpenAI(model=model, temperature=0.5)
-
-
-def get_last_message(state) -> BaseMessage:
-    """
-    Get the last message from a list of messages.
-    """
-
-    if not isinstance(state, dict) or "messages" not in state:
-        raise ValueError("Invalid state format. Expected a dictionary with 'messages' key.")
-    if not state["messages"]:
-        raise ValueError("No messages found in the state.")
-    if not isinstance(state["messages"], list):
-        raise ValueError("Messages should be a list of BaseMessage objects.")
-    if len(state["messages"]) == 0:
-        raise ValueError("No messages found in the state.")
-    if not isinstance(state["messages"][-1], BaseMessage):
-        raise ValueError("The last message is not a BaseMessage object.")
-    
-    return state["messages"][-1]
 
 
 def should_continue(state: WorkerState):

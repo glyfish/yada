@@ -66,3 +66,23 @@ class WorkerState(TypedDict):
 
     messages: Annotated[Sequence[BaseMessage], add_messages]
 
+
+def get_last_message(state) -> BaseMessage:
+    """
+    Get the last message from a list of messages.
+    """
+    
+    if not isinstance(state, dict) or "messages" not in state:
+        raise ValueError("Invalid state format. Expected a dictionary with 'messages' key.")
+    if not state["messages"]:
+        raise ValueError("No messages found in the state.")
+    if not isinstance(state["messages"], list):
+        raise ValueError("Messages should be a list of BaseMessage objects.")
+    if len(state["messages"]) == 0:
+        raise ValueError("No messages found in the state.")
+    if not isinstance(state["messages"][-1], BaseMessage):
+        raise ValueError("The last message is not a BaseMessage object.")
+    
+    return state["messages"][-1]
+
+

@@ -1,19 +1,30 @@
 # backend/main.py
+import os
+
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-import os
+
+from apps.agentic.agents.supervisor import SupervisorAgent
+from apps.agentic.core.utils import set_chatgpt_env, set_langsmith_env, set_tavily_env
 
 app = FastAPI()
+
+
+set_langsmith_env()
+set_chatgpt_env()
+set_tavily_env()
+
 
 class RequestPayload(BaseModel):
     input: str
 
+
 @app.post("/api/request")
 async def generate_markdown(req: RequestPayload):
-    # For now, return a hardcoded markdown string
-    return {"result": f"# You sent:\n\n{req.input}\n"}
+    supervisor = SupervisorAgent()
+    return await supervisor.process_request(req.input)
 
 
 html_path = os.path.join(os.path.dirname(__file__), "../html")
