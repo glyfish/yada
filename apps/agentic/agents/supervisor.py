@@ -1,16 +1,15 @@
-import logging
-
 from langchain_core.messages import BaseMessage, HumanMessage
 from langgraph.graph import END
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+
+from lib.logger import get_logger
 
 from apps.agentic.core.messages import get_last_message, WorkerState
 from apps.agentic.core.utils import build_llm, should_continue
 from apps.agentic.agents.search import SearchAgent
 from apps.agentic.agents.bar_chart import BarChartAgent
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger = get_logger("YADA")
 
 class SupervisorAgent:
     """
@@ -62,7 +61,7 @@ class SupervisorAgent:
             return agent_msg
 
         for node in next_nodes:
-            logger.debug("Calling node:", node)
+            logger.debug(f"Calling node: {node}")
             
             if node not in self.__workers:
                 raise RuntimeError(f"Unknown worker: {node}")
@@ -109,9 +108,12 @@ class SupervisorAgent:
 
     def __create_agent_node(self, agent, node_name: str):
         async def node(state, config):
+            logger.debug(f"Invoking worker: {node_name}")
+            logger.debug(f"Request Message: {get_last_message(state).content}")
             result = await agent.ainvoke(state, config)
             last_message = get_last_message(result)
-            content: str = last_message.content
+            content = last_message.content
+            logger.debug(f"Response Message: {content}")
             return {
                 "messages": [
                     HumanMessage(content=content, name=node_name)

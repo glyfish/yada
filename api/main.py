@@ -1,21 +1,26 @@
 # backend/main.py
 import os
+import logging
+import colorlog
+import sys
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from lib.logger import get_logger
 from apps.agentic.agents.supervisor import SupervisorAgent
 from apps.agentic.core.utils import set_chatgpt_env, set_langsmith_env, set_tavily_env
 
-app = FastAPI()
 
+logger = get_logger("YADA")
+
+app = FastAPI()
 
 set_langsmith_env()
 set_chatgpt_env()
 set_tavily_env()
-
 
 class RequestPayload(BaseModel):
     input: str
@@ -23,8 +28,14 @@ class RequestPayload(BaseModel):
 
 @app.post("/api/request")
 async def generate_markdown(req: RequestPayload):
+    logger.debug(f"YADA request: {req.input}")
     supervisor = SupervisorAgent()
-    return await supervisor.process_request(req.input)
+    result = await supervisor.process_request(req.input)
+
+    message = result['messages'][-1].content
+    logger.debug(f"Response Message: {message}")
+
+    return {"result": message}
 
 
 html_path = os.path.join(os.path.dirname(__file__), "../html")
