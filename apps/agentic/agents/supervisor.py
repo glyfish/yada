@@ -1,9 +1,16 @@
+import logging
+
 from langchain_core.messages import BaseMessage, HumanMessage
 from langgraph.graph import END
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from apps.agentic.core.messages import get_last_message, WorkerState
 from apps.agentic.core.utils import build_llm, should_continue
+from apps.agentic.agents.search import SearchAgent
+from apps.agentic.agents.bar_chart import BarChartAgent
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 class SupervisorAgent:
     """
@@ -13,12 +20,58 @@ class SupervisorAgent:
 
     def __init__(self):
         self.__llm = build_llm()
+        
+        self.__workers = {
+            "researcher": self.__create_agent_node(SearchAgent().agent, "researcher"),
+            "bar_chart_generator": self.__create_agent_node(BarChartAgent().agent, "bar_chart_generator")   
+        }
+
+        self.__prompt = self.__create_prompt()
+        self.__agent = self.__prompt | self.__llm
+        
 
 
-    def invoke(self, state: WorkerState, config=None) -> WorkerState:
-        """Invoke the agent with the current state."""
-        return self.agent.invoke(state, config)
+    @property
+    def agent(self): 
+        """
+        Get the compiled agent state graph.
+        """
+        return self.__agent
     
+    
+    async def process_request(self, request: str) -> WorkerState:
+        """
+        Process a user request and initialize the state.
+
+        Parameters
+        ----------
+            request: str
+                The user request to process.
+        Returns:
+            WorkerState
+                The initial state with the user request.
+        """
+
+        agent_msg = {"messages": [HumanMessage(content=request)]}
+        supervisor_output = await self.agent.ainvoke(agent_msg)
+        next_nodes = supervisor_output.content.split(", ")
+        logger.debug(f"Supervisor decided to call: {next_nodes}")
+
+        if "FINISH" in next_nodes:
+            logger.debug("No further action required. Finishing conversation.")
+            return agent_msg
+
+        for node in next_nodes:
+            logger.debug("Calling node:", node)
+            
+            if node not in self.__workers:
+                raise RuntimeError(f"Unknown worker: {node}")
+
+            worker = self.__workers[node]
+            agent_msg = await worker(agent_msg, {})
+
+        return agent_msg
+
 
     def __create_prompt(self):
         """
@@ -28,15 +81,15 @@ class SupervisorAgent:
     
         system_prompt = (
             "You are a supervisor tasked with delegating user requests to a team of agents. The agents you supervise" 
-            "are called {team_members}. {team_member_0} performs search requests. {team_member_1} plots data as a bar chart. "
+            "are called {team_members}. {researcher} performs search requests. {bar_chart_generator} plots data as a bar chart. "
             "You must determine which of the agents should process the user request and respond with the name of the all agents"
             "required. If there is no agent that can respond to the request return FINISH." 
             "It is possible that a request would require multiple agents and be executed in some order."
             "You should return all the agents that should be called in the order they should be called."
         )
 
-        team_members = ["researcher", "plotter"]
-        options = ["FINISH"] + team_members 
+        team = list(self.__workers.keys())
+        options = ["FINISH"] + team
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
@@ -48,15 +101,15 @@ class SupervisorAgent:
         ])
 
         return  prompt.partial(options=", ".join(options), 
-                               team_members=", ".join(team_members), 
-                               team_member_0=team_members[0], 
-                               team_member_1=team_members[1])
+                               team_members=", ".join(team), 
+                               researcher=team[0], 
+                               bar_chart_generator=team[1])
 
 
 
-    def __create_agent_node(agent, node_name: str):
-        def node(state, config):
-            result = agent.invoke(state, config)
+    def __create_agent_node(self, agent, node_name: str):
+        async def node(state, config):
+            result = await agent.ainvoke(state, config)
             last_message = get_last_message(result)
             content: str = last_message.content
             return {
