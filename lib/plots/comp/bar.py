@@ -2,13 +2,16 @@ import numpy
 import pandas
 import matplotlib.dates as mdates
 import matplotlib.units as munits
+from matplotlib import rcParams
 from matplotlib import pyplot
 from datetime import datetime, date
 
 from lib.plots.comp.plot_utils import (__plot_curve, __plot_curves, __twinx_ticks, __plot_bar, __axis_twinx)
 
 from lib.utils import get_param_default_if_missing
+
 from lib import config
+from lib.config import SharedCycler
 
 def bar(axis: pyplot.axis, y: numpy.ndarray[float], x: numpy.ndarray=None, **kwargs):
     """
@@ -48,7 +51,8 @@ def bar(axis: pyplot.axis, y: numpy.ndarray[float], x: numpy.ndarray=None, **kwa
     if title is not None:
         axis.set_title(title, y=title_offset + 1.0)
 
-    __plot_bar(axis, x, y, 0, **kwargs)
+    color_cycler = SharedCycler(rcParams['axes.prop_cycle'])
+    __plot_bar(axis, x, y, color_cycler, 0, **kwargs)
 
 
 def positive_negative_bar(axis: pyplot.axis, y: numpy.ndarray[float], x: numpy.ndarray=None, **kwargs):

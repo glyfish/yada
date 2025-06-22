@@ -33,7 +33,7 @@ async def generate_markdown(req: RequestPayload):
     result = await supervisor.process_request(req.input)
 
     message = result['messages'][-1].content
-    logger.debug(f"Response Message: {message}")
+    logger.debug(f"Supervisor response Message: {message}")
 
     return {"result": message}
 

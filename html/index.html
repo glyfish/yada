@@ -39,6 +39,19 @@
             border: 1px solid #ddd;
             border-radius: 4px;
         }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #ccc;
+            border-top: 4px solid #333;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 
@@ -55,8 +68,10 @@
 
         const textValue = state("");
         const markdownHTML = state("");
+        const isLoading = state(false);
         
         const handleSubmit = async () => {
+            isLoading.val = true;
             try {
                 const response = await fetch("/api/request", {
                     method: "POST",
@@ -67,6 +82,8 @@
                 markdownHTML.val = data.result;
             } catch (err) {
                 alert(`Error: ${err.message}`);
+            } finally {
+                isLoading.val = false;
             }
         };
 
@@ -86,6 +103,13 @@
                         button({ onclick: handleSubmit }, "Submit")
                     ),
                     h3({ style: () => markdownHTML.val ? "display:block" : "display:none" }, "YADA Response"),
+                    div({
+                        id: "spinner-overlay",
+                        style: () => isLoading.val
+                            ? "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(255,255,255,0.5);z-index:9999;display:flex;justify-content:center;align-items:center;"
+                            : "display:none"                    },
+                        div({ class: "spinner" })
+                    ),
                     div(
                        { class: "markdown-output", style: () => markdownHTML.val ? "display:block" : "display:none" },
                        div({ innerHTML: () => marked.parse(markdownHTML.val) })

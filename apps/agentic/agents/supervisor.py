@@ -113,7 +113,7 @@ class SupervisorAgent:
             result = await agent.ainvoke(state, config)
             last_message = get_last_message(result)
             content = last_message.content
-            logger.debug(f"Response Message: {content}")
+            logger.debug(f"{node_name} response Message: {content}")
             return {
                 "messages": [
                     HumanMessage(content=content, name=node_name)
