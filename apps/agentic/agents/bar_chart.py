@@ -10,6 +10,13 @@ from langchain_core.tools import tool
 from apps.agentic.core.messages import WorkerState
 from apps.agentic.core.utils import build_llm, should_continue
 
+import os
+import sys
+import numpy
+from matplotlib import pyplot
+
+from lib import config
+from lib.plots import bar
 
 class BarChartInput(BaseModel):
     """Input schema for the bar chart generator."""
@@ -31,6 +38,10 @@ class BarChartAgent:
         self.__tooled_llm = self.__llm.bind_tools(self.__tools)
         self.__agent = self.__create_agent()
 
+        sys.path.append(os.path.abspath(os.path.join(os.getcwd(), '..')))
+        pyplot.style.use(config.glyfish_style)
+
+    
     @property
     def agent(self):
         """
@@ -40,7 +51,8 @@ class BarChartAgent:
 
 
     @tool(args_schema=BarChartInput)
-    def bar_chart_tool(data: Dict[str, float], title: str) -> str:
+    def bar_chart_tool(data: Dict[str, float], description: str, title: str, xlabel: str,
+                       ylabel: str) -> str:
         """Generate a bar chart from data points and display it.
         
         Parameters
@@ -110,3 +122,22 @@ class BarChartAgent:
         )
 
         return graph.compile()
+    
+    
+    def __generate_bar_chart(self, data: Dict[str, float], title: str) -> str:
+        """
+        Create a bar chart from the provided data.
+        
+        Parameters
+        ----------
+            data: Dict[str, float]
+                Dictionary where keys are labels and values are numeric values to plot
+            title: str
+                Title of the chart
+            
+        Returns:
+            str: A string representation of the bar chart
+        """
+        # Placeholder for actual bar chart generation logic
+        return f"Bar Chart with title '{title}' and data {data}"
+    

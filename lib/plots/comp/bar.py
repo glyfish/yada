@@ -5,6 +5,7 @@ import matplotlib.units as munits
 from matplotlib import rcParams
 from matplotlib import pyplot
 from datetime import datetime, date
+from numpy.typing import NDArray
 
 from lib.plots.comp.plot_utils import (__plot_curve, __plot_curves, __twinx_ticks, __plot_bar, __axis_twinx)
 
@@ -13,7 +14,7 @@ from lib.utils import get_param_default_if_missing
 from lib import config
 from lib.config import SharedCycler
 
-def bar(axis: pyplot.axis, y: numpy.ndarray[float], x: numpy.ndarray=None, **kwargs):
+def bar(axis: pyplot.axis, y: NDArray, x: NDArray=None, **kwargs):
     """
     Plot samples in a bar chart.
 
@@ -55,7 +56,7 @@ def bar(axis: pyplot.axis, y: numpy.ndarray[float], x: numpy.ndarray=None, **kwa
     __plot_bar(axis, x, y, color_cycler, 0, **kwargs)
 
 
-def positive_negative_bar(axis: pyplot.axis, y: numpy.ndarray[float], x: numpy.ndarray=None, **kwargs):
+def positive_negative_bar(axis: pyplot.axis, y: NDArray, x: NDArray=None, **kwargs):
     """
     Plot data in a bar chart with different colors for positive and negative values.
 
@@ -105,8 +106,8 @@ def positive_negative_bar(axis: pyplot.axis, y: numpy.ndarray[float], x: numpy.n
     __plot_bar(axis, x, y, 0, **kwargs)
 
 
-def twinx_bar_line(axis: pyplot.axis, y_bar: numpy.ndarray[float], y_line: numpy.ndarray[float], x_bar: numpy.ndarray=None,
-                    x_line: numpy.ndarray=None, **kwargs):
+def twinx_bar_line(axis: pyplot.axis, y_bar: NDArray, y_line: NDArray, x_bar: NDArray=None,
+                    x_line: NDArray=None, **kwargs):
     """
     Bar plot and line plot using same x-axis but different scales on y-axis. Bar plot is on left y-axis
     and line plot is on right y-axis.
@@ -194,8 +195,8 @@ def twinx_bar_line(axis: pyplot.axis, y_bar: numpy.ndarray[float], y_line: numpy
 
 
 
-def twinx_bar_line_comparison(axis: pyplot.axis, y_bar: numpy.ndarray, y_line: numpy.ndarray[float], x_bar: numpy.ndarray=None,
-                              x_line: numpy.ndarray=None, **kwargs):
+def twinx_bar_line_comparison(axis: pyplot.axis, y_bar: NDArray, y_line: NDArray, x_bar: NDArray=None,
+                              x_line: NDArray=None, **kwargs):
     """
     Bar plot and comparison line plot using same x-axis but different scales on y-axis. Bar plot is on left y-axis
     and line plot is on right y-axis.
@@ -286,7 +287,7 @@ def twinx_bar_line_comparison(axis: pyplot.axis, y_bar: numpy.ndarray, y_line: n
         axis.legend(list, labs, loc=legend_loc, bbox_to_anchor=(0.1, 0.1, 0.9, 0.9))
 
 
-def hist(axis: pyplot.axis, samples: numpy.ndarray[float], fx=None, **kwargs):
+def hist(axis: pyplot.axis, samples: NDArray, fx=None, **kwargs):
     """
     Plot samples in histogram and compare with given function.
 
