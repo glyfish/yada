@@ -2,6 +2,7 @@
 .chatgpt_key
 .langsmith_key
 .tavily_key
+html/plots
 
 __pycache__/
 *.py[cod]

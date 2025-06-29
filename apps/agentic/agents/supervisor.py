@@ -1,6 +1,7 @@
 from langchain_core.messages import BaseMessage, HumanMessage
 from langgraph.graph import END
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+import langchain
 
 from lib.logger import get_logger
 
@@ -29,7 +30,6 @@ class SupervisorAgent:
         self.__agent = self.__prompt | self.__llm
         
 
-
     @property
     def agent(self): 
         """
@@ -50,10 +50,10 @@ class SupervisorAgent:
             WorkerState
                 The initial state with the user request.
         """
-
+        
         agent_msg = {"messages": [HumanMessage(content=request)]}
         supervisor_output = await self.agent.ainvoke(agent_msg)
-        next_nodes = supervisor_output.content.split(", ")
+        next_nodes = [item.strip() for item in supervisor_output.content.split(",")]
         logger.debug(f"Supervisor decided to call: {next_nodes}")
 
         if "FINISH" in next_nodes:
@@ -79,11 +79,11 @@ class SupervisorAgent:
         """
     
         system_prompt = (
-            "You are a supervisor tasked with delegating user requests to a team of agents. The agents you supervise" 
+            "You are a supervisor tasked with delegating user requests to a team of agents. The agents you supervise " 
             "are called {team_members}. {researcher} performs search requests. {bar_chart_generator} plots data as a bar chart. "
-            "You must determine which of the agents should process the user request and respond with the name of the all agents"
-            "required. If there is no agent that can respond to the request return FINISH." 
-            "It is possible that a request would require multiple agents and be executed in some order."
+            "You must determine which of the agents should process the user request and respond with the name of the all agents "
+            "required. If there is no agent that can respond to the request return FINISH. " 
+            "It is possible that a request would require multiple agents and be executed in some order. "
             "You should return all the agents that should be called in the order they should be called."
         )
 
@@ -98,6 +98,13 @@ class SupervisorAgent:
                 "Given the conversation above, who should act next? Or should we FINISH Select one of: {options}"
             )
         ])
+
+        formatted_system_prompt = prompt.format(messages=[], 
+                                                options=", ".join(options), 
+                                                team_members=", ".join(team), 
+                                                researcher=team[0], 
+                                                bar_chart_generator=team[1])
+        logger.debug(f"Supervisor prompt: {formatted_system_prompt}")
 
         return  prompt.partial(options=", ".join(options), 
                                team_members=", ".join(team), 

@@ -36,12 +36,12 @@ def log_output(x):
     return x
 
 
-def build_llm(model="gpt-4") -> ChatOpenAI:
+def build_llm(model="gpt-4.1") -> ChatOpenAI:
     """
     Build an LLM with a custom model name.
     """
 
-    return ChatOpenAI(model=model, temperature=0.5)
+    return ChatOpenAI(model=model, temperature=0)
 
 
 def should_continue(state: WorkerState):
