@@ -17,6 +17,10 @@ from matplotlib import pyplot
 
 from lib import config
 from lib.plots import bar
+from lib.utils import generate_plot_file_name
+from lib.logger import get_logger
+
+logger = get_logger("YADA")
 
 class BarChartInput(BaseModel):
     """Input schema for the bar chart generator."""
@@ -51,8 +55,10 @@ class BarChartAgent:
 
 
     @tool(args_schema=BarChartInput)
-    def bar_chart_tool(data: Dict[str, float], description: str, title: str, xlabel: str,
-                       ylabel: str) -> str:
+    def bar_chart_tool(data: Dict[str, float], 
+                       title: str = "Bar Chart", 
+                       xlabel: str = "Categories", 
+                       ylabel: str = "Values") -> str:
         """Generate a bar chart from data points and display it.
         
         Parameters
@@ -61,6 +67,12 @@ class BarChartAgent:
                 Dictionary where keys are labels and values are numeric values to plot
             title: str
                 Title of the chart (optional, defaults to "Bar Chart")
+            xlabel: str
+                Label for the x-axis (optional, defaults to "Categories")
+            ylabel: str
+                Label for the y-axis (optional, defaults to "Values")
+            xlabel_rotation: int
+                Rotation angle for the x-axis labels (optional, defaults to 0)
             
         Returns:
             plot as string
@@ -72,6 +84,7 @@ class BarChartAgent:
             )
         """
 
+        logger.debug(f"bar_chart_tool: {data}")   
         return f"{data}"
 
 
@@ -93,7 +106,7 @@ class BarChartAgent:
         """
     
         return ChatPromptTemplate.from_messages([
-            ("system", "You are a chart generator. You may use the generate_bar_chart tool to generate a chart."),
+            ("system", "You are a chart generator. You may use the bar_chart_tool tool to generate a chart."),
             MessagesPlaceholder(variable_name="messages"),
             ("system", "If you choose to call a tool, do so; otherwise, provide your findings in plain text."),
         ])
@@ -124,7 +137,8 @@ class BarChartAgent:
         return graph.compile()
     
     
-    def __generate_bar_chart(self, data: Dict[str, float], title: str) -> str:
+    def __generate_bar_chart(self, data: Dict[str, float], title: str, xlabel: str, ylabel: str,
+                             xlabel_rotation: int) -> str:
         """
         Create a bar chart from the provided data.
         
@@ -134,10 +148,25 @@ class BarChartAgent:
                 Dictionary where keys are labels and values are numeric values to plot
             title: str
                 Title of the chart
+            xlabel: str
+                Chart xlabel
+            ylabel: str
+                chart ylabel
+            xlabel_rotation: int
+                Rotation angle for the x-axis labels
             
         Returns:
             str: A string representation of the bar chart
         """
-        # Placeholder for actual bar chart generation logic
-        return f"Bar Chart with title '{title}' and data {data}"
+
+        x = numpy.array(list(data.keys()))
+        y = data.values()
+
+        file_name = generate_plot_file_name("bar_chart", path="../html/plots")
+        bar(y, x, alpha=1.0, bar_width=0.9, xlabel_rotation=xlabel_rotation,
+            xlabel=xlabel, ylabel=ylabel, title=title,
+            figsize=(10, 6), file_name=file_name)
+
+        print(file_name)
+        return file_name
     

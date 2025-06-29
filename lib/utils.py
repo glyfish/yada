@@ -1,7 +1,9 @@
+import os
 import numpy
 from enum import Enum
 from typing import Tuple
 from numpy.typing import NDArray
+import shortuuid
 
 from pandas import read_csv, DataFrame
 
@@ -346,4 +348,30 @@ def read_yahoo_data(file_path: str) -> DataFrame:
     """
     
     return read_csv(file_path, index_col=0, parse_dates=['Date']).sort_values(by='Date').dropna()
+
+
+def generate_plot_file_name(file_name: str, path="html/plots", extension: str = "png") -> str:
+    """
+    Generate a file name with the specified prefix, suffix and extension.
+
+    Parameters
+    ----------
+    prefix: str
+        File name prefix.
+    suffix: str
+        File name suffix.
+    extension: str
+        File name extension (default "csv").
+
+    Returns
+    -------
+    str
+        Generated file name.
+    """
+    
+    root_dir = os.getcwd()
+    full_path = os.path.join(root_dir, path, file_name)
+
+    uuid = shortuuid.uuid()  # Generate a short unique suffix
+    return f"{full_path}-{uuid}.{extension}"
 
