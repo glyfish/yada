@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Annotated, Dict
+import shortuuid
 
 from langchain_community.tools import TavilySearchResults
 from langgraph.graph import StateGraph, START, END
@@ -29,7 +30,9 @@ class BarChartInput(BaseModel):
     """Input schema for the bar chart generator."""
     data: Dict[str, float] = Field(..., description="Dictionary where keys are labels and values are numeric values to plot")
     title: str = Field(default="Bar Chart", description="Title of the chart")
-    
+    x_axis_label: str = Field(default="Category", description="Label for the x-axis")
+    y_axis_label: str = Field(default="Value", description="Label for the y-axis")
+    xlabel_rotation: float = Field(default=0.0, description="Rotation angle for the x-axis labels")
 
 class BarChartAgent:
     """
@@ -74,8 +77,22 @@ class BarChartAgent:
         This defines how the model should interpret the messages and what it should do.
         """
     
+        system_prompt = (
+            "You are a chart generator. You may use the bar_chart_tool tool to generate a bar chart "
+            "as instructed by the user. The bar_chart_tool takes the following parameters: a dictionary "
+            "containing the data points to plot with keys identifying the data categories and values as the numeric "
+            "values to plot, a plot title, a description label of the categories to label the x-axis, a label for "
+            "the y-axis describing the data values and a rotation angle for "
+            "the x-axis labels which should be 45 degrees if the categories are strings larger than 2 characters "
+            "otherwise the rotation should be zero. The bar_chart_tool will return a path to the plot image file. "
+            "The returned response should be in markdown and should include commentary on the data displayed above " 
+            "the plot image should be scaled to a width specified and centered by using the bar_chart CSSclass in an enclosing div." 
+        )
+
+        logger.debug(f"Bar Chart Agent prompt: {system_prompt}")
+
         return ChatPromptTemplate.from_messages([
-            ("system", "You are a chart generator. You may use the bar_chart_tool tool to generate a chart."),
+            ("system", system_prompt),
             MessagesPlaceholder(variable_name="messages"),
             ("system", "If you choose to call a tool, do so; otherwise, provide your findings in plain text."),
         ])
@@ -109,10 +126,10 @@ class BarChartAgent:
     @staticmethod
     @tool(args_schema=BarChartInput)
     def bar_chart_tool(data: Dict[str, float], 
-                       title: str = "Bar Chart", 
-                       xlabel: str = "Categories", 
-                       ylabel: str = "Values",
-                       xlabel_rotation: float = 0.0) -> str:
+                       title: str,  
+                       x_axis_label: str, 
+                       y_axis_label: str,
+                       xlabel_rotation: float) -> str:
         """Generate a bar chart from data points and display it.
         
         Parameters
@@ -120,37 +137,40 @@ class BarChartAgent:
             data: Dict[str, float]
                 Dictionary where keys are labels and values are numeric values to plot
             title: str
-                Title of the chart (optional, defaults to "Bar Chart")
-            xlabel: str
-                Label for the x-axis (optional, defaults to "Categories")
-            ylabel: str
-                Label for the y-axis (optional, defaults to "Values")
+                Title of the chart.
+            x_axis_label: str
+                Label for the x-axis.
+            y_axis_label: str
+                Label for the y-axis.
             xlabel_rotation: int
-                Rotation angle for the x-axis labels (optional, defaults to 0)
-            
+                Rotation angle for the x-axis labels.
         Returns:
-            plot as string
+            plot file name: str
+                The file name of the generated bar chart image.
             
         Example:
             input = BarChartInput(
                 data={"A": 10, "B": 20, "C": 15},
-                title="Sample Chart"
+                title="Sample Chart",
+                x_axis_label="Letter",
+                y_axis_label="Count",
+                xlabel_rotation=45
             )
         """
 
-        logger.debug(f"Calling bar_chart_tool: {data}, title: {title}, xlabel: {xlabel}, ylabel: {ylabel}, xlabel_rotation: {xlabel_rotation}")
+        logger.debug(f"Calling bar_chart_tool: {data}, title: {title}, xlabel: {x_axis_label}, ylabel: {y_axis_label}, xlabel_rotation: {xlabel_rotation}")
 
         bar_chart_file = BarChartAgent.generate_bar_chart(
             data=data, 
             title=title, 
-            xlabel=xlabel, 
-            ylabel=ylabel, 
+            xlabel=x_axis_label, 
+            ylabel=y_axis_label, 
             xlabel_rotation=xlabel_rotation
         )
 
         logger.debug(f"Generated bar chart file: {bar_chart_file}")
         
-        return f"{data}"
+        return bar_chart_file
 
     @staticmethod
     def generate_bar_chart(data: Dict[str, float], title: str, xlabel: str, ylabel: str, xlabel_rotation: int) -> str:
@@ -179,11 +199,14 @@ class BarChartAgent:
 
         logger.debug(f"Calling generate_bar_chart: {data}, title: {title}, xlabel: {xlabel}, ylabel: {ylabel}, xlabel_rotation: {xlabel_rotation}")
 
-        file_name = generate_plot_file_name("bar_chart", path="html/plots")
+        uuid = shortuuid.uuid()
+        output_file_name = generate_plot_file_name("bar_chart", path="./html/plots", uuid=uuid)
+
         bar(y, x, alpha=1.0, bar_width=0.9, xlabel_rotation=xlabel_rotation,
             xlabel=xlabel, ylabel=ylabel, title=title,
-            figsize=(10, 6), file_name=file_name)
+            figsize=(10, 6), file_name=output_file_name)
 
-        logger.debug(f"Bar Chart filename: {file_name}")
-        return file_name
+        # Return file path for HTML rendering
+        # Note: The file path is relative to the HTML directory
+        return generate_plot_file_name("bar_chart", path="./plots", uuid=uuid)
     
