@@ -350,7 +350,7 @@ def read_yahoo_data(file_path: str) -> DataFrame:
     return read_csv(file_path, index_col=0, parse_dates=['Date']).sort_values(by='Date').dropna()
 
 
-def generate_plot_file_name(file_name: str, path="html/plots", extension: str = "png") -> str:
+def generate_plot_file_name(file_name: str, path="./plots", extension: str = "png", uuid: str = None) -> str:
     """
     Generate a file name with the specified prefix, suffix and extension.
 
@@ -369,9 +369,7 @@ def generate_plot_file_name(file_name: str, path="html/plots", extension: str = 
         Generated file name.
     """
     
-    root_dir = os.getcwd()
-    full_path = os.path.join(root_dir, path, file_name)
-
-    uuid = shortuuid.uuid()  # Generate a short unique suffix
+    full_path = os.path.join(path, file_name)
+    uuid = uuid if uuid else shortuuid.uuid()
     return f"{full_path}-{uuid}.{extension}"
 
