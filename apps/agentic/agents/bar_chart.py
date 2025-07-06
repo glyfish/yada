@@ -13,6 +13,9 @@ from apps.agentic.core.utils import build_llm, should_continue
 import os
 import sys
 import numpy
+
+import matplotlib
+matplotlib.use("Agg")
 from matplotlib import pyplot
 
 from lib import config
@@ -37,7 +40,7 @@ class BarChartAgent:
     def __init__(self):
         self.__llm = build_llm()
         self.__prompt = self.__create_prompt()
-        self.__tools = [self.bar_chart_tool]
+        self.__tools = [BarChartAgent.bar_chart_tool]
         self.__tool_node = ToolNode(self.__tools, name="bar_chart_tool_node")
         self.__tooled_llm = self.__llm.bind_tools(self.__tools)
         self.__agent = self.__create_agent()
@@ -52,40 +55,6 @@ class BarChartAgent:
         Get the compiled agent state graph.
         """
         return self.__agent
-
-
-    @tool(args_schema=BarChartInput)
-    def bar_chart_tool(data: Dict[str, float], 
-                       title: str = "Bar Chart", 
-                       xlabel: str = "Categories", 
-                       ylabel: str = "Values") -> str:
-        """Generate a bar chart from data points and display it.
-        
-        Parameters
-        ----------
-            data: Dict[str, float]
-                Dictionary where keys are labels and values are numeric values to plot
-            title: str
-                Title of the chart (optional, defaults to "Bar Chart")
-            xlabel: str
-                Label for the x-axis (optional, defaults to "Categories")
-            ylabel: str
-                Label for the y-axis (optional, defaults to "Values")
-            xlabel_rotation: int
-                Rotation angle for the x-axis labels (optional, defaults to 0)
-            
-        Returns:
-            plot as string
-            
-        Example:
-            input = BarChartInput(
-                data={"A": 10, "B": 20, "C": 15},
-                title="Sample Chart"
-            )
-        """
-
-        logger.debug(f"bar_chart_tool: {data}")   
-        return f"{data}"
 
 
     async def __invoke_model(self, state: WorkerState, config=None) -> WorkerState:
@@ -137,8 +106,54 @@ class BarChartAgent:
         return graph.compile()
     
     
-    def __generate_bar_chart(self, data: Dict[str, float], title: str, xlabel: str, ylabel: str,
-                             xlabel_rotation: int) -> str:
+    @staticmethod
+    @tool(args_schema=BarChartInput)
+    def bar_chart_tool(data: Dict[str, float], 
+                       title: str = "Bar Chart", 
+                       xlabel: str = "Categories", 
+                       ylabel: str = "Values",
+                       xlabel_rotation: float = 0.0) -> str:
+        """Generate a bar chart from data points and display it.
+        
+        Parameters
+        ----------
+            data: Dict[str, float]
+                Dictionary where keys are labels and values are numeric values to plot
+            title: str
+                Title of the chart (optional, defaults to "Bar Chart")
+            xlabel: str
+                Label for the x-axis (optional, defaults to "Categories")
+            ylabel: str
+                Label for the y-axis (optional, defaults to "Values")
+            xlabel_rotation: int
+                Rotation angle for the x-axis labels (optional, defaults to 0)
+            
+        Returns:
+            plot as string
+            
+        Example:
+            input = BarChartInput(
+                data={"A": 10, "B": 20, "C": 15},
+                title="Sample Chart"
+            )
+        """
+
+        logger.debug(f"Calling bar_chart_tool: {data}, title: {title}, xlabel: {xlabel}, ylabel: {ylabel}, xlabel_rotation: {xlabel_rotation}")
+
+        bar_chart_file = BarChartAgent.generate_bar_chart(
+            data=data, 
+            title=title, 
+            xlabel=xlabel, 
+            ylabel=ylabel, 
+            xlabel_rotation=xlabel_rotation
+        )
+
+        logger.debug(f"Generated bar chart file: {bar_chart_file}")
+        
+        return f"{data}"
+
+    @staticmethod
+    def generate_bar_chart(data: Dict[str, float], title: str, xlabel: str, ylabel: str, xlabel_rotation: int) -> str:
         """
         Create a bar chart from the provided data.
         
@@ -162,11 +177,13 @@ class BarChartAgent:
         x = numpy.array(list(data.keys()))
         y = data.values()
 
-        file_name = generate_plot_file_name("bar_chart", path="../html/plots")
+        logger.debug(f"Calling generate_bar_chart: {data}, title: {title}, xlabel: {xlabel}, ylabel: {ylabel}, xlabel_rotation: {xlabel_rotation}")
+
+        file_name = generate_plot_file_name("bar_chart", path="html/plots")
         bar(y, x, alpha=1.0, bar_width=0.9, xlabel_rotation=xlabel_rotation,
             xlabel=xlabel, ylabel=ylabel, title=title,
             figsize=(10, 6), file_name=file_name)
 
-        print(file_name)
+        logger.debug(f"Bar Chart filename: {file_name}")
         return file_name
     
