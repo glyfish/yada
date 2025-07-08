@@ -83,10 +83,11 @@ class BarChartAgent:
             "containing the data points to plot with keys identifying the data categories and values as the numeric "
             "values to plot, a plot title, a description label of the categories to label the x-axis, a label for "
             "the y-axis describing the data values and a rotation angle for "
-            "the x-axis labels which should be 45 degrees if the categories are strings larger than 2 characters "
+            "the x-axis labels should be 90 degrees if the largest category string is larger than 7 characters "
+            "or 45 degrees if the largest category string is greater than 2 characters "
             "otherwise the rotation should be zero. The bar_chart_tool will return a path to the plot image file. "
             "The returned response should be in markdown and should include commentary on the data displayed above " 
-            "the plot image should be scaled to a width specified and centered by using the bar_chart CSSclass in an enclosing div." 
+            "only the plot image should be styled using the bar_chart CSS class in an enclosing div." 
         )
 
         logger.debug(f"Bar Chart Agent prompt: {system_prompt}")
