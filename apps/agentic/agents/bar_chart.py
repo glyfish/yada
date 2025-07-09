@@ -1,8 +1,7 @@
 from pydantic import BaseModel, Field
-from typing import Annotated, Dict
+from typing import Dict
 import shortuuid
 
-from langchain_community.tools import TavilySearchResults
 from langgraph.graph import StateGraph, START, END
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.prebuilt import ToolNode
