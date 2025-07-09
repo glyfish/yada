@@ -18,6 +18,8 @@ import matplotlib
 matplotlib.use("Agg")
 from matplotlib import pyplot
 
+from apps.agentic.core.tool_agent import ToolAgent
+
 from lib import config
 from lib.plots import bar
 from lib.utils import generate_plot_file_name
@@ -33,44 +35,23 @@ class BarChartInput(BaseModel):
     y_axis_label: str = Field(default="Value", description="Label for the y-axis")
     xlabel_rotation: float = Field(default=0.0, description="Rotation angle for the x-axis labels")
 
-class BarChartAgent:
+class BarChartAgent(ToolAgent):
     """
     BarChart Agent that uses a language model to generate bar chart data.
     It can call tools like TavilySearchResults to fetch search results.
     """
 
     def __init__(self):
-        self.__llm = build_llm()
-        self.__prompt = self.__create_prompt()
-        self.__tools = [BarChartAgent.bar_chart_tool]
-        self.__tool_node = ToolNode(self.__tools, name="bar_chart_tool_node")
-        self.__tooled_llm = self.__llm.bind_tools(self.__tools)
-        self.__agent = self.__create_agent()
+        tools = [BarChartAgent.bar_chart_tool]
+        tool_node = ToolNode(tools, name="bar_chart_tool_node")
 
         sys.path.append(os.path.abspath(os.path.join(os.getcwd(), '..')))
         pyplot.style.use(config.glyfish_style)
 
+        super().__init__(tools, tool_node)
+
     
-    @property
-    def agent(self):
-        """
-        Get the compiled agent state graph.
-        """
-        return self.__agent
-
-
-    async def __invoke_model(self, state: WorkerState, config=None) -> WorkerState:
-        """
-        Invoke the agent with the current state.
-        """
-
-        messages = state["messages"]
-        prompt_messages = self.__prompt.format_messages(messages=messages)
-        result = await self.__tooled_llm.ainvoke(prompt_messages)
-        return {"messages": [result]}
-    
-
-    def __create_prompt(self):
+    def create_prompt(self):
         """
         Create the prompt template for the BarChartAgent agent.
         This defines how the model should interpret the messages and what it should do.
@@ -86,7 +67,8 @@ class BarChartAgent:
             "or 45 degrees if the largest category string is greater than 2 characters "
             "otherwise the rotation should be zero. The bar_chart_tool will return a path to the plot image file. "
             "The returned response should be in markdown and should include commentary on the data displayed above " 
-            "only the plot image should be styled using the bar_chart CSS class in an enclosing div." 
+            "only the plot image should be styled using the bar_chart CSS class in an enclosing div. "
+            "If more than two variables are provided put the data in separate plots" 
         )
 
         logger.debug(f"Bar Chart Agent prompt: {system_prompt}")
@@ -96,31 +78,6 @@ class BarChartAgent:
             MessagesPlaceholder(variable_name="messages"),
             ("system", "If you choose to call a tool, do so; otherwise, provide your findings in plain text."),
         ])
-
-
-    def __create_agent(self):
-        """
-        Create the state graph for the researcher agent.
-        This defines the flow of the agent's operations.
-        """
-
-        graph = (
-            StateGraph(WorkerState)
-            .add_node("model", self.__invoke_model)
-            .add_node("tool", self.__tool_node)
-            .add_edge(START, "model")
-            .add_edge("tool", "model")
-            .add_conditional_edges(
-                "model",
-                should_continue,
-                {
-                    "tool": "tool",
-                    END: END,
-                }
-            )
-        )
-
-        return graph.compile()
     
     
     @staticmethod
