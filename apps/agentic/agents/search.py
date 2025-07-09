@@ -1,14 +1,9 @@
-
-
 from langchain_community.tools import TavilySearchResults
 from langgraph.graph import StateGraph, START, END
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.prebuilt import ToolNode
 
-from apps.agentic.core.messages import WorkerState
 from apps.agentic.core.tool_agent import ToolAgent
-from apps.agentic.core.utils import build_llm, should_continue
-
 
 class SearchAgent(ToolAgent):
     """
@@ -19,6 +14,7 @@ class SearchAgent(ToolAgent):
     def __init__(self):
         tools = [TavilySearchResults()]
         tool_node = ToolNode(tools, name="tavily_search_tool_node")
+
         super().__init__(tools, tool_node)
     
 
