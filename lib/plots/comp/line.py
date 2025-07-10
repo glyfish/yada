@@ -24,6 +24,7 @@ from datetime import datetime, date
 import matplotlib.ticker
 import matplotlib.dates as mdates
 import matplotlib.units as munits
+from matplotlib import rcParams
 from matplotlib import pyplot
 from numpy.typing import NDArray
 
@@ -31,6 +32,7 @@ from numpy.typing import NDArray
 from lib.plots.comp.axis import (PlotType, logStyle, logXStyle, logYStyle)
 from lib.plots.comp.plot_utils import (__plot_curve, __plot_curves, __twinx_ticks, __plot_symbols,
                                        __plot_symbol)
+from lib.config import SharedCycler
 
 from lib.utils import get_param_default_if_missing
 
@@ -93,7 +95,8 @@ def curve(axis: pyplot.axis, y: NDArray, x: NDArray=None, **kwargs):
         offset = 1.0 + title_offset
         axis.set_title(title, y=offset)
 
-    __plot_curve(axis, x, y, 0, **kwargs)
+    color_cycler = SharedCycler(rcParams['axes.prop_cycle'])
+    __plot_curve(axis, x, y, 0, color_cycler, **kwargs)
 
 def comparison(axis: pyplot.axis, y: NDArray, x: NDArray=None, **kwargs):
     """
