@@ -42,6 +42,8 @@
             padding: 0.5rem 1rem;
             font-size: 1rem;
             cursor: pointer;
+            position: relative;
+            overflow: visible;
         }
         .markdown-output {
             margin-top: 1.5rem;
@@ -58,6 +60,7 @@
             border-radius: 50%;
             animation: spin 1s linear infinite;
         }
+
         .button-spinner {
             display: inline-block;
             width: 1em;
@@ -68,6 +71,7 @@
             animation: spin 0.8s linear infinite;
             vertical-align: middle;
             margin-right: 0.5em;
+            position: static;
         }
 
         @keyframes spin {
@@ -85,7 +89,7 @@
         import van from "./vendor/van-1.5.5.min.js";
         import { marked } from "./vendor/marked.esm.js";
 
-        const { div, textarea, button, h3 } = van.tags;
+        const { div, span, textarea, button, h3 } = van.tags;
         const { add, state } = van;
 
         const textValue = state("");
@@ -135,13 +139,17 @@
                     // Button row (own wrapper and margin)
                     div({ class: "button-wrapper", style: "margin-bottom: 1.0rem; text-align: left;" },
                         button(
-                            { 
-                                onclick: handleClone, 
-                                disabled: () => cloneLoading.val, 
-                                style: "margin-right: 0.5rem; min-width: 175px; position:relative;"
+                            {
+                                onclick: handleClone,
+                                disabled: () => cloneLoading.val,
+                                style: "margin-right: 0.5rem; min-width: 175px;"
                             },
-                            () => cloneLoading.val ? div({ class: "button-spinner" }) : null,
-                            "Update GitHub Repos"
+                            // Spinner always present, visibility toggled via inline style
+                            span({
+                                class: "button-spinner",
+                                style: () => (cloneLoading.val ? "display: inline-block;" : "display: none;")
+                            }),
+                            "Update GitHub Repos"                        
                         )
                     ),
                     // Textarea on its own row

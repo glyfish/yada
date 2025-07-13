@@ -3,46 +3,63 @@ from pydantic import BaseModel
 
 import os
 import requests
+from urllib.parse import urlparse
+
 from lib.logger import get_logger
 
-from git import Repo, GitCommandError
+from git import Repo
 
 router = APIRouter()
 logger = get_logger("YADA")
-github_accounts = ["troystribling", "glyfish"]
 
+GITHUB_ACCOUNTS = ["troystribling"]
 GITHUB_API = "https://api.github.com"
 
 class CloneRequest(BaseModel):
     accounts: list[str]  # GitHub usernames/orgs
 
 
-def clone_or_pull(repo_url, local_path):
+def clone_or_pull(repo_name, repo_url, local_path):
+    logger.debug(f"CHECKING {repo_name} from {repo_url} to {local_path}")
     if os.path.exists(local_path):
         try:
             repo = Repo(local_path)
             repo.remotes.origin.pull()
-            return f"Updated {local_path}"
+            logger.info(f"PULLED {local_path}")
         except Exception as e:
-            return f"Failed to update {local_path}: {e}"
+            logger.error(f"Failed to update {local_path}: {e}")
     else:
         try:
             Repo.clone_from(repo_url, local_path)
-            return f"Cloned {local_path}"
+            logger.info(f"CLONED {repo_name} from {repo_url} to {local_path}")
         except Exception as e:
-            return f"Failed to clone {repo_url}: {e}"
+            logger.error(f"Failed to clone {repo_name} from {repo_url}: {e}")
 
 
 @router.post("/github/clone")
 def clone_github_repos():
-    logger.debug(f"Received request to clone GitHub repos for accounts: {github_accounts}")
-    for account in github_accounts:
-        # List all public repos for the user/org
-        
-        url = f"{GITHUB_API}/users/{account}/repos"
-        logger.debug(f"Fetching repos for {account} from {url}")
-        resp = requests.get(url)
-        logger.debug(f"Fetching repos for {account} from {url}")
+    GITHUB_API_KEY = os.environ["GITHUB_API_KEY"]
+    HEADERS = {"Authorization": f"token {GITHUB_API_KEY}"}
+    
+    # Determine authenticated user for retrieving private repos
+    user_resp = requests.get(f"{GITHUB_API}/user", headers=HEADERS)
+    if user_resp.status_code != 200:
+        raise HTTPException(status_code=500, detail="Failed to fetch authenticated user")
+    
+    auth_username = user_resp.json()["login"]
+    logger.debug(f"Received request to clone GitHub repos for accounts: {GITHUB_ACCOUNTS} and authenticated user: {auth_username}")
+
+    for account in GITHUB_ACCOUNTS:
+        # Use the appropriate endpoint to include private repos
+        if account == auth_username:
+            # fetch all repos (public + private) for the authenticated user
+            url = f"{GITHUB_API}/user/repos?per_page=100&visibility=all"
+        else:
+            # fetch org repos (public + private if member)
+            url = f"{GITHUB_API}/orgs/{account}/repos?per_page=100&type=all"
+        logger.debug(f"Fetching repos for {account} and {auth_username} from {url}")
+
+        resp = requests.get(url, headers=HEADERS)
         
         if resp.status_code != 200:
             logger.error(f"Fetching repos for {account} from {url}, failed with status code {resp.status_code}")
@@ -51,11 +68,13 @@ def clone_github_repos():
         for repo in resp.json():
             repo_name = repo["name"]
             clone_url = repo["clone_url"]
-            local_path = os.path.join(".repos", account, repo_name)
-            logger.debug(f"Cloning {repo_name} from {clone_url} to {local_path}")
-
+            auth_clone_url = clone_url.replace("https://", f"https://{auth_username}:{GITHUB_API_KEY}@")
+            parsed_url = urlparse(auth_clone_url)
+            owner = parsed_url.path.split('/')[1]
+            local_path = os.path.join(".repos", owner, repo_name)
             os.makedirs(os.path.dirname(local_path), exist_ok=True)
-            result = clone_or_pull(clone_url, local_path)
-            logger.debug(result)
+            clone_or_pull(repo_name, auth_clone_url, local_path)
 
-    return {"status": "OK"}
+        logger.info(f"Updated all repos for {account}")
+
+    return {"status": "Success", "message": "All repositories cloned or updated successfully."}

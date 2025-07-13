@@ -2,6 +2,7 @@
 .chatgpt_key
 .langsmith_key
 .tavily_key
+.github_key
 .repos
 html/plots
 
