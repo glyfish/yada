@@ -6,6 +6,8 @@ from langgraph.graph import END
 from apps.agentic.core.messages import WorkerState
 
 
+GITHUB_ACCOUNTS = ["troystribling"]
+
 def load_api_key(filepath=".chatgpt_key"):
     with open(filepath, "r") as file:
         return file.read().strip()

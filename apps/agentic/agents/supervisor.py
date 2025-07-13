@@ -7,9 +7,9 @@ from lib.logger import get_logger
 
 from apps.agentic.core.messages import get_last_message, WorkerState
 from apps.agentic.core.utils import build_llm, should_continue
-from apps.agentic.agents.search import SearchAgent
-from apps.agentic.agents.bar_chart import BarChartAgent
-from apps.agentic.agents.time_series_plot import TimeSeriesPlotAgent
+from apps.agentic.agents.search_agent import SearchAgent
+from apps.agentic.agents.bar_chart_agent import BarChartAgent
+from apps.agentic.agents.time_series_plot_agent import TimeSeriesPlotAgent
 
 logger = get_logger("YADA")
 

@@ -6,13 +6,16 @@ import requests
 from urllib.parse import urlparse
 
 from lib.logger import get_logger
+from apps.agentic.core.utils import GITHUB_ACCOUNTS 
 
 from git import Repo
+
+from langchain_community.vectorstores import Chroma
+
 
 router = APIRouter()
 logger = get_logger("YADA")
 
-GITHUB_ACCOUNTS = ["troystribling"]
 GITHUB_API = "https://api.github.com"
 
 class CloneRequest(BaseModel):
@@ -34,6 +37,7 @@ def clone_or_pull(repo_name, repo_url, local_path):
             logger.info(f"CLONED {repo_name} from {repo_url} to {local_path}")
         except Exception as e:
             logger.error(f"Failed to clone {repo_name} from {repo_url}: {e}")
+
 
 
 @router.post("/github/clone")

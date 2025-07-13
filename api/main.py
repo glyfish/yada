@@ -15,7 +15,7 @@ from apps.agentic.agents.supervisor import SupervisorAgent
 from apps.agentic.core.utils import (set_chatgpt_env, set_langsmith_env, set_tavily_env, 
                                      set_github_env)
 
-from api.github import router as github_router
+from api.github_router import router as github_router
 
 logger = get_logger("YADA")
 
