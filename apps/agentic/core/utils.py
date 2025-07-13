@@ -26,6 +26,9 @@ def set_tavily_env():
     os.environ["TAVILY_API_KEY"] = load_api_key(".tavily_key")
 
 
+def set_github_env():
+    os.environ["GITHUB_API_KEY"] = load_api_key(".github_key")
+
 def log_input(x):
     print("\n🔍 INPUT DATA:", x)
     return x

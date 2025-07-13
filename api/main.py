@@ -12,7 +12,8 @@ from pydantic import BaseModel
 from lib.logger import get_logger
 
 from apps.agentic.agents.supervisor import SupervisorAgent
-from apps.agentic.core.utils import set_chatgpt_env, set_langsmith_env, set_tavily_env
+from apps.agentic.core.utils import (set_chatgpt_env, set_langsmith_env, set_tavily_env, 
+                                     set_github_env)
 
 from api.github import router as github_router
 
@@ -23,6 +24,7 @@ app = FastAPI()
 set_langsmith_env()
 set_chatgpt_env()
 set_tavily_env()
+set_github_env()
 
 class RequestPayload(BaseModel):
     input: str
