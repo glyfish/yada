@@ -4,6 +4,8 @@
 .tavily_key
 .github_key
 .repos
+.db
+
 html/plots
 
 __pycache__/

@@ -10,6 +10,8 @@ from apps.agentic.core.utils import GITHUB_ACCOUNTS
 
 from git import Repo
 
+from apps.agentic.core.chroma_document_loader import ChromaDocumentLoader
+
 from langchain_community.vectorstores import Chroma
 
 
@@ -17,6 +19,8 @@ router = APIRouter()
 logger = get_logger("YADA")
 
 GITHUB_API = "https://api.github.com"
+GITHUB_DB_NAME = "github"
+GITHUB_COLLECTION_NAME = "github-repos"
 
 class CloneRequest(BaseModel):
     accounts: list[str]  # GitHub usernames/orgs
@@ -41,9 +45,11 @@ def clone_or_pull(repo_name, repo_url, local_path):
 
 
 @router.post("/github/clone")
-def clone_github_repos():
+async def clone_github_repos():
     GITHUB_API_KEY = os.environ["GITHUB_API_KEY"]
     HEADERS = {"Authorization": f"token {GITHUB_API_KEY}"}
+
+    doc_loader = ChromaDocumentLoader(GITHUB_DB_NAME, GITHUB_COLLECTION_NAME)
     
     # Determine authenticated user for retrieving private repos
     user_resp = requests.get(f"{GITHUB_API}/user", headers=HEADERS)
@@ -80,5 +86,7 @@ def clone_github_repos():
             clone_or_pull(repo_name, auth_clone_url, local_path)
 
         logger.info(f"Updated all repos for {account}")
+
+    await doc_loader.load_github_documents()
 
     return {"status": "Success", "message": "All repositories cloned or updated successfully."}
