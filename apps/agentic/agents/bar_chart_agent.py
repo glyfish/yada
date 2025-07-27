@@ -65,9 +65,9 @@ class BarChartAgent(ToolAgent):
             "the y-axis describing the data values and a rotation angle for "
             "the x-axis labels should be 90 degrees if the largest category string is larger than 7 characters "
             "or 45 degrees if the largest category string is greater than 2 characters "
-            "otherwise the rotation should be zero. The bar_chart_tool will return a path to the plot image file. "
-            "The returned response should be in markdown and should include commentary on the data displayed above " 
-            "only the plot image should be styled using the bar_chart CSS class in an enclosing div. "
+            "otherwise the rotation should be zero. Sort the values in descending order. The bar_chart_tool will return a path to the plot image file. "
+            "The returned response should be in markdown and should include commentary on the data displayed above and " 
+            "the html plot image should be styled using the bar_chart CSS class in an enclosing div. "
             "If more than two variables are provided put the data in separate plots" 
         )
 

@@ -43,7 +43,6 @@ def clone_or_pull(repo_name, repo_url, local_path):
             logger.error(f"Failed to clone {repo_name} from {repo_url}: {e}")
 
 
-
 @router.post("/github/clone")
 async def clone_github_repos():
     GITHUB_API_KEY = os.environ["GITHUB_API_KEY"]

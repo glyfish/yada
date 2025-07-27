@@ -1,8 +1,5 @@
 # backend/main.py
 import os
-import logging
-import colorlog
-import sys
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
@@ -25,6 +22,8 @@ set_langsmith_env()
 set_chatgpt_env()
 set_tavily_env()
 set_github_env()
+
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 class RequestPayload(BaseModel):
     input: str
