@@ -1,15 +1,18 @@
 import os
 import sys
+from tracemalloc import start
 import numpy
 
 from lib.logger import get_logger
+from git import Repo
 
-from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.document_loaders import GitLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 from apps.agentic.core.utils import load_api_key
+from apps.agentic.core.constants import GITHUB_LOCAL_PATH, GITHUB_EXCLUDED_REPOS, CHROMA_DB_MAX_BATCH_SIZE
 import tiktoken
 
 logger = get_logger("YADA")
@@ -25,7 +28,10 @@ class ChromaDocumentLoader:
         self.__db_name = db_name
         self.__collection_name = collection_name
         self.__db_path = os.path.join(".db", db_name)
-        self.__embedding_function = OpenAIEmbeddings()
+        self.__embedding_function = OpenAIEmbeddings(
+            embedding_ctx_length=2000,
+            chunk_size=100
+        )
 
         self.__vectorstore = Chroma(
             collection_name=self.__collection_name,
@@ -70,7 +76,7 @@ class ChromaDocumentLoader:
         return self.__vectorstore
         
 
-    async def load_github_documents(self, base_path: str = ".repos"):
+    async def load_github_documents(self, base_path: str = GITHUB_LOCAL_PATH):
         """
         Load documents into the ChromaDB collection.
         """
@@ -85,10 +91,29 @@ class ChromaDocumentLoader:
                 continue
 
             for repo in os.listdir(acct_path):
+                
+                if repo in GITHUB_EXCLUDED_REPOS:
+                    logger.info(f"Skipping excluded repo {repo}.")
+                    continue
+
                 repo_path = os.path.join(acct_path, repo)
                 logger.info(f"Updating github documents in {repo} from {repo_path}.")
                 if os.path.isdir(os.path.join(repo_path, ".git")):
                     await self.load_github_repo(repo_path)
+
+        logger.info(f"Finished updating github document store from {base_path}.")
+
+
+    def get_default_branch(self, repo_path: str) -> str:
+        repo = Repo(repo_path)
+        # If HEAD is pointing to a branch, use that
+        try:
+            return repo.active_branch.name
+        except TypeError:
+            # Detached HEAD? fall back to reading origin/HEAD
+            remote_head = repo.remotes.origin.refs.HEAD
+            return remote_head.reference.name.split("/")[-1]
+
 
 
     async def load_github_repo(self, path: str):
@@ -96,9 +121,11 @@ class ChromaDocumentLoader:
         Load the GitHub repositories into the ChromaDB collection.
         """
 
+        branch = self.get_default_branch(path)        
+        logger.info(f"Setting default branch {branch} for {path}.")        
         loader = GitLoader(
             repo_path=path,
-            branch="master"
+            branch=branch
         )
 
         documents = await loader.aload()
@@ -119,12 +146,16 @@ class ChromaDocumentLoader:
             max_tokens = max(max_tokens, ntokens)
             total_tokens += ntokens
 
-        logger.info(f"Loaded {len(documents)} documents from {path} into ChromaDB collection {self.collection_name}, " \
-                    f"max chunk tokens: {max_tokens}, total tokens: {total_tokens}, number of chunks: {len(all_chunked)}.")
-        
-        nchunks = len(all_chunked)
-        batche_size = 
-        
+        logger.info(f"Started loading {len(documents)} documents from {path} into ChromaDB collection {self.collection_name}, " \
+                    f"max chunk tokens: {max_tokens}, total tokens: {total_tokens}, number of chunks: {len(all_chunked)}, ", \
+                    f"default branch: {branch}.")        
 
-        self.vectorstore.add_documents(all_chunked)
-        
+        if len(all_chunked) == 0:
+            logger.warning(f"No documents loaded from {path}. Skipping.")
+            return
+
+        for start in range(0, len(all_chunked), CHROMA_DB_MAX_BATCH_SIZE):
+            end = start + CHROMA_DB_MAX_BATCH_SIZE
+            self.vectorstore.add_documents(all_chunked[start:end])
+
+        logger.info(f"Added {len(all_chunked)} documents to ChromaDB collection {self.collection_name} from {path}.") 
