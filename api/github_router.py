@@ -6,7 +6,7 @@ import requests
 from urllib.parse import urlparse
 
 from lib.logger import get_logger
-from apps.agentic.core.utils import GITHUB_ACCOUNTS 
+from apps.agentic.core.constants import GITHUB_ACCOUNTS, GITHUB_API, GITHUB_DB_NAME, GITHUB_COLLECTION_NAME
 
 from git import Repo
 
@@ -17,10 +17,6 @@ from langchain_community.vectorstores import Chroma
 
 router = APIRouter()
 logger = get_logger("YADA")
-
-GITHUB_API = "https://api.github.com"
-GITHUB_DB_NAME = "github"
-GITHUB_COLLECTION_NAME = "github-repos"
 
 class CloneRequest(BaseModel):
     accounts: list[str]  # GitHub usernames/orgs
@@ -66,7 +62,7 @@ async def clone_github_repos():
         else:
             # fetch org repos (public + private if member)
             url = f"{GITHUB_API}/orgs/{account}/repos?per_page=100&type=all"
-        logger.debug(f"Fetching repos for {account} and {auth_username} from {url}")
+        logger.debug(f"Fetching repos for account {account} and user {auth_username} from {url}")
 
         resp = requests.get(url, headers=HEADERS)
         
