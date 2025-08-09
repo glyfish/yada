@@ -29,6 +29,9 @@ def set_tavily_env():
 def set_github_env():
     os.environ["GITHUB_API_KEY"] = load_api_key(".github_key")
 
+def set_user_agent():
+    os.environ["USER_AGENT"] = "yada/0.1 (troy.stribling@gly.fish)"
+
 def log_input(x):
     print("\n🔍 INPUT DATA:", x)
     return x
@@ -39,7 +42,7 @@ def log_output(x):
     return x
 
 
-def build_llm(model="gpt-4.1") -> ChatOpenAI:
+def build_llm(model="gpt-5") -> ChatOpenAI:
     """
     Build an LLM with a custom model name.
     """

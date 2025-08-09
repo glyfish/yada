@@ -3,8 +3,8 @@ from typing import Annotated, Literal, Sequence
 
 from pydantic import BaseModel, Field
 from typing import Dict
-import shortuuid
 
+from langchain_core.messages import HumanMessage
 from langgraph.graph import StateGraph, START, END
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.prebuilt import ToolNode
@@ -16,8 +16,7 @@ from langchain.tools.retriever import create_retriever_tool
 from apps.agentic.core.chroma_document_loader import ChromaDocumentLoader
 from apps.agentic.core.messages import WorkerState
 from apps.agentic.core.utils import build_llm, should_continue
-from apps.agentic.core.tool_agent import ToolAgent
-from apps.agentic.core.constants import GITHUB_ACCOUNTS, GITHUB_API, GITHUB_DB_NAME, GITHUB_COLLECTION_NAME
+from apps.agentic.core.constants import GITHUB_DB_NAME, GITHUB_COLLECTION_NAME
 
 from lib.logger import get_logger
 
@@ -135,7 +134,8 @@ class GitHubAgent(ABC):
         ]
 
         # Grader
-        model = ChatOpenAI(temperature=0, model="gpt-4-0125-preview", streaming=True)
+        model = model = build_llm()
+
         response = model.invoke(msg)
         return {"messages": [response]}
 
@@ -160,7 +160,7 @@ class GitHubAgent(ABC):
         prompt = hub.pull("rlm/rag-prompt")
 
         # LLM
-        llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0, streaming=True)
+        llm = build_llm()
 
         # Post-processing
         def format_docs(docs):

@@ -1,4 +1,4 @@
-from langchain_core.messages import BaseMessage, HumanMessage
+from langchain_core.messages import HumanMessage
 from langgraph.graph import END
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 import langchain
