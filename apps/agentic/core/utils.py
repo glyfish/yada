@@ -42,28 +42,9 @@ def log_output(x):
     return x
 
 
-def build_llm(model="gpt-5") -> ChatOpenAI:
+def build_llm(model="gpt-4.1") -> ChatOpenAI:
     """
     Build an LLM with a custom model name.
     """
 
-    return ChatOpenAI(model=model, temperature=0)
-
-
-def should_continue(state: WorkerState):
-    messages = state["messages"]
-    if not messages or len(messages) == 0:
-        return END
-    if not isinstance(messages, list):
-        raise ValueError("Messages should be a list of BaseMessage objects.")
-    if len(messages) < 2:
-        raise ValueError("At least two messages are required to determine continuation.")
-    
-    ai_message = messages[-1]
-    
-    # Check if it's an AI message with tool calls
-    if hasattr(ai_message, "tool_calls") and len(ai_message.tool_calls) > 0:
-        return "tool"
-    
-    return END
-
+    return ChatOpenAI(model=model, temperature=1)

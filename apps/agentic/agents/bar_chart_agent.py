@@ -8,7 +8,7 @@ from langgraph.prebuilt import ToolNode
 from langchain_core.tools import tool
 
 from apps.agentic.core.messages import WorkerState
-from apps.agentic.core.utils import build_llm, should_continue
+from apps.agentic.core.utils import build_llm
 
 import os
 import sys

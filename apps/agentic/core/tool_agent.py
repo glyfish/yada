@@ -2,7 +2,8 @@ from abc import ABC, abstractmethod
 
 from langgraph.graph import StateGraph, START, END
 from apps.agentic.core.messages import WorkerState
-from apps.agentic.core.utils import build_llm, should_continue
+from apps.agentic.core.utils import build_llm
+from langgraph.prebuilt import tools_condition
 
 from lib.logger import get_logger
 
@@ -98,14 +99,14 @@ class ToolAgent(ABC):
         graph = (
             StateGraph(WorkerState)
             .add_node("model", self._invoke_model)
-            .add_node("tool", self.tool_node)
+            .add_node("tools", self.tool_node)
             .add_edge(START, "model")
-            .add_edge("tool", "model")
+            .add_edge("tools", "model")
             .add_conditional_edges(
                 "model",
-                should_continue,
+                tools_condition,
                 {
-                    "tool": "tool",
+                    "tools": "tools",
                     END: END,
                 }
             )
