@@ -4,18 +4,17 @@ from typing import Annotated, Literal, Sequence
 from pydantic import BaseModel, Field
 from typing import Dict
 
+from langchain import hub
+from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import HumanMessage
 from langgraph.graph import StateGraph, START, END
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langgraph.prebuilt import ToolNode
-from langchain_core.tools import tool
-from langchain_community.vectorstores import Chroma
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langgraph.prebuilt import tools_condition
 from langchain.tools.retriever import create_retriever_tool
 
 from apps.agentic.core.chroma_document_loader import ChromaDocumentLoader
 from apps.agentic.core.messages import WorkerState
-from apps.agentic.core.utils import build_llm, should_continue
+from apps.agentic.core.utils import build_llm
 from apps.agentic.core.constants import GITHUB_DB_NAME, GITHUB_COLLECTION_NAME
 
 from lib.logger import get_logger
@@ -30,9 +29,10 @@ class DocumentGrade(BaseModel):
 
 class GitHubAgent(ABC):
 
-    def __init(self):
+    def __init__(self):
         tool_name = "github_agent_tool"
         tool_description = "Search and return information about GitHub repositories."
+        self.__llm = build_llm()
 
         self.__doc_loader = ChromaDocumentLoader(GITHUB_DB_NAME, GITHUB_COLLECTION_NAME)
         self.__retriever = self.__doc_loader.vectorstore.as_retriever(
@@ -44,6 +44,8 @@ class GitHubAgent(ABC):
             tool_name,
             tool_description)
         self.__tools = [self.__retriever_tool]
+        self.__agent = self._create_agent()
+
 
     @property
     def doc_loader(self):
@@ -60,6 +62,7 @@ class GitHubAgent(ABC):
         """
         return self.__retriever
     
+
     @property
     def tools(self):
         """
@@ -68,6 +71,43 @@ class GitHubAgent(ABC):
         return self.__tools
 
 
+    @property
+    def retriever_tool(self):
+        """
+        Get the retriever tool for the GitHub agent.
+        """
+        return self.__retriever_tool
+
+
+    @property
+    def llm(self):
+        """
+        Get the language model used by the agent.
+        """
+
+        return self.__llm
+    
+
+    @property
+    def agent(self):
+        """
+        Get the compiled agent state graph.
+        """
+
+        return self.__agent
+
+
+    async def invoke_model(self, state: WorkerState, config=None) -> WorkerState:
+        """
+        Invoke the agent with the current state.
+        """
+
+        messages = state["messages"]
+        prompt_messages = self.prompt.format_messages(messages=messages)
+        result = await self.tooled_llm.ainvoke(prompt_messages)
+        return {"messages": [result]}
+
+  
     def __grade_documents(self, state) -> Literal["generate", "rewrite"]:
         """
         Determines whether the retrieved documents are relevant to the question.
@@ -79,8 +119,7 @@ class GitHubAgent(ABC):
             str: A decision for whether the documents are relevant or not
         """
 
-        model = build_llm()
-        llm_with_tool = model.with_structured_output(DocumentGrade)
+        llm_with_tool = self.llm.with_structured_output(DocumentGrade)
 
         system_prompt = ChatPromptTemplate(
             template="""You are a grader assessing relevance of a retrieved document to a user question. \n 
@@ -133,10 +172,7 @@ class GitHubAgent(ABC):
             )
         ]
 
-        # Grader
-        model = model = build_llm()
-
-        response = model.invoke(msg)
+        response = self.llm.invoke(msg)
         return {"messages": [response]}
 
 
@@ -156,19 +192,52 @@ class GitHubAgent(ABC):
 
         docs = last_message.content
 
-        # Prompt
         prompt = hub.pull("rlm/rag-prompt")
-
-        # LLM
         llm = build_llm()
 
-        # Post-processing
-        def format_docs(docs):
-            return "\n\n".join(doc.page_content for doc in docs)
-
-        # Chain
         rag_chain = prompt | llm | StrOutputParser()
-
-        # Run
         response = rag_chain.invoke({"context": docs, "question": question})
         return {"messages": [response]}
+    
+
+    def _create_agent(self):
+        """
+        Create a tool node for the agent.
+
+        Args:
+            agent (StateGraph): The agent state graph.
+            name (str): The name of the tool node.
+
+        Returns:
+            ToolNode: The created tool node.
+        """
+
+        graph = (
+            StateGraph(WorkerState)
+            .add_node("model", self.__invoke_model)
+            .add_node("retrieve", self.retriever_tool)
+            .add_node("rewrite", self.__rewrite) 
+            .add_node("generate", self.__generate) 
+            .add_edge(START, "model")
+            .add_edge("tools", "model")
+            .add_conditional_edges(
+                "model",
+                tools_condition,
+                {
+                    "tools": "retrieve",
+                    END: END,
+                }
+            )
+            .add_conditional_edges(
+                "retrieve",
+                self.__grade_documents,
+                {
+                    "generate": "generate", 
+                    "rewrite": "rewrite"
+                }
+            )
+            .add_edge("generate", END)
+            .add_edge("rewrite", "model")
+        )
+
+        return graph.compile()
