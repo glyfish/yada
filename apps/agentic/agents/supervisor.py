@@ -10,6 +10,7 @@ from apps.agentic.core.utils import build_llm
 from apps.agentic.agents.search_agent import SearchAgent
 from apps.agentic.agents.bar_chart_agent import BarChartAgent
 from apps.agentic.agents.time_series_plot_agent import TimeSeriesPlotAgent
+from apps.agentic.agents.code_repo_agent import CodeRepoAgent
 
 logger = get_logger("YADA")
 
@@ -25,7 +26,8 @@ class SupervisorAgent:
         self.__workers = {
             "researcher": self.__create_agent_node(SearchAgent().agent, "researcher"),
             "bar_chart_generator": self.__create_agent_node(BarChartAgent().agent, "bar_chart_generator"),
-            "time_series_generator": self.__create_agent_node(TimeSeriesPlotAgent().agent, "time_series_generator")   
+            "time_series_generator": self.__create_agent_node(TimeSeriesPlotAgent().agent, "time_series_generator"),
+            "code_repository_search": self.__create_agent_node(CodeRepoAgent().agent, "code_repository_search"),
         }
 
         self.__prompt = self.__create_prompt()
@@ -84,6 +86,8 @@ class SupervisorAgent:
             "You are a supervisor tasked with delegating user requests to a team of agents. The agents you supervise " 
             "are called {team_members}. {researcher} performs search requests. {bar_chart_generator} plots categorical data as a bar chart. "
             "{time_series_generator} generates time series plots for time varying numerical data. "
+            "{code_repository_search} searches my code repositories for relevant code snippets and generates "
+            "reports as requested. "
             "You must determine which of the agents should process the user request and respond with the name of the all agents "
             "required. If there is no agent that can respond to the request return FINISH. " 
             "It is possible that a request would require multiple agents and be executed in some order. "
@@ -107,14 +111,16 @@ class SupervisorAgent:
                                                 team_members=", ".join(team), 
                                                 researcher=team[0], 
                                                 bar_chart_generator=team[1],
-                                                time_series_generator=team[2])
+                                                time_series_generator=team[2],
+                                                code_repository_search=team[3])
         logger.debug(f"Supervisor prompt: {formatted_system_prompt}")
 
         return  prompt.partial(options=", ".join(options), 
                                team_members=", ".join(team), 
                                researcher=team[0], 
                                bar_chart_generator=team[1],
-                               time_series_generator=team[2])
+                               time_series_generator=team[2],
+                               code_repository_search=team[3])
 
 
 

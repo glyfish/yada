@@ -92,7 +92,7 @@ class ToolAgent(ABC):
     
     def _create_agent(self):
         """
-        Create the state graph for the time series plot agent.
+        Create the state graph for the tool agent.
         This defines the flow of the agent's operations.
         """
 
