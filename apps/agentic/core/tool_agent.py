@@ -31,7 +31,7 @@ class ToolAgent(ABC):
         Get the tools available to the agent.
         """
         
-        self.__tools
+        return self.__tools
 
     
     @property

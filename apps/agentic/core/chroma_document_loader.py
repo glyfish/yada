@@ -115,6 +115,13 @@ class ChromaDocumentLoader:
             return remote_head.reference.name.split("/")[-1]
 
 
+    def latest_commit_for(self, repo, rel_path: str) -> str | None:
+        try:
+            c = next(repo.iter_commits(paths=rel_path, max_count=1))
+            return c.hexsha[:12]
+        except StopIteration:
+            return None
+
 
     async def load_github_repo(self, path: str):
         """
@@ -123,17 +130,40 @@ class ChromaDocumentLoader:
 
         branch = self.get_default_branch(path)        
         logger.info(f"Setting default branch {branch} for {path}.")        
-        loader = GitLoader(
-            repo_path=path,
-            branch=branch
-        )
+        loader = GitLoader(repo_path=path, branch=branch)
 
         documents = await loader.aload()
 
-        splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1028,
-            chunk_overlap=200
-        )
+        repo = Repo(path)
+        repo_root = os.path.realpath(repo.working_tree_dir)
+
+        account = os.path.basename(os.path.dirname(path.rstrip("/")))
+        repo_name = os.path.basename(path.rstrip("/"))
+
+        for d in documents:
+            src = d.metadata.get("source")  # absolute path from GitLoader
+            if not src:
+                rel = None
+            else:
+                src_real = os.path.realpath(src)
+                # only compute rel if file is inside the repo root
+                if src_real.startswith(repo_root + os.sep) or src_real == repo_root:
+                    rel = os.path.relpath(src_real, start=repo_root)
+                else:
+                    logger.warning(f"Skipping commit lookup for out-of-repo file: {src_real}")
+                    rel = None
+
+            d.metadata.update({
+                "account": account,
+                "repo": repo_name,
+                "branch": branch,
+                "path": rel,
+                "filename": os.path.basename(rel) if rel else None,
+                "ext": os.path.splitext(rel)[1] if rel else None,
+                "commit": self.latest_commit_for(repo, rel) if rel else None,
+            })
+
+        splitter = RecursiveCharacterTextSplitter(chunk_size=1028, chunk_overlap=200)
 
         all_chunked = []
         for doc in documents:
