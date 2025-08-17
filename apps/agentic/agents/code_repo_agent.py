@@ -27,7 +27,7 @@ class DocumentGrade(BaseModel):
     binary_score: str = Field(description="Relevance score 'yes' or 'no'")
 
 
-class GitHubAgent(ABC):
+class CodeRepoAgent(ABC):
 
     def __init__(self):
         tool_name = "github_agent_tool"
@@ -97,14 +97,15 @@ class GitHubAgent(ABC):
         return self.__agent
 
 
-    async def invoke_model(self, state: WorkerState, config=None) -> WorkerState:
+    async def _invoke_model(self, state: WorkerState, config=None) -> WorkerState:
         """
         Invoke the agent with the current state.
         """
 
         messages = state["messages"]
-        prompt_messages = self.prompt.format_messages(messages=messages)
-        result = await self.tooled_llm.ainvoke(prompt_messages)
+        llm = build_llm()
+        model = llm.bind_tools(self.tools)
+        result = await model.ainvoke(messages)
         return {"messages": [result]}
 
   
@@ -129,6 +130,8 @@ class GitHubAgent(ABC):
             Give a binary score 'yes' or 'no' score to indicate whether the document is relevant to the question.""",
             input_variables=["context", "question"],
         )
+
+        logger.debug(f"Code repository agent grade documents prompt: {system_prompt}")
 
         chain = system_prompt | llm_with_tool
         
@@ -156,7 +159,6 @@ class GitHubAgent(ABC):
             dict: The updated state with re-phrased question
         """
 
-        print("---TRANSFORM QUERY---")
         messages = state["messages"]
         question = messages[0].content
 
@@ -172,6 +174,8 @@ class GitHubAgent(ABC):
             )
         ]
 
+        logger.debug(f"Code repository rewrite prompt: {msg}")
+
         response = self.llm.invoke(msg)
         return {"messages": [response]}
 
@@ -186,6 +190,7 @@ class GitHubAgent(ABC):
         Returns:
             dict: The updated state with re-phrased question
         """
+
         messages = state["messages"]
         question = messages[0].content
         last_message = messages[-1]
@@ -193,6 +198,8 @@ class GitHubAgent(ABC):
         docs = last_message.content
 
         prompt = hub.pull("rlm/rag-prompt")
+        logger.debug(f"Code repository generate prompt: {prompt}")
+
         llm = build_llm()
 
         rag_chain = prompt | llm | StrOutputParser()
@@ -214,12 +221,11 @@ class GitHubAgent(ABC):
 
         graph = (
             StateGraph(WorkerState)
-            .add_node("model", self.__invoke_model)
+            .add_node("model", self._invoke_model)
             .add_node("retrieve", self.retriever_tool)
             .add_node("rewrite", self.__rewrite) 
             .add_node("generate", self.__generate) 
             .add_edge(START, "model")
-            .add_edge("tools", "model")
             .add_conditional_edges(
                 "model",
                 tools_condition,
