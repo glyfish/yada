@@ -8,7 +8,7 @@ from langchain import hub
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import HumanMessage
 from langgraph.graph import StateGraph, START, END
-from langchain.prompts import MessagesPlaceholder, ChatPromptTemplate
+from langchain.prompts import PromptTemplate, ChatPromptTemplate
 from langgraph.prebuilt import tools_condition
 from langchain.tools.retriever import create_retriever_tool
 from langgraph.prebuilt import ToolNode
@@ -30,7 +30,7 @@ class DocumentGrade(BaseModel):
 
 class ChromaRAGAgent(ABC):
 
-    def __init__(self, tool_name: str, tool_description: str, db_name: str, collection_name: str):
+    def __init__(self, tool_name: str, tool_description: str, document_prompt: str, db_name: str, collection_name: str):
         self.tool_name = tool_name
         self.tool_description = tool_description
         
@@ -40,10 +40,13 @@ class ChromaRAGAgent(ABC):
             search_type="similarity",
             search_kwargs={"k": 5}
         )
+
         self.__retriever_tool = create_retriever_tool(
             self.__retriever,
             tool_name,
-            tool_description)
+            tool_description,
+            document_prompt=document_prompt,
+            document_separator="\n\n-----\n\n",)
         self.__tools = [self.__retriever_tool]
         self.__retriever_tool_node = ToolNode(self.__tools)
         self.__tooled_llm = self.__llm.bind_tools(self.__tools)
@@ -123,10 +126,14 @@ class ChromaRAGAgent(ABC):
         """
 
         messages = state["messages"]
-        result = await self.tooled_llm.ainvoke(messages)
-        return {"messages": [result]}
 
-  
+        try:
+            result = await self.tooled_llm.ainvoke(messages)
+            return {"messages": [result]}
+        except Exception as e:
+            logger.error(f"Error invoking model: {e}")
+            return {"messages": [f"Error: {e}"]}
+
     def __grade_documents(self, state) -> Literal["generate", "rewrite"]:
         """
         Determines whether the retrieved documents are relevant to the question.
@@ -139,28 +146,25 @@ class ChromaRAGAgent(ABC):
         """
 
         llm_with_tool = self.llm.with_structured_output(DocumentGrade)
-
-        system_prompt = (
-            "You are a grader assessing relevance of a retrieved document to a user question. "
-            "If the document contains keyword(s) or semantic meaning related to the user question, grade it as relevant "
-            "by giving it a binary score 'yes' or 'no' score to indicate whether the document is relevant to the question. "
-            "The retrieved document is: {context}"
-        )
     
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", system_prompt),
-            MessagesPlaceholder(variable_name="messages"),
-            (
-                "system",
-                "Given the message above determine the relevance of the document to the question."
-            )
-        ])
+        prompt = PromptTemplate(
+            template="""
+                You are grading a retrieved chunk for relevance to a question about Troy Stribling’s code. "
+                Say 'yes' if it could plausibly help (matching files/paths/symbols/features/components or semantically similar code). "
+                Say 'no' only if clearly unrelated."
+                Here is the retrieved document: \n\n {context} \n\n
+                Here is the user question: {question} \n
+                If the document contains keyword(s) or semantic meaning related to the user question, grade it as relevant. \n
+                Give a binary score 'yes' or 'no' score to indicate whether the document is relevant to the question.""",
+            input_variables=["context", "question"],
+        )
+
 
         messages = state["messages"]
         question = messages[0].content
         docs = messages[-1].content
 
-        prompt = prompt.partial(messages=question, context=docs)
+        prompt = prompt.partial(question=question, context=docs)
 
         chain = prompt | llm_with_tool
         scored_result = chain.invoke({"messages": messages, "context": docs})
@@ -185,18 +189,20 @@ class ChromaRAGAgent(ABC):
         messages = state["messages"]
         question = messages[0].content
 
-        msg = [
-            HumanMessage(
-                content=f""" \n 
-                Look at the input and try to reason about the underlying semantic intent / meaning. \n 
-                Here is the initial question:
-                \n ------- \n
-                {question} 
-                \n ------- \n
-                Formulate an improved question: """,
-            )
-        ]
+        rewrite_prompt = ChatPromptTemplate.from_messages([
+            ("system", 
+            """You improve queries for searching Troy Stribling’s codebase (vector store).
+            - Resolve first-person references: "my code" → "Troy Stribling’s repositories (vector store)".
+            - Expand with likely repo names, frameworks, and file types when implied 
+              (e.g., YADA, FastAPI, VanJS, LangGraph, Python, JS).
+            - Generate 2–4 alternative phrasings optimized for code retrieval (include key entities, filenames, 
+            classes, function names if mentioned).
+            - Keep each query ≤ 200 chars. Do NOT answer the question."""
+            ),
+            ("human", "Original question:\n\n{question}\n\nFormulate improved queries:")
+        ])
 
+        msg = rewrite_prompt.format(messages=messages, question=question)  
         logger.debug(f"Code repository rewrite prompt: {msg}")
 
         response = self.llm.invoke(msg)
