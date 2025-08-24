@@ -141,27 +141,36 @@ class ChromaDocumentLoader:
         repo_name = os.path.basename(path.rstrip("/"))
 
         for d in documents:
-            src = d.metadata.get("source")  # absolute path from GitLoader
-            if not src:
-                rel = None
-            else:
-                src_real = os.path.realpath(src)
-                # only compute rel if file is inside the repo root
-                if src_real.startswith(repo_root + os.sep) or src_real == repo_root:
-                    rel = os.path.relpath(src_real, start=repo_root)
-                else:
-                    logger.warning(f"Skipping commit lookup for out-of-repo file: {src_real}")
-                    rel = None
+            src = d.metadata.get("source")  # may be absolute or relative from GitLoader
+            rel = None
+            src_abs = None
+            if src:
+                # Ensure we resolve relative paths against the repo root, not process CWD.
+                if not os.path.isabs(src):
+                    src_abs = os.path.realpath(os.path.join(repo_root, src))
 
-            d.metadata.update({
+                # Only compute a repo-relative path if the file is inside this repo.
+                if src_abs.startswith(repo_root + os.sep) or src_abs == repo_root:
+                    rel = os.path.relpath(src_abs, start=repo_root)
+                else:
+                    # Reduce noise: this can happen for symlinks or odd metadata; skip commit lookup.
+                    logger.debug(f"Skipping commit lookup for out-of-repo file resolved from '{src}': {src_abs}")
+
+            filename = os.path.basename(rel) if rel else (os.path.basename(src_abs) if src_abs else None)
+            ext = os.path.splitext(rel)[1] if rel else (os.path.splitext(src_abs)[1] if src_abs else None)
+            last_commit = self.latest_commit_for(repo, rel) if rel else None
+
+            file_metadata = {
                 "account": account,
                 "repo": repo_name,
                 "branch": branch,
                 "path": rel,
-                "filename": os.path.basename(rel) if rel else None,
-                "ext": os.path.splitext(rel)[1] if rel else None,
-                "commit": self.latest_commit_for(repo, rel) if rel else None,
-            })
+                "filename": filename,
+                "ext": ext,
+                "commit": last_commit,
+            }
+
+            d.metadata.update(file_metadata)
 
         splitter = RecursiveCharacterTextSplitter(chunk_size=1028, chunk_overlap=200)
 
@@ -177,7 +186,7 @@ class ChromaDocumentLoader:
             total_tokens += ntokens
 
         logger.info(f"Started loading {len(documents)} documents from {path} into ChromaDB collection {self.collection_name}, " \
-                    f"max chunk tokens: {max_tokens}, total tokens: {total_tokens}, number of chunks: {len(all_chunked)}, ", \
+                    f"max chunk tokens: {max_tokens}, total tokens: {total_tokens}, number of chunks: {len(all_chunked)}, " \
                     f"default branch: {branch}.")        
 
         if len(all_chunked) == 0:
