@@ -9,9 +9,7 @@ from lib.logger import get_logger
 from apps.agentic.core.constants import GITHUB_ACCOUNTS, GITHUB_API, GITHUB_DB_NAME, GITHUB_COLLECTION_NAME
 
 from git import Repo
-
 from apps.agentic.core.chroma_document_loader import ChromaDocumentLoader
-
 from langchain_community.vectorstores import Chroma
 
 
@@ -39,8 +37,8 @@ def clone_or_pull(repo_name, repo_url, local_path):
             logger.error(f"Failed to clone {repo_name} from {repo_url}: {e}")
 
 
-@router.post("/github/clone")
-async def clone_github_repos():
+@router.post("/github/load_all_repos")
+async def load_all_github_repos():
     GITHUB_API_KEY = os.environ["GITHUB_API_KEY"]
     HEADERS = {"Authorization": f"token {GITHUB_API_KEY}"}
 
@@ -82,6 +80,39 @@ async def clone_github_repos():
 
         logger.info(f"Updated all repos for {account}")
 
-    await doc_loader.load_github_documents()
+    await doc_loader.load_all_github_documents()
 
     return {"status": "Success", "message": "All repositories cloned or updated successfully."}
+
+
+class GitHubRepoLoadPayload(BaseModel):
+    account: str
+    repo: str
+
+
+@router.post("/github/load_repo")
+async def load_github_repo(payload: GitHubRepoLoadPayload):
+    GITHUB_API_KEY = os.environ["GITHUB_API_KEY"]
+    HEADERS = {"Authorization": f"token {GITHUB_API_KEY}"}
+
+    doc_loader = ChromaDocumentLoader(GITHUB_DB_NAME, GITHUB_COLLECTION_NAME)
+    
+    # Determine authenticated user for retrieving private repos
+    user_resp = requests.get(f"{GITHUB_API}/user", headers=HEADERS)
+    if user_resp.status_code != 200:
+        raise HTTPException(status_code=500, detail="Failed to fetch authenticated user")
+    
+    auth_username = user_resp.json()["login"]
+    account = payload.account
+    repo_name = payload.repo
+
+    logger.debug(f"Received request to clone GitHub repository: {repo_name} for account: {account}, authenticated user: {auth_username}")
+    clone_url = f"https://github.com/{account}/{repo_name}.git"
+    auth_clone_url = clone_url.replace("https://", f"https://{auth_username}:{GITHUB_API_KEY}@")
+    local_path = os.path.join(".repos", account, repo_name)
+    os.makedirs(os.path.dirname(local_path), exist_ok=True)
+    clone_or_pull(repo_name, auth_clone_url, local_path)
+
+    await doc_loader.load_github_documents(local_path)
+
+    return {"status": "Success", "message": f"Updated gitHub Repository {repo_name}."}
