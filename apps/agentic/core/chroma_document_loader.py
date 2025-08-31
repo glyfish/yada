@@ -76,7 +76,7 @@ class ChromaDocumentLoader:
         return self.__vectorstore
         
 
-    async def load_github_documents(self, base_path: str = GITHUB_LOCAL_PATH):
+    async def load_all_github_documents(self, base_path: str = GITHUB_LOCAL_PATH):
         """
         Load documents into the ChromaDB collection.
         """
@@ -102,6 +102,18 @@ class ChromaDocumentLoader:
                     await self.load_github_repo(repo_path)
 
         logger.info(f"Finished updating github document store from {base_path}.")
+
+
+
+    async def load_github_documents(self, repo_path: str):
+        """
+        Load documents into the ChromaDB collection.
+        """
+
+        logger.info(f"Updating github document store from {repo_path}.")
+                
+        if os.path.isdir(os.path.join(repo_path, ".git")):
+            await self.load_github_repo(repo_path)
 
 
     def get_default_branch(self, repo_path: str) -> str:

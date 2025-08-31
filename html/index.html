@@ -60,7 +60,6 @@
             border-radius: 50%;
             animation: spin 1s linear infinite;
         }
-
         .button-spinner {
             display: inline-block;
             width: 1em;
@@ -78,6 +77,52 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+
+        dialog.modal {
+            border: none;
+            border-radius: 12px;
+            padding: 1.25rem 1.5rem;
+            box-shadow: 0 12px 32px rgba(0,0,0,.25);
+            width: min(640px, 92vw);
+            max-width: 92vw;
+        }
+        dialog.modal form {
+            display: grid;
+            grid-template-columns: 200px minmax(0, 1fr);
+            gap: 1rem 1rem;
+            align-items: center;
+            width: 100%;
+        }
+
+        dialog.modal, dialog.modal * { box-sizing: border-box; }
+        dialog.modal::backdrop { background: rgba(0,0,0,.45); }
+        dialog.modal label { justify-self: end; font-weight: 600; }
+
+        dialog.modal input {
+            width: 100%;
+            max-width: 100%;
+            padding: .55rem .7rem;
+            font-size: 1rem;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+        }
+        dialog.modal menu {
+            grid-column: 1 / -1;
+            display: flex;
+            justify-content: space-between;
+            margin: .5rem 0 0;
+            padding: 0;
+        }
+        .btn {
+            padding: .5rem 1rem;
+            font-size: 1rem;
+            border: 1px solid #d0d0d0;
+            border-radius: 8px;
+            background: #f7f7f7;
+            cursor: pointer;
+        }
+        .btn.primary { background: #111; color: #fff; border-color: #111; }
+        .btn:disabled { opacity: .7; cursor: not-allowed; }
     </style>
 </head>
 
@@ -96,10 +141,103 @@
         const markdownHTML = state("");
         const isLoading = state(false);
         
-        const handleSubmit = async () => {
+        const GITHUB_LOAD_ALL_REPOS = "/api/github/load_all_repos";
+        const GITHUB_LOAD_REPO = "/api/github/load_repo";
+        const YADA_REQUEST = "/api/request";
+
+        // Load Repository Dialog
+        const handleLoadGitHubRepoDialog = () => {
+            const dialog = document.createElement("dialog");
+            dialog.className = "modal";
+            dialog.innerHTML = `
+                <form method="dialog" novalidate>
+                    <label for="gh-account">GitHub Account:</label>
+                    <input id="gh-account" name="account" type="text" required>
+                    <label for="gh-repo">Repository Name:</label>
+                    <input id="gh-repo" name="repo" type="text" required>
+                    <menu>
+                        <button type="button" class="btn" id="cancelRepoBtn">Cancel</button>
+                        <button type="button" class="btn primary" id="loadRepoBtn">Load Repo</button>
+                    </menu>
+                </form>
+            `;
+            document.body.appendChild(dialog);
+            dialog.showModal();
+
+            const cancelBtn = dialog.querySelector("#cancelRepoBtn");
+            const loadBtn   = dialog.querySelector("#loadRepoBtn");
+            const accInput  = dialog.querySelector("input[name='account']");
+            const repoInput = dialog.querySelector("input[name='repo']");
+
+            const saved = localStorage.getItem("gh_account");
+            if (saved) accInput.value = saved;
+
+            requestAnimationFrame(() => accInput.focus());
+
+            const close = () => { dialog.close(); dialog.remove(); };
+            cancelBtn.addEventListener("click", close);
+            dialog.addEventListener("cancel", e => { e.preventDefault(); close(); }); // Esc key
+
+            const submit = async () => {
+                const account = accInput.value.trim();
+                const repo    = repoInput.value.trim();
+                if (!account || !repo) {
+                    [accInput, repoInput].forEach(el => {
+                        if (!el.value.trim()) el.style.borderColor = "#d33";
+                    });
+                    return;
+                }
+                const prev = loadBtn.textContent;
+                loadBtn.disabled = true;
+                loadBtn.textContent = "Loading…";
+                try {
+                    const res = await fetch(GITHUB_LOAD_REPO, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ account, repo })
+                    });
+                    const result = await res.json().catch(() => ({}));
+                    alert(result.status || "Repo load requested.");
+                } catch (err) {
+                    alert(`Error loading repo: ${err.message}`);
+                } finally {
+                    loadBtn.disabled = false;
+                    loadBtn.textContent = prev;
+                    close();
+                }
+            };
+
+            loadBtn.addEventListener("click", submit);
+            [accInput, repoInput].forEach(el => el.addEventListener("keydown", e => {
+                if (e.key === "Enter") { e.preventDefault(); submit(); }
+            }));
+        };
+
+        // Load All Repositories
+        const gitHubLoadAllReposStatus = state(""); 
+        const gitHubLoadAllReposLoading = state(false);
+
+        const handleGitHubLoadAllRepos = async () => {
+            gitHubLoadAllReposLoading.val = true;
+            try {
+                const response = await fetch(GITHUB_LOAD_ALL_REPOS, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" }
+                });
+                const data = await response.json();
+                alert(data.status || "gitHubLoadAllRepos request sent.");
+            } catch (err) {
+                alert(`Error: ${err.message}`);
+            } finally {
+                gitHubLoadAllReposLoading.val = false;
+            }
+        };
+
+        // Main Page
+        const handleYadaRequestSubmit = async () => {
             isLoading.val = true;
             try {
-                const response = await fetch("/api/request", {
+                const response = await fetch(YADA_REQUEST, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ input: textValue.val })
@@ -113,26 +251,6 @@
             }
         };
 
-        const cloneStatus = state(""); 
-        const cloneLoading = state(false);
-
-        const handleClone = async () => {
-            cloneLoading.val = true;
-            try {
-                const response = await fetch("/api/github/clone", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" }
-                });
-                const data = await response.json();
-                // If data.status is a string (e.g., "OK")
-                alert(data.status || "Clone request sent.");
-            } catch (err) {
-                alert(`Error: ${err.message}`);
-            } finally {
-                cloneLoading.val = false;
-            }
-        };
-
         add(document.getElementById("app"),
             div(
                 div({ class: "input-container" },
@@ -140,17 +258,21 @@
                     div({ class: "button-wrapper", style: "margin-bottom: 1.0rem; text-align: left;" },
                         button(
                             {
-                                onclick: handleClone,
-                                disabled: () => cloneLoading.val,
+                                onclick: handleGitHubLoadAllRepos,
+                                disabled: () => gitHubLoadAllReposLoading.val,
                                 style: "margin-right: 0.5rem; min-width: 175px;"
                             },
                             // Spinner always present, visibility toggled via inline style
                             span({
                                 class: "button-spinner",
-                                style: () => (cloneLoading.val ? "display: inline-block;" : "display: none;")
+                                style: () => (gitHubLoadAllReposLoading.val ? "display: inline-block;" : "display: none;")
                             }),
                             "Update GitHub Repos"                        
-                        )
+                        ),
+                        button(
+                            { onclick: handleLoadGitHubRepoDialog, style: "margin-left: 0.5rem; min-width: 175px;" },
+                            "Update GitHub Repo"
+                        ),
                     ),
                     // Textarea on its own row
                     textarea({
@@ -164,7 +286,7 @@
                     }),
                     // Submit button row
                     div({ class: "button-wrapper", style: "margin-top: 0.5rem;" },
-                        button({ onclick: handleSubmit }, "Submit")
+                        button({ onclick: handleYadaRequestSubmit }, "Submit")
                     ),
                     h3({ style: () => markdownHTML.val ? "display:block" : "display:none" }, "YADA Response"),
                     div({

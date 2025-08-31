@@ -34,8 +34,13 @@ def set_fred_env():
     os.environ["FRED_API_KEY"] = load_api_key(".keys/.fred_key")
 
 
+def set_bls_env():
+    os.environ["BLS_API_KEY"] = load_api_key(".keys/.bls_key")
+
+
 def set_user_agent():
     os.environ["USER_AGENT"] = "yada/0.1 (troy.stribling@gly.fish)"
+
 
 def log_input(x):
     print("\n🔍 INPUT DATA:", x)
