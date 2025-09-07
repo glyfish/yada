@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Annotated, Literal, Sequence
+from typing import Annotated, Literal, Sequence, Any
 
 from pydantic import BaseModel, Field
 from typing import Dict
@@ -30,28 +30,29 @@ class DocumentGrade(BaseModel):
 
 class ChromaRAGAgent(ABC):
 
-    def __init__(self, tool_name: str, tool_description: str, document_prompt: str, query, db_name: str, collection_name: str):
+    def __init__(self, tool_name: str, tool_description: str, document_prompt: str, db_name: str, collection_name: str, 
+                 query: Dict[str, Any]=None, db_path: str=".db"):
         self.tool_name = tool_name
         self.tool_description = tool_description
         
-        self.__llm = build_llm()
-        self.__doc_loader = ChromaDocumentLoader(db_name, collection_name)
+        self._llm = build_llm()
+        self._doc_loader = ChromaDocumentLoader(db_name, collection_name, db_path)
 
-        self.__retriever = self.__doc_loader.vectorstore.as_retriever(
+        self._retriever = self._doc_loader.vectorstore.as_retriever(
             search_type="similarity",
             search_kwargs={"k": 8, "fetch_k": 40, "filter": query}
         )
 
-        self.__retriever_tool = create_retriever_tool(
-            self.__retriever,
+        self._retriever_tool = create_retriever_tool(
+            self._retriever,
             tool_name,
             tool_description,
             document_prompt=document_prompt,
             document_separator="\n\n-----\n\n",)
-        self.__tools = [self.__retriever_tool]
-        self.__retriever_tool_node = ToolNode(self.__tools)
-        self.__tooled_llm = self.__llm.bind_tools(self.__tools)
-        self.__agent = self._create_agent()
+        self._tools = [self._retriever_tool]
+        self._retriever_tool_node = ToolNode(self._tools)
+        self._tooled_llm = self._llm.bind_tools(self._tools)
+        self._agent = self._create_agent()
 
 
     @property
@@ -59,7 +60,7 @@ class ChromaRAGAgent(ABC):
         """
         Get the document loader for the GitHub agent.
         """
-        return self.__doc_loader
+        return self._doc_loader
 
 
     @property
@@ -67,7 +68,7 @@ class ChromaRAGAgent(ABC):
         """
         Get the retriever for the GitHub agent.
         """
-        return self.__retriever
+        return self._retriever
     
 
     @property
@@ -75,7 +76,7 @@ class ChromaRAGAgent(ABC):
         """
         Get the tools available to the GitHub agent.
         """
-        return self.__tools
+        return self._tools
 
 
     @property
@@ -83,7 +84,7 @@ class ChromaRAGAgent(ABC):
         """
         Get the retriever tool for the GitHub agent.
         """
-        return self.__retriever_tool
+        return self._retriever_tool
 
 
     @property
@@ -92,7 +93,7 @@ class ChromaRAGAgent(ABC):
         Get the language model used by the agent.
         """
 
-        return self.__llm
+        return self._llm
     
 
     @property
@@ -101,7 +102,7 @@ class ChromaRAGAgent(ABC):
         Get the compiled agent state graph.
         """
 
-        return self.__agent
+        return self._agent
 
 
     @property
@@ -110,7 +111,7 @@ class ChromaRAGAgent(ABC):
         Get the language model bound with tools.
         """
 
-        return self.__tooled_llm
+        return self._tooled_llm
 
     @property
     def retriever_tool_node(self):
@@ -118,7 +119,7 @@ class ChromaRAGAgent(ABC):
         Get the retriever tool node.
         """
 
-        return self.__retriever_tool_node
+        return self._retriever_tool_node
 
 
     async def _invoke_model(self, state: WorkerState, config=None) -> WorkerState:
@@ -135,7 +136,7 @@ class ChromaRAGAgent(ABC):
             logger.error(f"Error invoking model: {e}")
             return {"messages": [f"Error: {e}"]}
 
-    def __grade_documents(self, state) -> Literal["generate", "rewrite"]:
+    def _grade_documents(self, state) -> Literal["generate", "rewrite"]:
         """
         Determines whether the retrieved documents are relevant to the question.
 
@@ -176,7 +177,7 @@ class ChromaRAGAgent(ABC):
         return "generate" if score == "yes" else "rewrite"
     
 
-    def __rewrite(self, state):
+    def _rewrite(self, state):
         """
         Transform the query to produce a better question.
 
@@ -210,7 +211,7 @@ class ChromaRAGAgent(ABC):
         return {"messages": [response]}
 
 
-    def __generate(self, state):
+    def _generate(self, state):
         """
         Generate answer
 
@@ -253,8 +254,8 @@ class ChromaRAGAgent(ABC):
             StateGraph(WorkerState)
             .add_node("model", self._invoke_model)
             .add_node("retrieve", self.retriever_tool_node)
-            .add_node("rewrite", self.__rewrite) 
-            .add_node("generate", self.__generate) 
+            .add_node("rewrite", self._rewrite) 
+            .add_node("generate", self._generate) 
             .add_edge(START, "model")
             .add_conditional_edges(
                 "model",
@@ -266,7 +267,7 @@ class ChromaRAGAgent(ABC):
             )
             .add_conditional_edges(
                 "retrieve",
-                self.__grade_documents,
+                self._grade_documents,
                 {
                     "generate": "generate", 
                     "rewrite": "rewrite"

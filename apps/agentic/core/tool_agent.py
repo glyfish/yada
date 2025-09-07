@@ -17,12 +17,12 @@ class ToolAgent(ABC):
     """
 
     def __init__(self, tools, tool_node):
-        self.__tools = tools
-        self.__tool_node = tool_node
-        self.__llm = build_llm()
-        self.__prompt = self.create_prompt()
-        self.__tooled_llm = self.__llm.bind_tools(self.__tools)
-        self.__agent = self._create_agent()
+        self._tools = tools
+        self._tool_node = tool_node
+        self._llm = build_llm()
+        self._prompt = self.create_prompt()
+        self._tooled_llm = self._llm.bind_tools(self._tools)
+        self._agent = self._create_agent()
 
 
     @property
@@ -31,7 +31,7 @@ class ToolAgent(ABC):
         Get the tools available to the agent.
         """
         
-        return self.__tools
+        return self._tools
 
     
     @property
@@ -40,7 +40,7 @@ class ToolAgent(ABC):
         Get the tool node used by the agent.
         """
 
-        return self.__tool_node
+        return self._tool_node
 
 
     @property
@@ -49,7 +49,7 @@ class ToolAgent(ABC):
         Get the compiled agent state graph.
         """
 
-        return self.__agent
+        return self._agent
     
 
     @property
@@ -58,7 +58,7 @@ class ToolAgent(ABC):
         Get the language model used by the agent.
         """
 
-        return self.__llm
+        return self._llm
     
 
     @property
@@ -67,7 +67,7 @@ class ToolAgent(ABC):
         Get the prompt template used by the agent.
         """
 
-        return self.__prompt
+        return self._prompt
     
     
     @property
@@ -76,7 +76,7 @@ class ToolAgent(ABC):
         Get the language model bound with tools.
         """
 
-        return self.__tooled_llm
+        return self._tooled_llm
     
 
     async def _invoke_model(self, state: WorkerState, config=None) -> WorkerState:

@@ -11,31 +11,37 @@ def load_api_key(filepath=".keys/.chatgpt_key"):
         return file.read().strip()
 
 
-def set_chatgpt_env():
-    os.environ["OPENAI_API_KEY"] = load_api_key()
+def set_chatgpt_env(filedir=".keys"):
+    filepath = os.path.join(filedir, ".chatgpt_key")
+    os.environ["OPENAI_API_KEY"] = load_api_key(filepath)
 
 
-def set_langsmith_env(project_name="pr-crushing-rowing-30", tracing=False):
-    os.environ["LANGSMITH_API_KEY"] = load_api_key(".keys/.langsmith_key")
+def set_langsmith_env(project_name="pr-crushing-rowing-30", tracing=False, filedir=".keys"):
+    filepath = os.path.join(filedir, ".langsmith_key")
+    os.environ["LANGSMITH_API_KEY"] = load_api_key(filepath)
     os.environ["LANGCHAIN_TRACING_V2"] = "true" if tracing else "false"
     os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
-    os.environ["LANGCHAIN_PROJECT"] = "pr-crushing-rowing-30"
+    os.environ["LANGCHAIN_PROJECT"] = project_name
 
 
-def set_tavily_env():
-    os.environ["TAVILY_API_KEY"] = load_api_key(".keys/.tavily_key")
+def set_tavily_env(filedir=".keys"):
+    filepath = os.path.join(filedir, ".tavily_key")
+    os.environ["TAVILY_API_KEY"] = load_api_key(filepath)
 
 
-def set_github_env():
-    os.environ["GITHUB_API_KEY"] = load_api_key(".keys/.github_key")
+def set_github_env(filedir=".keys"):
+    filepath = os.path.join(filedir, ".github_key")
+    os.environ["GITHUB_API_KEY"] = load_api_key(filepath)
 
 
-def set_fred_env():
-    os.environ["FRED_API_KEY"] = load_api_key(".keys/.fred_key")
+def set_fred_env(filedir=".keys"):
+    filepath = os.path.join(filedir, ".fred_key")
+    os.environ["FRED_API_KEY"] = load_api_key(filepath)
 
 
-def set_bls_env():
-    os.environ["BLS_API_KEY"] = load_api_key(".keys/.bls_key")
+def set_bls_env(filedir=".keys"):
+    filepath = os.path.join(filedir, ".bls_key")    
+    os.environ["BLS_API_KEY"] = load_api_key(filepath)
 
 
 def set_user_agent():
