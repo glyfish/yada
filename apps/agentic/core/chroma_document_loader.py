@@ -25,20 +25,21 @@ def num_tokens(text):
 
 class ChromaDocumentLoader:
 
-    def __init__(self, db_name: str, collection_name: str):
-        self.__db_name = db_name
-        self.__collection_name = collection_name
-        self.__db_path = os.path.join(".db", db_name)
-        self.__embedding_function = OpenAIEmbeddings(
+    def __init__(self, db_name: str, collection_name: str, db_path: str=".db"):
+        self._db_name = db_name
+        self._collection_name = collection_name
+        self._db_path = os.path.join(db_path, db_name)
+        self._embedding_function = OpenAIEmbeddings(
             embedding_ctx_length=2000,
             chunk_size=100
         )
 
-        self.__vectorstore = Chroma(
-            collection_name=self.__collection_name,
-            persist_directory=self.__db_path,
-            embedding_function=self.__embedding_function
+        self._vectorstore = Chroma(
+            collection_name=self._collection_name,
+            persist_directory=self._db_path,
+            embedding_function=self._embedding_function
         )
+        print("ChromaDocumentLoader initialized.", self._vectorstore)
 
 
     @property
@@ -47,7 +48,7 @@ class ChromaDocumentLoader:
         Get the name of the ChromaDB database.
         """
 
-        return self.__db_name
+        return self._db_name
     
     
     @property
@@ -56,7 +57,7 @@ class ChromaDocumentLoader:
         Get the name of the collection in the ChromaDB.
         """
 
-        return self.__collection_name
+        return self._collection_name
 
 
     @property
@@ -65,7 +66,7 @@ class ChromaDocumentLoader:
         Get the database path.
         """
 
-        return self.__db_path
+        return self._db_path
     
 
     @property
@@ -74,7 +75,7 @@ class ChromaDocumentLoader:
         Get the ChromaDB client instance.
         """
 
-        return self.__vectorstore
+        return self._vectorstore
         
 
     async def load_all_github_documents(self, base_path: str = GITHUB_LOCAL_PATH):
@@ -135,9 +136,10 @@ class ChromaDocumentLoader:
         try:
             c = next(repo.iter_commits(paths=rel_path, max_count=1))
             ts = c.committed_datetime.astimezone(timezone.utc).isoformat()
-            return c.hexsha[:12], ts
+            ts_unix = int(c.committed_datetime.astimezone(timezone.utc).timestamp())
+            return c.hexsha[:12], ts, ts_unix
         except StopIteration:
-            return None, None
+            return None, None, None
 
 
     async def load_github_repo(self, path: str):
@@ -175,7 +177,7 @@ class ChromaDocumentLoader:
 
             filename = os.path.basename(rel) if rel else (os.path.basename(src_abs) if src_abs else None)
             ext = os.path.splitext(rel)[1] if rel else (os.path.splitext(src_abs)[1] if src_abs else None)
-            last_commit, commit_ts = self.latest_commit_info(repo, rel) if rel else (None, None)
+            last_commit, commit_ts, commit_ts_unix = self.latest_commit_info(repo, rel) if rel else (None, None, None)
 
             file_metadata = {
                 "account": account,
@@ -186,6 +188,7 @@ class ChromaDocumentLoader:
                 "ext": ext,
                 "commit": last_commit,
                 "commit_ts": commit_ts,
+                "commit_ts_unix": commit_ts_unix,
             }
 
             d.metadata.update(file_metadata)

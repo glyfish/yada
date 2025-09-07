@@ -23,7 +23,7 @@ class SupervisorAgent:
     """
 
     def __init__(self):
-        self.__llm = build_llm()        
+        self._llm = build_llm()        
         
 
     @property
@@ -31,7 +31,7 @@ class SupervisorAgent:
         """
         Get the compiled agent state graph.
         """
-        return self.__agent
+        return self._agent
     
     
     async def process_request(self, request: str) -> WorkerState:
@@ -48,9 +48,9 @@ class SupervisorAgent:
         """
         
         clean_request, query = build_filter_and_query(request)
-        self.__create_workers(query)
-        prompt = self.__create_prompt()
-        self.__agent = prompt | self.__llm
+        self._create_workers(query)
+        prompt = self._create_prompt()
+        self._agent = prompt | self._llm
 
         agent_msg = {"messages": [HumanMessage(content=clean_request)]}
         supervisor_output = await self.agent.ainvoke(agent_msg)
@@ -64,16 +64,16 @@ class SupervisorAgent:
         for node in next_nodes:
             logger.debug(f"Calling node: {node}")
             
-            if node not in self.__workers:
+            if node not in self._workers:
                 raise RuntimeError(f"Unknown worker: {node}")
 
-            worker = self.__workers[node]
+            worker = self._workers[node]
             agent_msg = await worker(agent_msg, {})
 
         return agent_msg
 
 
-    def __create_prompt(self):
+    def _create_prompt(self):
         """
         Create the prompt template for the supervisor agent.
         This defines how the model should interpret the messages and what it should do.
@@ -97,7 +97,7 @@ class SupervisorAgent:
 
         )
 
-        team = list(self.__workers.keys())
+        team = list(self._workers.keys())
         options = ["FINISH"] + team
 
         prompt = ChatPromptTemplate.from_messages([
@@ -127,7 +127,7 @@ class SupervisorAgent:
 
 
 
-    def __create_agent_node(self, agent, node_name: str):
+    def _create_agent_node(self, agent, node_name: str):
         async def node(state, config):
             logger.debug(f"Invoking worker: {node_name}")
             logger.debug(f"Request Message: {get_last_message(state).content}")
@@ -143,11 +143,11 @@ class SupervisorAgent:
         return node
 
 
-    def __create_workers(self, query):
-        self.__workers = {            
-            "researcher": self.__create_agent_node(SearchAgent().agent, "researcher"),
-            "bar_chart_generator": self.__create_agent_node(BarChartAgent().agent, "bar_chart_generator"),
-            "time_series_generator": self.__create_agent_node(TimeSeriesPlotAgent().agent, "time_series_generator"),
-            "code_repository_search": self.__create_agent_node(CodeRepoAgent(query).agent, "code_repository_search"),
+    def _create_workers(self, query):
+        self._workers = {            
+            "researcher": self._create_agent_node(SearchAgent().agent, "researcher"),
+            "bar_chart_generator": self._create_agent_node(BarChartAgent().agent, "bar_chart_generator"),
+            "time_series_generator": self._create_agent_node(TimeSeriesPlotAgent().agent, "time_series_generator"),
+            "code_repository_search": self._create_agent_node(CodeRepoAgent(query).agent, "code_repository_search"),
         }
 

@@ -13,9 +13,6 @@ from langgraph.prebuilt import tools_condition
 from langchain.tools.retriever import create_retriever_tool
 from langgraph.prebuilt import ToolNode
 
-from apps.agentic.core.chroma_document_loader import ChromaDocumentLoader
-from apps.agentic.core.messages import WorkerState
-from apps.agentic.core.utils import build_llm
 from apps.agentic.core.constants import GITHUB_DB_NAME, GITHUB_COLLECTION_NAME
 from apps.agentic.core.chroma_rag_agent import ChromaRAGAgent
 from lib.logger import get_logger
@@ -56,4 +53,4 @@ class CodeRepoAgent(ChromaRAGAgent):
         )
         document_prompt = PromptTemplate.from_template(template=prompt_template)
 
-        super().__init__(tool_name, tool_description, document_prompt, query, GITHUB_DB_NAME, GITHUB_COLLECTION_NAME)
+        super().__init__(tool_name, tool_description, document_prompt, GITHUB_DB_NAME, GITHUB_COLLECTION_NAME, query)
