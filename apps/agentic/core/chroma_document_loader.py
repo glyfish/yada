@@ -2,6 +2,7 @@ import os
 import sys
 from tracemalloc import start
 import numpy
+from datetime import timezone
 
 from lib.logger import get_logger
 from git import Repo
@@ -127,12 +128,16 @@ class ChromaDocumentLoader:
             return remote_head.reference.name.split("/")[-1]
 
 
-    def latest_commit_for(self, repo, rel_path: str) -> str | None:
+    def latest_commit_info(self, repo, rel_path: str) -> tuple[str | None, str | None]:
+        """
+        Returns (short_sha, ISO-8601 UTC timestamp) for the latest commit touching rel_path.
+        """
         try:
             c = next(repo.iter_commits(paths=rel_path, max_count=1))
-            return c.hexsha[:12]
+            ts = c.committed_datetime.astimezone(timezone.utc).isoformat()
+            return c.hexsha[:12], ts
         except StopIteration:
-            return None
+            return None, None
 
 
     async def load_github_repo(self, path: str):
@@ -170,7 +175,7 @@ class ChromaDocumentLoader:
 
             filename = os.path.basename(rel) if rel else (os.path.basename(src_abs) if src_abs else None)
             ext = os.path.splitext(rel)[1] if rel else (os.path.splitext(src_abs)[1] if src_abs else None)
-            last_commit = self.latest_commit_for(repo, rel) if rel else None
+            last_commit, commit_ts = self.latest_commit_info(repo, rel) if rel else (None, None)
 
             file_metadata = {
                 "account": account,
@@ -180,6 +185,7 @@ class ChromaDocumentLoader:
                 "filename": filename,
                 "ext": ext,
                 "commit": last_commit,
+                "commit_ts": commit_ts,
             }
 
             d.metadata.update(file_metadata)

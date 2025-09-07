@@ -30,19 +30,20 @@ class DocumentGrade(BaseModel):
 
 class CodeRepoAgent(ChromaRAGAgent):
 
-    def __init__(self):
+    def __init__(self, query):
         tool_name = "github_agent_tool"
         tool_description = (
             "Troy Stribling Code Retriever"
-            "Description: Search and retrieve content from Troy Stribling’s (the user’s) GitHub repositories "
-            "indexed in the vector store (code, READMEs, docs, issues, commit messages). Use this for "
-            "any query about 'my code', 'my repo(s)', or specific files/functions."
+            "Description: Search and retrieve content from Troy Stribling’s GitHub repositories "
+            "(i.e. my GitHub Repositories) indexed in the vector store. "
+            "The vector store contains various types of content (code, READMEs, docs, issues, commit messages). " 
+            "Use this for any query about 'my code', 'my repo(s)', or requests for specific files/functions."
         )
 
         prompt_template = (
-            "You are looking up Troy Stribling’s code (“my code”) in his indexed GitHub repositories.vector store "
-            "Information about the code can be found in the metadata attached to each file. Following is a description of the metadata:"
-            "The programming language should be deduced from the file extension."
+            "You are searching Troy Stribling’s code (i.e. my code) in his indexed GitHub repositories.vector store to answer "
+            "requests about his code. Information about the code can be found in the metadata attached to each file. "
+            "Following is a description of the metadata. The programming language should be deduced from the file extension."
             "- GitHub account: {metadata[account]}"
             "- Repository name: {metadata[repo]}"
             "- Git branch name: {metadata[branch]}"
@@ -55,4 +56,4 @@ class CodeRepoAgent(ChromaRAGAgent):
         )
         document_prompt = PromptTemplate.from_template(template=prompt_template)
 
-        super().__init__(tool_name, tool_description, document_prompt, GITHUB_DB_NAME, GITHUB_COLLECTION_NAME)
+        super().__init__(tool_name, tool_description, document_prompt, query, GITHUB_DB_NAME, GITHUB_COLLECTION_NAME)
