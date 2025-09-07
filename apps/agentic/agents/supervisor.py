@@ -11,6 +11,8 @@ from apps.agentic.agents.search_agent import SearchAgent
 from apps.agentic.agents.bar_chart_agent import BarChartAgent
 from apps.agentic.agents.time_series_plot_agent import TimeSeriesPlotAgent
 from apps.agentic.agents.code_repo_agent import CodeRepoAgent
+from apps.agentic.core.query_filters import build_filter_and_query
+
 
 logger = get_logger("YADA")
 
@@ -21,17 +23,7 @@ class SupervisorAgent:
     """
 
     def __init__(self):
-        self.__llm = build_llm()
-        
-        self.__workers = {
-            "researcher": self.__create_agent_node(SearchAgent().agent, "researcher"),
-            "bar_chart_generator": self.__create_agent_node(BarChartAgent().agent, "bar_chart_generator"),
-            "time_series_generator": self.__create_agent_node(TimeSeriesPlotAgent().agent, "time_series_generator"),
-            "code_repository_search": self.__create_agent_node(CodeRepoAgent().agent, "code_repository_search"),
-        }
-
-        self.__prompt = self.__create_prompt()
-        self.__agent = self.__prompt | self.__llm
+        self.__llm = build_llm()        
         
 
     @property
@@ -55,7 +47,12 @@ class SupervisorAgent:
                 The initial state with the user request.
         """
         
-        agent_msg = {"messages": [HumanMessage(content=request)]}
+        clean_request, query = build_filter_and_query(request)
+        self.__create_workers(query)
+        prompt = self.__create_prompt()
+        self.__agent = prompt | self.__llm
+
+        agent_msg = {"messages": [HumanMessage(content=clean_request)]}
         supervisor_output = await self.agent.ainvoke(agent_msg)
         next_nodes = [item.strip() for item in supervisor_output.content.split(",")]
         logger.debug(f"Supervisor decided to call: {next_nodes}")
@@ -144,3 +141,13 @@ class SupervisorAgent:
                 ]
             }
         return node
+
+
+    def __create_workers(self, query):
+        self.__workers = {            
+            "researcher": self.__create_agent_node(SearchAgent().agent, "researcher"),
+            "bar_chart_generator": self.__create_agent_node(BarChartAgent().agent, "bar_chart_generator"),
+            "time_series_generator": self.__create_agent_node(TimeSeriesPlotAgent().agent, "time_series_generator"),
+            "code_repository_search": self.__create_agent_node(CodeRepoAgent(query).agent, "code_repository_search"),
+        }
+

@@ -30,15 +30,16 @@ class DocumentGrade(BaseModel):
 
 class ChromaRAGAgent(ABC):
 
-    def __init__(self, tool_name: str, tool_description: str, document_prompt: str, db_name: str, collection_name: str):
+    def __init__(self, tool_name: str, tool_description: str, document_prompt: str, query, db_name: str, collection_name: str):
         self.tool_name = tool_name
         self.tool_description = tool_description
         
         self.__llm = build_llm()
         self.__doc_loader = ChromaDocumentLoader(db_name, collection_name)
+
         self.__retriever = self.__doc_loader.vectorstore.as_retriever(
             search_type="similarity",
-            search_kwargs={"k": 5}
+            search_kwargs={"k": 8, "fetch_k": 40, "filter": query}
         )
 
         self.__retriever_tool = create_retriever_tool(
