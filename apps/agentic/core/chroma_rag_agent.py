@@ -23,11 +23,6 @@ from lib.logger import get_logger
 logger = get_logger("YADA")
 
 
-class DocumentGrade(BaseModel):
-    """Binary score for relevance check."""
-    binary_score: str = Field(description="Relevance score 'yes' or 'no'")
-
-
 class ChromaRAGAgent(ABC):
 
     def __init__(self, tool_name: str, tool_description: str, document_prompt: str, db_name: str, collection_name: str, 
