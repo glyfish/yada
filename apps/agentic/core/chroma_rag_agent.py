@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 from typing import Annotated, Literal, Sequence, Any
-from pathlib import Path
 import re
 
 from pydantic import BaseModel, Field
@@ -18,7 +17,6 @@ from langgraph.prebuilt import ToolNode
 from apps.agentic.core.chroma_document_loader import ChromaDocumentLoader
 from apps.agentic.core.messages import WorkerState
 from apps.agentic.core.utils import build_llm
-from apps.agentic.core.constants import GITHUB_LOCAL_PATH
 
 from lib.logger import get_logger
 
@@ -179,7 +177,6 @@ class ChromaRAGAgent(ABC):
         docs = last_message.content
 
         # Build full-file section from the top retrieved file(s)
-        files_section = ""
         try:
             hits = self.retriever.invoke(question)
 
@@ -194,84 +191,10 @@ class ChromaRAGAgent(ABC):
                 if len(top_files) >= 1:
                     break
 
-            for d in top_files:
-                acct   = d.metadata.get("account")
-                repo   = d.metadata.get("repo")
-                commit = d.metadata.get("commit")
-                ts     = d.metadata.get("commit_ts")
-                path   = d.metadata.get("path")
-
-                # Try reading from the local filesystem clone
-                file_path = Path(GITHUB_LOCAL_PATH) / (acct or "") / (repo or "") / (path or "")
-                full = None
-                try:
-                    full = file_path.read_text(encoding="utf-8", errors="ignore")
-                except Exception:
-                    full = None
-
-                if not full:
-                    continue
-
-                # Guardrail for huge files
-                if len(full) > 30000:
-                    full = full[:30000] + "\n\n<!-- truncated -->\n"
-
-                # Derive extension from metadata or file path and map to a markdown fence language
-                name_lower = Path(path).name.lower() if path else ""
-                ext_path = Path(path).suffix.lower() if path else ""
-                ext = (d.metadata.get("ext") or ext_path or "").lower()
-
-                lang_map = {
-                    ".py": "python",
-                    ".rb": "ruby",
-                    ".rs": "rust",
-                    ".js": "javascript",
-                    ".ts": "typescript",
-                    ".jsx": "jsx",
-                    ".tsx": "tsx",
-                    ".go": "go",
-                    ".java": "java",
-                    ".kt": "kotlin",
-                    ".c": "c",
-                    ".h": "c",
-                    ".cpp": "cpp",
-                    ".hpp": "cpp",
-                    ".cs": "csharp",
-                    ".php": "php",
-                    ".swift": "swift",
-                    ".scala": "scala",
-                    ".sql": "sql",
-                    ".sh": "bash",
-                    ".json": "json",
-                    ".toml": "toml",
-                    ".ini": "ini",
-                    ".conf": "ini",
-                    ".yml": "yaml",
-                    ".yaml": "yaml",
-                    ".md": "markdown",
-                    ".mdx": "markdown",
-                    ".rdoc": "markdown",
-                    ".html": "html",
-                    ".xml": "xml",
-                    ".css": "css",
-                    ".txt": "text",
-                }
-
-                # Filename-based special cases (no extension)
-                if not ext:
-                    if name_lower == "makefile":
-                        lang = "makefile"
-                    elif name_lower == "dockerfile":
-                        lang = "dockerfile"
-                    else:
-                        lang = "plaintext"
-                else:
-                    lang = lang_map.get(ext, "plaintext")
-
-                header = f"### {path}\n{acct}/{repo}@{commit}, {ts}"
-                files_section += ("\n\n-----\n\n#\n" + header + f"\n\n```{lang}\n{full}\n```\n")
+            files_section = self.read_file(top_files)
         except Exception as e:
-            logger.debug(f"Full-file append skipped: {e}")
+            logger.error(f"Full-file append skipped because of error: {e}")
+
 
         prompt = hub.pull("rlm/rag-prompt")
         logger.debug(f"Code repository generate prompt: {prompt}")
@@ -323,6 +246,15 @@ class ChromaRAGAgent(ABC):
             .add_edge("generate", END)
         )
         return graph.compile()
+
+
+    @abstractmethod
+    def read_file(self, top_files):
+        """
+        Read the contents of the specified files.
+        """
+
+        raise NotImplementedError("Subclasses must implement the read_file method to read files.")
 
 
     @staticmethod
