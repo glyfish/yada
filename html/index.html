@@ -4,6 +4,9 @@
 <head>
     <meta charset="UTF-8" />
     <title>YADA</title>
+        <!-- highlight.js theme + core -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -45,12 +48,27 @@
             position: relative;
             overflow: visible;
         }
-        .markdown-output {
-            margin-top: 1.5rem;
-            padding: 1rem;
+        .markdown-output pre {
+            margin: 12px 0;
+            padding: 12px 16px;
             background: #f5f5f5;
             border: 1px solid #ddd;
-            border-radius: 4px;
+            border-radius: 8px;
+            max-width: 100%;
+            max-height: 60vh;
+            overflow-x: auto;
+            overflow-y: auto;
+            white-space: pre;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+                        "Liberation Mono", "Courier New", monospace;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        .markdown-output pre code {
+            white-space: inherit;
+        }
+        .markdown-output pre code, .markdown-output pre code.hljs {
+          background: #f5f5f5 !important;
         }
         .spinner {
             width: 40px;
@@ -134,6 +152,28 @@
         import van from "./vendor/van-1.5.5.min.js";
         import { marked } from "./vendor/marked.esm.js";
 
+        marked.setOptions({
+          highlight(code, lang) {
+            if (window.hljs && lang && window.hljs.getLanguage(lang)) {
+              return window.hljs.highlight(code, { language: lang }).value;
+            }
+            // Fallback: auto-detect if lang missing/unknown
+            return window.hljs ? window.hljs.highlightAuto(code).value : code;
+          },
+          gfm: true,
+          breaks: false
+        });
+
+        function renderMarkdown(mdText) {
+          const el = document.querySelector(".markdown-output");
+          if (!el) return;
+          el.innerHTML = marked.parse(mdText || "");
+          // After HTML is in the DOM, run highlight.js on all code blocks
+          if (window.hljs) {
+            el.querySelectorAll("pre code").forEach(block => window.hljs.highlightElement(block));
+          }
+        }
+
         const { div, span, textarea, button, h3 } = van.tags;
         const { add, state } = van;
 
@@ -144,6 +184,13 @@
         const GITHUB_LOAD_ALL_REPOS = "/api/github/load_all_repos";
         const GITHUB_LOAD_REPO = "/api/github/load_repo";
         const YADA_REQUEST = "/api/request";
+
+        van.derive(() => {
+          // read the state to register dependency
+          const _ = markdownHTML.val;
+          // schedule render after DOM updates
+          queueMicrotask(() => renderMarkdown(markdownHTML.val));
+        });
 
         // Load Repository Dialog
         const handleLoadGitHubRepoDialog = () => {
@@ -298,8 +345,7 @@
                         div({ class: "spinner" })
                     ),
                     div(
-                        { class: "markdown-output", style: () => markdownHTML.val ? "display:block" : "display:none" },
-                        div({ innerHTML: () => marked.parse(markdownHTML.val) })
+                        { class: "markdown-output", style: () => markdownHTML.val ? "display:block" : "display:none" }
                     )
                 )
             )

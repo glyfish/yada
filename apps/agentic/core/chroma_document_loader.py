@@ -193,7 +193,7 @@ class ChromaDocumentLoader:
 
             d.metadata.update(file_metadata)
 
-        splitter = RecursiveCharacterTextSplitter(chunk_size=1028, chunk_overlap=200)
+        splitter = RecursiveCharacterTextSplitter(chunk_size=1028, chunk_overlap=200, add_start_index=True)
 
         all_chunked = []
         for doc in documents:
