@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Annotated, Literal, Sequence
+from pathlib import Path
 
 from pydantic import BaseModel, Field
 from typing import Dict
@@ -13,7 +14,7 @@ from langgraph.prebuilt import tools_condition
 from langchain.tools.retriever import create_retriever_tool
 from langgraph.prebuilt import ToolNode
 
-from apps.agentic.core.constants import GITHUB_DB_NAME, GITHUB_COLLECTION_NAME
+from apps.agentic.core.constants import GITHUB_DB_NAME, GITHUB_COLLECTION_NAME, GITHUB_LOCAL_PATH
 from apps.agentic.core.chroma_rag_agent import ChromaRAGAgent
 from lib.logger import get_logger
 
@@ -54,3 +55,83 @@ class CodeRepoAgent(ChromaRAGAgent):
         document_prompt = PromptTemplate.from_template(template=prompt_template)
 
         super().__init__(tool_name, tool_description, document_prompt, GITHUB_DB_NAME, GITHUB_COLLECTION_NAME, query)
+
+
+    def read_file(self, top_files):
+        files_section = ""
+        for d in top_files:
+            acct   = d.metadata.get("account")
+            repo   = d.metadata.get("repo")
+            commit = d.metadata.get("commit")
+            ts     = d.metadata.get("commit_ts")
+            path   = d.metadata.get("path")
+
+            # Try reading from the local filesystem clone
+            file_path = Path(GITHUB_LOCAL_PATH) / (acct or "") / (repo or "") / (path or "")
+            full = None
+            try:
+                full = file_path.read_text(encoding="utf-8", errors="ignore")
+            except Exception:
+                full = None
+
+            if not full:
+                continue
+
+            if len(full) > 30000:
+                full = full[:30000] + "\n\n<!-- truncated -->\n"
+
+            # Derive extension from metadata or file path and map to a markdown fence language
+            name_lower = Path(path).name.lower() if path else ""
+            ext_path = Path(path).suffix.lower() if path else ""
+            ext = (d.metadata.get("ext") or ext_path or "").lower()
+
+            lang_map = {
+                ".py": "python",
+                ".rb": "ruby",
+                ".rs": "rust",
+                ".js": "javascript",
+                ".ts": "typescript",
+                ".jsx": "jsx",
+                ".tsx": "tsx",
+                ".go": "go",
+                ".java": "java",
+                ".kt": "kotlin",
+                ".c": "c",
+                ".h": "c",
+                ".cpp": "cpp",
+                ".hpp": "cpp",
+                ".cs": "csharp",
+                ".php": "php",
+                ".swift": "swift",
+                ".scala": "scala",
+                ".sql": "sql",
+                ".sh": "bash",
+                ".json": "json",
+                ".toml": "toml",
+                ".ini": "ini",
+                ".conf": "ini",
+                ".yml": "yaml",
+                ".yaml": "yaml",
+                ".md": "markdown",
+                ".mdx": "markdown",
+                ".rdoc": "markdown",
+                ".html": "html",
+                ".xml": "xml",
+                ".css": "css",
+                ".txt": "text",
+            }
+
+            if not ext:
+                if name_lower == "makefile":
+                    lang = "makefile"
+                elif name_lower == "dockerfile":
+                    lang = "dockerfile"
+                else:
+                    lang = "plaintext"
+            else:
+                lang = lang_map.get(ext, "plaintext")
+
+            header = f"### {path}\n{acct}/{repo}@{commit}, {ts}"
+            files_section += ("\n\n-----\n\n#\n" + header + f"\n\n```{lang}\n{full}\n```\n")
+
+        return files_section
