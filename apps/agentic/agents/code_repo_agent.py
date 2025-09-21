@@ -14,7 +14,8 @@ from langgraph.prebuilt import tools_condition
 from langchain.tools.retriever import create_retriever_tool
 from langgraph.prebuilt import ToolNode
 
-from apps.agentic.core.constants import GITHUB_DB_NAME, GITHUB_COLLECTION_NAME, GITHUB_LOCAL_PATH
+from apps.agentic.core.constants import (GITHUB_DB_NAME, GITHUB_COLLECTION_NAME, GITHUB_LOCAL_PATH,
+                                         PROGRAMMING_LANGUAGE_MAP)
 from apps.agentic.core.chroma_rag_agent import ChromaRAGAgent
 from apps.agentic.core.github_document_loader import GitHubChromaDocumentLoader
 from lib.logger import get_logger
@@ -86,42 +87,6 @@ class CodeRepoAgent(ChromaRAGAgent):
             ext_path = Path(path).suffix.lower() if path else ""
             ext = (d.metadata.get("ext") or ext_path or "").lower()
 
-            lang_map = {
-                ".py": "python",
-                ".rb": "ruby",
-                ".rs": "rust",
-                ".js": "javascript",
-                ".ts": "typescript",
-                ".jsx": "jsx",
-                ".tsx": "tsx",
-                ".go": "go",
-                ".java": "java",
-                ".kt": "kotlin",
-                ".c": "c",
-                ".h": "c",
-                ".cpp": "cpp",
-                ".hpp": "cpp",
-                ".cs": "csharp",
-                ".php": "php",
-                ".swift": "swift",
-                ".scala": "scala",
-                ".sql": "sql",
-                ".sh": "bash",
-                ".json": "json",
-                ".toml": "toml",
-                ".ini": "ini",
-                ".conf": "ini",
-                ".yml": "yaml",
-                ".yaml": "yaml",
-                ".md": "markdown",
-                ".mdx": "markdown",
-                ".rdoc": "markdown",
-                ".html": "html",
-                ".xml": "xml",
-                ".css": "css",
-                ".txt": "text",
-            }
-
             if not ext:
                 if name_lower == "makefile":
                     lang = "makefile"
@@ -130,7 +95,7 @@ class CodeRepoAgent(ChromaRAGAgent):
                 else:
                     lang = "plaintext"
             else:
-                lang = lang_map.get(ext, "plaintext")
+                lang = PROGRAMMING_LANGUAGE_MAP.get(ext, "plaintext")
 
             header = f"### {path}\n{acct}/{repo}@{commit}, {ts}"
             files_section += ("\n\n-----\n\n#\n" + header + f"\n\n```{lang}\n{full}\n```\n")
