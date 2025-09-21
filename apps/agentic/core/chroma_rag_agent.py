@@ -25,14 +25,14 @@ logger = get_logger("YADA")
 
 class ChromaRAGAgent(ABC):
 
-    def __init__(self, tool_name: str, tool_description: str, document_prompt: str, db_name: str, collection_name: str, 
-                 query: Dict[str, Any]={}, db_path: str=".db"):
+    def __init__(self, tool_name: str, tool_description: str, document_prompt: str, doc_loader: ChromaDocumentLoader,
+                 query: Dict[str, Any]={}):
         self.tool_name = tool_name
         self.tool_description = tool_description
         self._query = query
 
         self._llm = build_llm()
-        self._doc_loader = ChromaDocumentLoader(db_name, collection_name, db_path)
+        self._doc_loader = doc_loader
 
         logger.debug(f"Chroma query: {query}")
 
