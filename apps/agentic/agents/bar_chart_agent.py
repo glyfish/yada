@@ -129,6 +129,7 @@ class BarChartAgent(ToolAgent):
         
         return bar_chart_file
 
+
     @staticmethod
     def generate_bar_chart(data: Dict[str, float], title: str, xlabel: str, ylabel: str, xlabel_rotation: int) -> str:
         """

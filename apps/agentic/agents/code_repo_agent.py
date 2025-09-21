@@ -16,6 +16,7 @@ from langgraph.prebuilt import ToolNode
 
 from apps.agentic.core.constants import GITHUB_DB_NAME, GITHUB_COLLECTION_NAME, GITHUB_LOCAL_PATH
 from apps.agentic.core.chroma_rag_agent import ChromaRAGAgent
+from apps.agentic.core.github_document_loader import GitHubChromaDocumentLoader
 from lib.logger import get_logger
 
 logger = get_logger("YADA")
@@ -54,7 +55,7 @@ class CodeRepoAgent(ChromaRAGAgent):
         )
         document_prompt = PromptTemplate.from_template(template=prompt_template)
 
-        super().__init__(tool_name, tool_description, document_prompt, GITHUB_DB_NAME, GITHUB_COLLECTION_NAME, query)
+        super().__init__(tool_name, tool_description, document_prompt, GitHubChromaDocumentLoader(), query)
 
 
     def read_file(self, top_files):
