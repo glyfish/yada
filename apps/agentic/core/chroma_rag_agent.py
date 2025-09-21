@@ -250,21 +250,3 @@ class ChromaRAGAgent(ABC):
         """
 
         raise NotImplementedError("Subclasses must implement the read_file method to read files.")
-
-
-    @staticmethod
-    def extract_snippet(text: str, needle: str, context_lines: int = 12) -> str | None:
-        """Return a code excerpt around the first match of `needle` (regex)."""
-        lines = text.splitlines()
-        # join with newlines to search reliably
-        joined = "\n".join(lines)
-        m = re.search(needle, joined, re.IGNORECASE)
-        if not m:
-            return None
-        # map char offsets to line numbers
-        upto = joined[:m.start()]
-        start_line = upto.count("\n")
-        lo = max(0, start_line - context_lines)
-        hi = min(len(lines), start_line + context_lines)
-        snippet = "\n".join(lines[lo:hi])
-        return snippet

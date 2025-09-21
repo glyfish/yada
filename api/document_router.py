@@ -157,7 +157,7 @@ async def load_github_repo(payload: GitHubRepoLoadPayload):
 Load specified research note into the document store.
 """
 class LoadResearchNotePayload(BaseModel):
-    file_name:str
+    filename:str
     title: str
     author: str
     start_date: str
@@ -166,8 +166,9 @@ class LoadResearchNotePayload(BaseModel):
 
 @router.post("/document/load_research_note")
 async def load_research_note(payload: LoadResearchNotePayload):
+
     meta_data = {
-        "file_name": payload.file_name,
+        "filename": payload.filename,
         "title": payload.title,
         "author": payload.author,
         "start_date": payload.start_date,
@@ -178,9 +179,9 @@ async def load_research_note(payload: LoadResearchNotePayload):
     doc_loader = ResearchNoteChromaDocumentLoader(meta_data)
 
     logger.debug((f"Received request to load research note: "
-                  f"file_name={meta_data['file_name']}, title={meta_data['title']}, author={meta_data['author']}, "
+                  f"file_name={meta_data['filename']}, title={meta_data['title']}, author={meta_data['author']}, "
                   f"start_date={meta_data['start_date']}, topic={meta_data['topic']}, tags={meta_data['tags']}."))
 
-    await doc_loader.load_research_notes(meta_data)
+    await doc_loader.load_document(meta_data)
 
     return {"status": "Success", "message": f"Loaded research note: {payload.title}."}
