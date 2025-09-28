@@ -88,7 +88,7 @@ class ChromaDocumentLoader(ABC):
 
 
     @abstractmethod
-    async def load_all_documents(self, base_path: str):
+    async def load_all_documents(self, base_path: str, **kwargs):
         """
         load all of the documents from the base path.
         """
@@ -97,7 +97,7 @@ class ChromaDocumentLoader(ABC):
 
 
     @abstractmethod
-    async def load_document(self, path: str):
+    async def load_document(self, path: str, **kwargs):
         """
         Load document from path into the ChromaDB collection.
         """

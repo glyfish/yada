@@ -42,12 +42,12 @@ class TimeSeriesPlotAgent(ToolAgent):
 
     def __init__(self):
         tools = [TimeSeriesPlotAgent.time_series_plot_tool]
-        tool_node = ToolNode(tools, name="time_series_plot_tool_node")
+        tool_node_name = "time_series_plot_tool_node"
 
         sys.path.append(os.path.abspath(os.path.join(os.getcwd(), '..')))
         pyplot.style.use(config.glyfish_style)
 
-        super().__init__(tools, tool_node)
+        super().__init__(tools, tool_node_name)
 
 
     def create_prompt(self):
