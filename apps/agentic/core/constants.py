@@ -1,4 +1,6 @@
 # GITHUB constants
+DB_PATH = ".db"
+
 GITHUB_ACCOUNTS = ["troystribling"]
 GITHUB_EXCLUDED_REPOS = ["3dmodels"]
 

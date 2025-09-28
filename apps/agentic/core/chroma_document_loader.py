@@ -17,7 +17,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 from apps.agentic.core.utils import load_api_key
 from apps.agentic.core.constants import (GITHUB_LOCAL_PATH, GITHUB_EXCLUDED_REPOS, CHROMA_DB_MAX_BATCH_SIZE,
-                                         RESEARCH_NOTES_LOCAL_PATH)
+                                         RESEARCH_NOTES_LOCAL_PATH, DB_PATH)
 import tiktoken
 
 logger = get_logger("YADA")
@@ -29,7 +29,7 @@ def num_tokens(text):
 
 class ChromaDocumentLoader(ABC):
 
-    def __init__(self, db_name: str, collection_name: str, db_path: str=".db"):
+    def __init__(self, db_name: str, collection_name: str, db_path: str=DB_PATH):
         self._db_name = db_name
         self._collection_name = collection_name
         self._db_path = os.path.join(db_path, db_name)
@@ -43,7 +43,6 @@ class ChromaDocumentLoader(ABC):
             persist_directory=self._db_path,
             embedding_function=self._embedding_function
         )
-        print("ChromaDocumentLoader initialized.", self._vectorstore)
 
 
     @property
