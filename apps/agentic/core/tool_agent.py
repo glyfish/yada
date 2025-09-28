@@ -4,8 +4,9 @@ from langgraph.graph import StateGraph, START, END
 from apps.agentic.core.messages import WorkerState
 from apps.agentic.core.utils import build_llm
 from langgraph.prebuilt import tools_condition
-
+from langchain_core.tools import BaseTool
 from lib.logger import get_logger
+from langgraph.prebuilt import ToolNode
 
 logger = get_logger("YADA")
 
@@ -16,9 +17,10 @@ class ToolAgent(ABC):
     Abstract Base class for agents that use a language model to generate data and can call tools.
     """
 
-    def __init__(self, tools, tool_node):
+    def __init__(self, tools: list[BaseTool], tool_node_name: str):
         self._tools = tools
-        self._tool_node = tool_node
+        self._tool_node_name = tool_node_name
+        self._tool_node = ToolNode(tools, name=self._tool_node_name)
         self._llm = build_llm()
         self._prompt = self.create_prompt()
         self._tooled_llm = self._llm.bind_tools(self._tools)
@@ -33,7 +35,16 @@ class ToolAgent(ABC):
         
         return self._tools
 
-    
+
+    @property
+    def tool_node_name(self):
+        """
+        Get the name of the tool node.
+        """
+
+        return self._tool_node_name
+
+
     @property
     def tool_node(self):
         """

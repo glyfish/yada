@@ -16,12 +16,45 @@ logger = get_logger("YADA")
 
 
 class GitHubChromaDocumentLoader(ChromaDocumentLoader):
+    """
+    Document loader for GitHub repositories.
+
+    Metadata added to each document
+    ------------------------------
+    - account: GitHub account or organization name
+    - repo: Repository name
+    - branch: Branch name (default branch)
+    - path: File path relative to the repository root
+    - filename: Base name of the file
+    - ext: File extension
+    - commit: Short SHA of the latest commit touching the file
+    - commit_ts: ISO-8601 UTC timestamp of the latest commit touching the file
+    - commit_ts_unix: Unix timestamp of the latest commit touching the file
+
+    Meta Data Filter Examples
+    ------------------------
+    Requests must use filters on the meta data to restrict to a single repo or account+repo.
+
+    Example filter to restrict to a single repo: 
+        repo:yada
+    Example filter to restrict to a single account: 
+        account:glyfish
+    Example filter to restrict to a single account+repo: 
+        account:glyfish repo:yada
+    Example filter to restrict to a single account+repo+path prefix: 
+        account:glyfish repo:yada path:apps/agentic/
+    Example to filter by file extension:
+        ext:md
+    Example to filter commit timestamp range:
+        after:2012-01-01
+        before:2023-01-01
+    """
 
     def __init__(self, db_path=DB_PATH):
         super().__init__(GITHUB_DB_NAME, GITHUB_COLLECTION_NAME, db_path)
 
 
-    async def load_all_documents(self, base_path: str = GITHUB_LOCAL_PATH):
+    async def load_all_documents(self, base_path: str = GITHUB_LOCAL_PATH, **kwargs):
         """
         Load documents into the ChromaDB collection.
         """
@@ -49,7 +82,7 @@ class GitHubChromaDocumentLoader(ChromaDocumentLoader):
         logger.info(f"Finished updating github document store from {base_path}.")
 
 
-    async def load_document(self, path: str):
+    async def load_document(self, path: str, **kwargs):
         """
         Load documents into the ChromaDB collection.
         """
@@ -129,6 +162,8 @@ class GitHubChromaDocumentLoader(ChromaDocumentLoader):
                 "filename": filename,
                 "ext": ext,
                 "commit": last_commit,
+                "ts_iso": commit_ts,
+                "ts_unix": commit_ts_unix,
                 "commit_ts": commit_ts,
                 "commit_ts_unix": commit_ts_unix,
             }

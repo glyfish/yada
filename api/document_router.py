@@ -6,7 +6,7 @@ import requests
 from urllib.parse import urlparse
 
 from lib.logger import get_logger
-from apps.agentic.core.constants import (GITHUB_ACCOUNTS, GITHUB_API)
+from apps.agentic.core.constants import (GITHUB_ACCOUNTS, GITHUB_API, RESEARCH_NOTES_LOCAL_PATH)
 
 from git import Repo
 from apps.agentic.core.github_document_loader import GitHubChromaDocumentLoader
@@ -32,6 +32,7 @@ def clone_or_pull(repo_name, repo_url, local_path):
             logger.info(f"CLONED {repo_name} from {repo_url} to {local_path}")
         except Exception as e:
             logger.error(f"Failed to clone {repo_name} from {repo_url}: {e}")
+
 
 """
 Load all GitHub repositories for the configured accounts.
@@ -167,8 +168,10 @@ class LoadResearchNotePayload(BaseModel):
 @router.post("/document/load_research_note")
 async def load_research_note(payload: LoadResearchNotePayload):
 
+    note_path = os.path.join(RESEARCH_NOTES_LOCAL_PATH, payload.filename)
     meta_data = {
         "filename": payload.filename,
+        "path": note_path,
         "title": payload.title,
         "author": payload.author,
         "start_date": payload.start_date,
@@ -176,12 +179,12 @@ async def load_research_note(payload: LoadResearchNotePayload):
         "tags": ",".join(payload.tags)
     }
 
-    doc_loader = ResearchNoteChromaDocumentLoader(meta_data)
+    doc_loader = ResearchNoteChromaDocumentLoader()
 
     logger.debug((f"Received request to load research note: "
                   f"file_name={meta_data['filename']}, title={meta_data['title']}, author={meta_data['author']}, "
                   f"start_date={meta_data['start_date']}, topic={meta_data['topic']}, tags={meta_data['tags']}."))
 
-    await doc_loader.load_document(meta_data)
+    await doc_loader.load_document(note_path, meta_data=meta_data)
 
     return {"status": "Success", "message": f"Loaded research note: {payload.title}."}

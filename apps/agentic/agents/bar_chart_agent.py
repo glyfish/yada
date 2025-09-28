@@ -4,7 +4,6 @@ import shortuuid
 
 from langgraph.graph import StateGraph, START, END
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langgraph.prebuilt import ToolNode
 from langchain_core.tools import tool
 
 from apps.agentic.core.messages import WorkerState
@@ -43,12 +42,12 @@ class BarChartAgent(ToolAgent):
 
     def __init__(self):
         tools = [BarChartAgent.bar_chart_tool]
-        tool_node = ToolNode(tools, name="bar_chart_tool_node")
+        tool_node_name = "bar_chart_tool_node"
 
         sys.path.append(os.path.abspath(os.path.join(os.getcwd(), '..')))
         pyplot.style.use(config.glyfish_style)
 
-        super().__init__(tools, tool_node)
+        super().__init__(tools, tool_node_name)
 
     
     def create_prompt(self):

@@ -1,4 +1,5 @@
 import os
+import re, bisect
 from pathlib import Path
 import aiofiles
 
@@ -11,56 +12,58 @@ from langchain_core.documents import Document
 from apps.agentic.core.chroma_document_loader import ChromaDocumentLoader
 from apps.agentic.core.constants import (RESEARCH_NOTES_COLLECTION_NAME, RESEARCH_NOTES_DB_NAME, 
                                          RESEARCH_NOTES_LOCAL_PATH, DB_PATH)
+
+from lib.utils import get_param_throw_if_missing
+
 logger = get_logger("YADA")
 
 
 class ResearchNoteChromaDocumentLoader(ChromaDocumentLoader):
     """
-    Loader for Research Note files stored as **Markdown** only.
-    - Keeps TeX delimiters ($...$, $$...$$) in text for math-friendly embeddings.
-    - Splits by Markdown headings first, then by length with overlap.
-    - Batches inserts into the Chroma vector store.
+    Document loader for Research Note files stored as **Markdown** only.
+
+    Metadata added to each document
+    ------------------------------
+    - filename: Base name of the file
+    - path: File path relative to the research notes root
+    - title: Title of the research note.
+    - author: Author of the research note
+    - start_date: Start date of the research note
+    - topic: Topic of the research note
+    - tags: Comma-separated list of tags associated with the research note
+    - ext: File extension
+    - images: Comma-separated list of image URLs in the note (if any)
     """
 
-    def __init__(self, meta_data: dict, db_path=DB_PATH):
+    def __init__(self, db_path=DB_PATH):
         super().__init__(RESEARCH_NOTES_DB_NAME, RESEARCH_NOTES_COLLECTION_NAME, db_path)
-        self._meta_data = meta_data
-
-
-    @property
-    def meta_data(self):
-        """
-        Get the metadata for the research note.
-        """
-
-        return self._meta_data
-
     
-    async def load_document(self, path: str):
+
+    async def load_document(self, path: str, **kwargs):
         """
         Load a **Markdown** research note into the ChromaDB collection.
         """
 
-        filename = self.meta_data["filename"]
-        note_path = os.path.join(RESEARCH_NOTES_LOCAL_PATH, filename)
-        logger.info(f"Loading research note from {note_path}.")
+        meta_data = get_param_throw_if_missing("meta_data", **kwargs)
+        filename = meta_data["filename"]
+        logger.info(f"Loading research note from {path}.")
 
-        async with aiofiles.open(note_path, "r", encoding="utf-8", errors="ignore") as f:
+        async with aiofiles.open(path, "r", encoding="utf-8", errors="ignore") as f:
             md = await f.read()
 
+        starts = _page_starts_from_h2(md)
         ext = (Path(filename).suffix or "").lower()
         if ext and ext not in (".md", ".markdown"):
             logger.warning(f"Expected Markdown file, got '{ext}'; proceeding as Markdown.")
-        title = self.meta_data.get("title") or Path(filename).stem
+        title = meta_data.get("title") or Path(filename).stem
 
         base_meta = {
-            **self.meta_data,
-            "path": note_path,
+            **meta_data,
             "ext": ext or ".md",
-            "source": "research_notes",
-            "format": "md",
             "images": "",
-            "md_localized": None,
+            "section": None,
+            "section_char_offset": None,
+            "_global_start": None,
         }
 
         try:
@@ -76,14 +79,37 @@ class ResearchNoteChromaDocumentLoader(ChromaDocumentLoader):
             chunk_size=1500, chunk_overlap=200, add_start_index=True
         )
 
+        cursor = 0
+        for d in header_docs:
+            d.metadata = d.metadata or {}
+            # small, stable prefix to locate the section in the FULL md
+            prefix = d.page_content.lstrip()[:200]
+            idx = md.find(prefix, cursor)
+            if idx == -1:
+                # fallback: search from beginning (handles repeated headings)
+                idx = md.find(prefix)
+                if idx == -1:
+                    idx = cursor  # last resort to keep monotonicity
+            d.metadata["_global_start"] = idx
+            cursor = max(cursor, idx) + len(prefix)
+
         chunks = []
         for d in header_docs:
             sec_meta = {**base_meta, **(d.metadata or {})}
-            chunks.extend(
-                length_splitter.split_documents(
-                    [Document(page_content=d.page_content, metadata=sec_meta)]
-                )
+            parts = length_splitter.split_documents(
+                [Document(page_content=d.page_content, metadata=sec_meta)]
             )
+
+            base = int(sec_meta.get("_global_start", 0))
+            for ch in parts:
+                local = int(ch.metadata.get("start_index", 0))
+                global_pos = base + local
+                section_num, offset = _page_of(global_pos, starts)
+                ch.metadata["section"] = section_num
+                ch.metadata["section_char_offset"] = offset
+                ch.metadata.pop("_global_start", None)
+            
+            chunks.extend(parts)
 
         if not chunks:
             logger.warning(f"No content extracted from {filename}; skipping.")
@@ -97,8 +123,27 @@ class ResearchNoteChromaDocumentLoader(ChromaDocumentLoader):
             f"Loaded research note into collection {self.collection_name}: '{title}' with {len(chunks)} chunks."
         )
 
-        logger.info(f"Loaded research note: {self.meta_data['title']}.")
+        logger.info(f"Loaded research note: {meta_data['title']}.")
 
 
-    async def load_all_documents(self, path: str):
+    async def load_all_documents(self, path: str, **kwargs):
         pass
+
+
+_H2_RX = re.compile(r"(?m)^##\s+")
+
+def _page_starts_from_h2(text: str) -> list[int]:
+    """Return sorted char offsets where pages start: 0 and every H2 line."""
+    starts = [0]
+    starts.extend(m.start() for m in _H2_RX.finditer(text))
+    # unique + sorted
+    return sorted(set(starts))
+
+def _page_of(pos: int, starts: list[int]) -> tuple[int, int]:
+    """
+    Given a GLOBAL char position, return (page_num, page_char_offset).
+    page_num is 1-based. offset is chars from the page start.
+    """
+    i = bisect.bisect_right(starts, pos) - 1
+    start_char = starts[i] if i >= 0 else 0
+    return i + 1, pos - start_char
