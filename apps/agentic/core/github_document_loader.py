@@ -10,14 +10,15 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 from apps.agentic.core.chroma_document_loader import ChromaDocumentLoader
 from apps.agentic.core.constants import (GITHUB_LOCAL_PATH, GITHUB_EXCLUDED_REPOS, CHROMA_DB_MAX_BATCH_SIZE,
-                                         RESEARCH_NOTES_LOCAL_PATH, GITHUB_DB_NAME, GITHUB_COLLECTION_NAME)
+                                         RESEARCH_NOTES_LOCAL_PATH, GITHUB_DB_NAME, GITHUB_COLLECTION_NAME,
+                                         DB_PATH)
 logger = get_logger("YADA")
 
 
 class GitHubChromaDocumentLoader(ChromaDocumentLoader):
 
-    def __init__(self):
-        super().__init__(GITHUB_DB_NAME, GITHUB_COLLECTION_NAME, ".db")
+    def __init__(self, db_path=DB_PATH):
+        super().__init__(GITHUB_DB_NAME, GITHUB_COLLECTION_NAME, db_path)
 
 
     async def load_all_documents(self, base_path: str = GITHUB_LOCAL_PATH):

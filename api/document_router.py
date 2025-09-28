@@ -173,7 +173,7 @@ async def load_research_note(payload: LoadResearchNotePayload):
         "author": payload.author,
         "start_date": payload.start_date,
         "topic": payload.topic,
-        "tags": payload.tags
+        "tags": ",".join(payload.tags)
     }
 
     doc_loader = ResearchNoteChromaDocumentLoader(meta_data)

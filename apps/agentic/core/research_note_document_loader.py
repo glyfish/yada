@@ -10,7 +10,7 @@ from langchain_core.documents import Document
 
 from apps.agentic.core.chroma_document_loader import ChromaDocumentLoader
 from apps.agentic.core.constants import (RESEARCH_NOTES_COLLECTION_NAME, RESEARCH_NOTES_DB_NAME, 
-                                         RESEARCH_NOTES_LOCAL_PATH)
+                                         RESEARCH_NOTES_LOCAL_PATH, DB_PATH)
 logger = get_logger("YADA")
 
 
@@ -22,8 +22,8 @@ class ResearchNoteChromaDocumentLoader(ChromaDocumentLoader):
     - Batches inserts into the Chroma vector store.
     """
 
-    def __init__(self, meta_data: dict):
-        super().__init__(RESEARCH_NOTES_DB_NAME, RESEARCH_NOTES_COLLECTION_NAME, ".db")
+    def __init__(self, meta_data: dict, db_path=DB_PATH):
+        super().__init__(RESEARCH_NOTES_DB_NAME, RESEARCH_NOTES_COLLECTION_NAME, db_path)
         self._meta_data = meta_data
 
 
@@ -55,11 +55,11 @@ class ResearchNoteChromaDocumentLoader(ChromaDocumentLoader):
 
         base_meta = {
             **self.meta_data,
-            "path": filename,
+            "path": note_path,
             "ext": ext or ".md",
             "source": "research_notes",
             "format": "md",
-            "images": [],
+            "images": "",
             "md_localized": None,
         }
 
