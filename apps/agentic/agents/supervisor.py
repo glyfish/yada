@@ -11,6 +11,7 @@ from apps.agentic.agents.search_agent import SearchAgent
 from apps.agentic.agents.bar_chart_agent import BarChartAgent
 from apps.agentic.agents.time_series_plot_agent import TimeSeriesPlotAgent
 from apps.agentic.agents.code_repo_agent import CodeRepoAgent
+from apps.agentic.agents.research_notes_agent import ResearchNoteAgent 
 from apps.agentic.core.query_filters import build_filter_and_query
 
 
@@ -88,8 +89,13 @@ class SupervisorAgent:
             "- {code_repository_search} searches Troy Stribling's code repositories for relevant code snippets and generates " 
             "  reports as requested. If there is a mention of 'my code', 'my repo(s)', 'my project', 'YADA', 'glyfish', "
             "  'troystribling', a file path, a filename, or a function/class, you MUST call the 'Troy Stribling Code Repository Agent'.\n"
+            " -{research_notes_search} searches Troy Stribling's research notes for relevant information and generates \n"
+            "  reports as requested. If there is a mention of 'my research', 'my notes', 'my papers', 'my articles', \n"
+            "  'Troy Stribling research notes', you MUST call the 'Troy Stribling Research Notes Agent'.\n"
             "Map pronouns:\n"
                 "- 'my code' → Troy Stribling’s indexed repos in the vector store.\n"
+                "- 'my research' → Troy Stribling’s indexed research notes in the vector store.\n"
+                "- 'my notes' → Troy Stribling’s indexed research notes in the vector store.\n"
             "You task is to determine which of the agents should process the user request and respond with the name of the all agents "
             "required. If there is no agent that can respond to the request return FINISH. " 
             "It is possible that a request would require multiple agents and be executed in some order. "
@@ -115,7 +121,8 @@ class SupervisorAgent:
                                                 researcher=team[0], 
                                                 bar_chart_generator=team[1],
                                                 time_series_generator=team[2],
-                                                code_repository_search=team[3])
+                                                code_repository_search=team[3],
+                                                research_notes_search=team[4])
         logger.debug(f"Supervisor prompt: {formatted_system_prompt}")
 
         return  prompt.partial(options=", ".join(options), 
@@ -123,7 +130,8 @@ class SupervisorAgent:
                                researcher=team[0], 
                                bar_chart_generator=team[1],
                                time_series_generator=team[2],
-                               code_repository_search=team[3])
+                               code_repository_search=team[3],
+                               research_notes_search=team[4])
 
 
 
@@ -149,5 +157,6 @@ class SupervisorAgent:
             "bar_chart_generator": self._create_agent_node(BarChartAgent().agent, "bar_chart_generator"),
             "time_series_generator": self._create_agent_node(TimeSeriesPlotAgent().agent, "time_series_generator"),
             "code_repository_search": self._create_agent_node(CodeRepoAgent(query).agent, "code_repository_search"),
+            "research_notes_search": self._create_agent_node(ResearchNoteAgent(query).agent, "research_notes_search"),
         }
 
