@@ -20,8 +20,8 @@ Supported qualifiers (case-insensitive):
   author:"..."      | author:<word>
   topic:"..."       | topic:<word>
   tag:<word>        # matches substring in CSV 'tags' field you store
-  page:<n>
-  pages:<lo>-<hi>
+  section:<n>
+  section:<lo>-<hi>
 
 Returns:
     clean_q: str              # the natural-language remainder to search with
@@ -157,7 +157,7 @@ def build_filter_and_query(q: str) -> Tuple[str, Optional[Dict[str, Any]]]:
     m = QUAL_PAGE.search(q)
     if m:
         try:
-            conditions.append({"page": int(m.group(1))})
+            conditions.append({"section": int(m.group(1))})
         except Exception:
             pass
         q = QUAL_PAGE.sub("", q).strip()
@@ -168,8 +168,8 @@ def build_filter_and_query(q: str) -> Tuple[str, Optional[Dict[str, Any]]]:
             lo, hi = int(m.group(1)), int(m.group(2))
             if lo > hi:
                 lo, hi = hi, lo
-            conditions.append({"page": {"$gte": lo}})
-            conditions.append({"page": {"$lte": hi}})
+            conditions.append({"section": {"$gte": lo}})
+            conditions.append({"section": {"$lte": hi}})
         except Exception:
             pass
         q = QUAL_PAGES.sub("", q).strip()

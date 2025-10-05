@@ -20,7 +20,8 @@ logger = get_logger("YADA")
 
 class ResearchNoteChromaDocumentLoader(ChromaDocumentLoader):
     """
-    Document loader for Research Note files stored as **Markdown** only.
+    Document loader for Research Note files stored as **Markdown** only. The documents are split
+    by H2 headers and then further split into smaller chunks for embedding.
 
     Metadata added to each document
     ------------------------------
@@ -33,6 +34,9 @@ class ResearchNoteChromaDocumentLoader(ChromaDocumentLoader):
     - tags: Comma-separated list of tags associated with the research note
     - ext: File extension
     - images: Comma-separated list of image URLs in the note (if any)
+    - h2: Section titles (from H2 headers)
+    - section: Section number (1-based) within the note
+    - section_char_offset: Character offset within the section
     """
 
     def __init__(self, db_path=DB_PATH):
