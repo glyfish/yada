@@ -134,8 +134,23 @@ class ResearchNoteAgent(ChromaRAGAgent):
                 return (sec, off)
 
             items.sort(key=_sort_key)
-            full_text = "".join((doc or "") for doc, _ in items)
-
+            # Insert section headings (## {h2}) once per section
+            out_parts = []
+            current_sec = None
+            for doc, m in items:
+                m = m or {}
+                try:
+                    sec = int(m.get("section", 1))
+                except Exception:
+                    sec = 1
+                if current_sec != sec:
+                    current_sec = sec
+                    h2 = m.get("h2")
+                    if h2:
+                        out_parts.append(f"\n\n## {h2}\n\n")
+                out_parts.append(doc or "")
+            full_text = "".join(out_parts)
+ 
         except Exception:
             # Fallback: stitch from the already-returned top_files if they share the same path
             same_path = [d for d in top_files if (d.metadata or {}).get("path") == path]
@@ -154,10 +169,25 @@ class ResearchNoteAgent(ChromaRAGAgent):
                     off = 0
                 return (sec, off)
             same_path.sort(key=_tf_key)
-            full_text = "\n".join(d.page_content for d in same_path)
+            # Insert section headings (## {h2}) once per section in fallback too
+            out_parts = []
+            current_sec = None
+            for d in same_path:
+                m = d.metadata or {}
+                try:
+                    sec = int(m.get("section", 1))
+                except Exception:
+                    sec = 1
+                if current_sec != sec:
+                    current_sec = sec
+                    h2 = m.get("h2")
+                    if h2:
+                        out_parts.append(f"\n\n## {h2}\n\n")
+                out_parts.append(d.page_content or "")
+            full_text = "".join(out_parts)
 
-        if not full_text:
-            return ""
+            if not full_text:
+                return ""
 
         # Lightweight header with useful metadata
         title = md0.get("title") or path
@@ -171,5 +201,10 @@ class ResearchNoteAgent(ChromaRAGAgent):
         if topic:      header_lines.append(f"- Topic: {topic}")
 
         header = "\n\n-----\n\n" + "\n".join(header_lines) + "\n\n"
-        fenced = f"```{lang}\n{full_text}\n```" if lang else f"```\n{full_text}\n```"
-        return header + fenced
+        if ext in (".md", ".markdown"):
+            body = full_text
+        else:
+            fence_lang = lang if lang else ""
+            body = f"```{fence_lang}\n{full_text}\n```"
+
+        return header + body
