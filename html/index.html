@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 <head>
     <meta charset="UTF-8" />
     <title>YADA</title>
@@ -150,7 +149,49 @@
         }
         .btn.primary { background: #111; color: #fff; border-color: #111; }
         .btn:disabled { opacity: .7; cursor: not-allowed; }
+        .markdown-output {
+            text-align: left;
+        }
+        /* Keep code blocks/inline code left-aligned for readability */
+        .markdown-output pre,
+        .markdown-output code {
+            text-align: left;
+        }
+        /* Center and constrain images */
+        .markdown-output img {
+            display: block;
+            margin: 0.75rem auto;
+            max-width: 100%;
+            height: auto;
+            object-fit: contain;
+        }
+        /* Center tables */
+        .markdown-output table {
+            margin-left: auto;
+            margin-right: auto;
+        }
+        /* Center MathJax display equations */
+        .markdown-output mjx-container[jax="CHTML"][display="true"] {
+            display: block;
+            text-align: center !important;
+            margin: 1rem auto !important;
+        }
     </style>
+    <!-- MathJax v3 config + loader -->
+     <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$','$$'], ['\\[','\\]']],
+                processEscapes: true,
+                processEnvironments: true,
+            },
+            options: {
+                skipHtmlTags: ['script','noscript','style','textarea','pre','code'],
+            }
+        };
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 </head>
 
 <body>
@@ -162,25 +203,28 @@
         import { marked } from "./vendor/marked.esm.js";
 
         marked.setOptions({
-          highlight(code, lang) {
-            if (window.hljs && lang && window.hljs.getLanguage(lang)) {
-              return window.hljs.highlight(code, { language: lang }).value;
-            }
-            // Fallback: auto-detect if lang missing/unknown
-            return window.hljs ? window.hljs.highlightAuto(code).value : code;
-          },
-          gfm: true,
-          breaks: false
+            highlight(code, lang) {
+                if (window.hljs && lang && window.hljs.getLanguage(lang)) {
+                return window.hljs.highlight(code, { language: lang }).value;
+                }
+                // Fallback: auto-detect if lang missing/unknown
+                return window.hljs ? window.hljs.highlightAuto(code).value : code;
+            },
+            gfm: true,
+            breaks: false
         });
 
         function renderMarkdown(mdText) {
-          const el = document.querySelector(".markdown-output");
-          if (!el) return;
-          el.innerHTML = marked.parse(mdText || "");
-          // After HTML is in the DOM, run highlight.js on all code blocks
-          if (window.hljs) {
-            el.querySelectorAll("pre code").forEach(block => window.hljs.highlightElement(block));
-          }
+            const el = document.querySelector(".markdown-output");
+            if (!el) return;
+            el.innerHTML = marked.parse(mdText || "");
+            // After HTML is in the DOM, run highlight.js on all code blocks
+            if (window.hljs) {
+                el.querySelectorAll("pre code").forEach(block => window.hljs.highlightElement(block));
+            }
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise([el]).catch(() => {});
+            }
         }
 
         const { div, span, textarea, button, h3 } = van.tags;

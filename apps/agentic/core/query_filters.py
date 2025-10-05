@@ -135,23 +135,23 @@ def build_filter_and_query(q: str) -> Tuple[str, Optional[Dict[str, Any]]]:
 
     m = QUAL_TITLE.search(q)
     if m:
-        conditions.append({"title": {"$contains": _pick(m)}})
+        conditions.append({"title": _pick(m)})
         q = QUAL_TITLE.sub("", q).strip()
 
     m = QUAL_AUTHOR.search(q)
     if m:
-        conditions.append({"author": {"$contains": _pick(m)}})
+        conditions.append({"author": _pick(m)})
         q = QUAL_AUTHOR.sub("", q).strip()
 
     m = QUAL_TOPIC.search(q)
     if m:
-        conditions.append({"topic": {"$contains": _pick(m)}})
+        conditions.append({"topic": _pick(m)})
         q = QUAL_TOPIC.sub("", q).strip()
 
     m = QUAL_TAG.search(q)
     if m:
         # 'tags' is expected to be a CSV string (scalar) in metadata
-        conditions.append({"tags": {"$contains": m.group(1)}})
+        conditions.append({"tags": m.group(1)})
         q = QUAL_TAG.sub("", q).strip()
 
     m = QUAL_PAGE.search(q)
@@ -174,6 +174,13 @@ def build_filter_and_query(q: str) -> Tuple[str, Optional[Dict[str, Any]]]:
             pass
         q = QUAL_PAGES.sub("", q).strip()
 
-    where = {"$and": conditions} if conditions else None
+    if not conditions:
+        where = None
+    elif len(conditions) == 1:
+        where = conditions[0]           # <-- no $and wrapper
+    else:
+        where = {"$and": conditions} 
+
     clean_q = q.strip() or "*"
+    
     return clean_q, where

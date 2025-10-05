@@ -49,6 +49,8 @@ class SupervisorAgent:
         """
         
         clean_request, query = build_filter_and_query(request)
+        logger.debug(f"Processed request: {clean_request}, {query}")
+
         self._create_workers(query)
         prompt = self._create_prompt()
         self._agent = prompt | self._llm
