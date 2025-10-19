@@ -1,17 +1,20 @@
+from lib.logger import get_logger
+
 from langchain_core.messages import HumanMessage
 from langgraph.graph import END
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 import langchain
 
-from lib.logger import get_logger
-
 from apps.agentic.core.agents.messages import get_last_message, WorkerState
 from apps.agentic.core.utils import build_llm
+
 from apps.agentic.agents.search_agent import SearchAgent
+from apps.agentic.agents.document.document_library_agent import DocumentLibraryAgent
 from apps.agentic.agents.plots.bar_chart_agent import BarChartAgent
 from apps.agentic.agents.plots.time_series_plot_agent import TimeSeriesPlotAgent
 from apps.agentic.agents.document.code_repo_agent import CodeRepoAgent
 from apps.agentic.agents.document.research_notes_agent import ResearchNoteAgent 
+
 from apps.agentic.core.agents.query_filters import build_filter_and_query
 
 
@@ -94,6 +97,8 @@ class SupervisorAgent:
             " -{research_notes_search} searches Troy Stribling's research notes for relevant information and generates \n"
             "  reports as requested. If there is a mention of 'my research', 'my notes', 'my papers', 'my articles', \n"
             "  'Troy Stribling research notes', you MUST call the 'Troy Stribling Research Notes Agent'.\n"
+            " -{document_library_search} searches PDF document library for relevant information and generates \n"
+            "  reports as requested. If there is a mention of 'document library', 'pdf documents', 'articles', 'documents'\n"
             "Map pronouns:\n"
                 "- 'my code' → Troy Stribling’s indexed repos in the vector store.\n"
                 "- 'my research' → Troy Stribling’s indexed research notes in the vector store.\n"
@@ -160,5 +165,6 @@ class SupervisorAgent:
             "time_series_generator": self._create_agent_node(TimeSeriesPlotAgent().agent, "time_series_generator"),
             "code_repository_search": self._create_agent_node(CodeRepoAgent(query).agent, "code_repository_search"),
             "research_notes_search": self._create_agent_node(ResearchNoteAgent(query).agent, "research_notes_search"),
+            "document_library_search": self._create_agent_node(DocumentLibraryAgent(query).agent, "document_library_search"),
         }
 

@@ -21,10 +21,11 @@ from lib.logger import get_logger
 logger = get_logger("YADA")
 
 
-class PDFDocumentAgent(ChromaRAGAgent):
+class DocumentLibraryAgent(ChromaRAGAgent):
     """
     PDF Document Agent that uses a vector store index of PDF documents to answer questions about document
-    content. It is designed to handle queries related to PDF documents, topics, authors, dates, and tags.
+    content. It is designed to handle queries related to PDF documents like: title, topic, authors, 
+    published_date, and tags.
 
     Query filters
     -------------
@@ -33,9 +34,6 @@ class PDFDocumentAgent(ChromaRAGAgent):
     - topic: Research topic (e.g., topic:AI)
     - published_date: Start date of work on the research note (e.g., date:2023-01-01)
     - tag: Tag associated with the research note (e.g., tag:physics)
-    - section: Section number within the research note (e.g., section:2)
-    - section: Range of section within the research note (e.g., section:2-5)
-
     """
 
     def __init__(self, query):
