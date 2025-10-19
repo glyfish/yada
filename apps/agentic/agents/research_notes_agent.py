@@ -207,4 +207,57 @@ class ResearchNoteAgent(ChromaRAGAgent):
             fence_lang = lang if lang else ""
             body = f"```{fence_lang}\n{full_text}\n```"
 
-        return header + body
+        final = header + body
+        final = self._clamp_markdown(final, max_chars=40_000)  # tune the budget
+        return final
+
+
+    def _clamp_markdown(self, md: str, max_chars: int = 60_000) -> str:
+        """Truncate markdown to ~max_chars at a sane boundary.
+        - prefers blank-line break before the budget
+        - avoids breaking code fences / $$ blocks (closes them if needed)
+        - appends a short notice
+        """
+        if not md or len(md) <= max_chars:
+            return md or ""
+
+        cut = max_chars
+
+        # Prefer to cut at a blank-line boundary somewhat before the budget
+        boundary = md.rfind("\n\n", 0, max(0, max_chars - 2000))
+        if boundary > 0:
+            cut = boundary
+        else:
+            # fallback: single newline before budget
+            nl = md.rfind("\n", 0, max_chars)
+            if nl > 0:
+                cut = nl
+
+        chunk = md[:cut].rstrip()
+
+        # Keep rendering well-formed: balance code fences and $$ math if we cut inside one
+        # Code fences
+        if chunk.count("```") % 2 != 0:
+            # attempt to cut before the last opening fence
+            last_fence = chunk.rfind("```")
+            if last_fence > 0:
+                chunk = chunk[:last_fence].rstrip()
+            else:
+                # or just close it cleanly
+                chunk += "\n```"
+
+        # Display math $$ … $$
+        if chunk.count("$$") % 2 != 0:
+            # try to cut before last $$
+            last_dd = chunk.rfind("$$")
+            if last_dd > 0:
+                chunk = chunk[:last_dd].rstrip()
+            else:
+                chunk += "\n$$"
+
+        chunk += (
+            "\n\n---\n"
+            "_Note: truncated for display. Use filters (e.g., `section:` / `pages:` / `before:` / `after:`) "
+            "to narrow the result, or open the file to see more._\n"
+        )
+        return chunk

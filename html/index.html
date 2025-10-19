@@ -178,18 +178,16 @@
         }
     </style>
     <!-- MathJax v3 config + loader -->
-     <script>
-        window.MathJax = {
-            tex: {
-                inlineMath: [['$', '$'], ['\\(', '\\)']],
-                displayMath: [['$$','$$'], ['\\[','\\]']],
-                processEscapes: true,
-                processEnvironments: true,
-            },
-            options: {
-                skipHtmlTags: ['script','noscript','style','textarea','pre','code'],
-            }
-        };
+    <script>
+    window.MathJax = {
+        tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$','$$'], ['\\[','\\]']],
+        processEscapes: true,
+        processEnvironments: true,
+        },
+        options: { skipHtmlTags: ['script','noscript','style','textarea','pre','code'] }
+    };
     </script>
     <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 </head>
@@ -214,19 +212,60 @@
             breaks: false
         });
 
+        // Protect LaTeX so Marked won't touch underscores/dollars.
+        // Order matters: $$...$$ first, then $...$, then \( \), then \[ \]
+        // (No lookbehind — works in all modern browsers.)
+        function protectMathBlocks(md) {
+            const blocks = [];
+            const token = i => `@@MATH${i}@@`;
+            const re = /(\$\$[\s\S]*?\$\$)|(\$[\s\S]*?\$)|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]/g;
+            const text = String(md || "").replace(re, m => {
+                const t = token(blocks.length);
+                blocks.push(m);
+                return t;
+            });
+            return { text, blocks };
+        }
+
+        // Restore tokens with minimal HTML escaping so < and > inside math
+        // don't get parsed as tags before MathJax typesets them.
+        function restoreMathTokens(html, blocks) {
+            let out = String(html || "");
+             const esc = s => s
+              .replace(/&/g, "&amp;")
+              .replace(/</g, "&lt;")
+              .replace(/>/g, "&gt;");
+            blocks.forEach((m, i) => {
+                const t = `@@MATH${i}@@`;
+                out = out.split(t).join(esc(m));
+            });
+            return out;
+        }
+
+        // --- Render markdown + code highlight + MathJax ---
         function renderMarkdown(mdText) {
             const el = document.querySelector(".markdown-output");
             if (!el) return;
-            el.innerHTML = marked.parse(mdText || "");
-            // After HTML is in the DOM, run highlight.js on all code blocks
+
+            // Protect → parse → restore
+            const { text, blocks } = protectMathBlocks(mdText || "");
+            let html = marked.parse(text);
+            html = restoreMathTokens(html, blocks);
+
+            el.innerHTML = html;
+
+            // Code highlight
             if (window.hljs) {
-                el.querySelectorAll("pre code").forEach(block => window.hljs.highlightElement(block));
+                el.querySelectorAll("pre code").forEach(b => window.hljs.highlightElement(b));
             }
-            if (window.MathJax && window.MathJax.typesetPromise) {
+
+            // MathJax
+            if (window.MathJax?.typesetPromise) {
+                if (window.MathJax.typesetClear) window.MathJax.typesetClear([el]);
                 window.MathJax.typesetPromise([el]).catch(() => {});
             }
         }
-
+        
         const { div, span, textarea, button, h3 } = van.tags;
         const { add, state } = van;
 
