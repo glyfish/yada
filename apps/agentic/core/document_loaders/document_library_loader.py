@@ -1,6 +1,7 @@
 import os
 import re, bisect
 from pathlib import Path
+from datetime import datetime, timezone
 import aiofiles
 
 from lib.logger import get_logger
@@ -8,6 +9,7 @@ from git import Repo
 
 from langchain.text_splitter import RecursiveCharacterTextSplitter, MarkdownHeaderTextSplitter
 from langchain_core.documents import Document
+from langchain_community.document_loaders import PyPDFLoader
 
 from apps.agentic.core.document_loaders.chroma_document_loader import ChromaDocumentLoader
 from apps.agentic.core.constants import (RESEARCH_NOTES_COLLECTION_NAME, RESEARCH_NOTES_DB_NAME, 
@@ -18,7 +20,7 @@ from lib.utils import get_param_throw_if_missing
 logger = get_logger("YADA")
 
 
-class PDFDocumentLoader(ChromaDocumentLoader):
+class DocumentLibraryLoader(ChromaDocumentLoader):
     """
     Document loader for PDF files. The documents are split
     by H2 headers and then further split into smaller chunks for embedding.
@@ -32,11 +34,6 @@ class PDFDocumentLoader(ChromaDocumentLoader):
     - start_date: Start date of the research note
     - topic: Topic of the research note
     - tags: Comma-separated list of tags associated with the research note
-    - ext: File extension
-    - images: Comma-separated list of image URLs in the note (if any)
-    - h2: Section titles (from H2 headers)
-    - section: Section number (1-based) within the note
-    - section_char_offset: Character offset within the section
     """
 
     def __init__(self, db_path=DB_PATH):
@@ -45,109 +42,135 @@ class PDFDocumentLoader(ChromaDocumentLoader):
 
     async def load_document(self, path: str, **kwargs):
         """
-        Load a **Markdown** research note into the ChromaDB collection.
+        Load a PDF document into the ChromaDB collection.
+
+        Expected kwargs:
+          - meta_data: dict with keys {filename, path, title, authors, published_date, topic, tags}
+            authors may be a list[str] or comma-separated string. tags may be list[str] or comma-separated string.
         """
-
-        meta_data = get_param_throw_if_missing("meta_data", **kwargs)
-        filename = meta_data["filename"]
-        logger.info(f"Loading research note from {path}.")
-
-        async with aiofiles.open(path, "r", encoding="utf-8", errors="ignore") as f:
-            md = await f.read()
-
-        starts = _page_starts_from_h2(md)
-        ext = (Path(filename).suffix or "").lower()
-        if ext and ext not in (".md", ".markdown"):
-            logger.warning(f"Expected Markdown file, got '{ext}'; proceeding as Markdown.")
-        title = meta_data.get("title") or Path(filename).stem
-
-        base_meta = {
-            **meta_data,
-            "ext": ext or ".md",
-            "images": "",
-            "section": None,
-            "section_char_offset": None,
-            "_global_start": None,
-        }
-
-        try:
-            header_splitter = MarkdownHeaderTextSplitter(
-                headers_to_split_on=[("#", "h1"), ("##", "h2"), ("###", "h3")]
-            )
-            header_docs = header_splitter.split_text(md)
-        except Exception:
-            header_docs = [Document(page_content=md, metadata=base_meta)]
-
-        # Size-based split per section
-        length_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1500, chunk_overlap=200, add_start_index=True
-        )
-
-        cursor = 0
-        for d in header_docs:
-            d.metadata = d.metadata or {}
-            # small, stable prefix to locate the section in the FULL md
-            prefix = d.page_content.lstrip()[:200]
-            idx = md.find(prefix, cursor)
-            if idx == -1:
-                # fallback: search from beginning (handles repeated headings)
-                idx = md.find(prefix)
-                if idx == -1:
-                    idx = cursor  # last resort to keep monotonicity
-            d.metadata["_global_start"] = idx
-            cursor = max(cursor, idx) + len(prefix)
-
-        chunks = []
-        for d in header_docs:
-            sec_meta = {**base_meta, **(d.metadata or {})}
-            parts = length_splitter.split_documents(
-                [Document(page_content=d.page_content, metadata=sec_meta)]
-            )
-
-            base = int(sec_meta.get("_global_start", 0))
-            for ch in parts:
-                local = int(ch.metadata.get("start_index", 0))
-                global_pos = base + local
-                section_num, offset = _page_of(global_pos, starts)
-                ch.metadata["section"] = section_num
-                ch.metadata["section_char_offset"] = offset
-                ch.metadata.pop("_global_start", None)
-            
-            chunks.extend(parts)
-
-        if not chunks:
-            logger.warning(f"No content extracted from {filename}; skipping.")
+        # Resolve and validate path
+        file_path = Path(path)
+        if not file_path.exists() or not file_path.is_file():
+            logger.error(f"PDF path not found or not a file: {file_path}")
+            return
+        if file_path.suffix.lower() != ".pdf":
+            logger.error(f"Not a PDF file: {file_path}")
             return
 
-        BATCH = 64
-        for i in range(0, len(chunks), BATCH):
-            self.vectorstore.add_documents(chunks[i:i + BATCH])
+        meta = kwargs.get("meta_data", {}) or {}
 
-        logger.info(
-            f"Loaded research note into collection {self.collection_name}: '{title}' with {len(chunks)} chunks."
+        # Normalize scalar metadata values for Chroma (no lists allowed)
+        def _to_scalar(val):
+            if val is None:
+                return ""
+            if isinstance(val, (int, float, bool)):
+                return val
+            if isinstance(val, (list, tuple, set)):
+                return ",".join([str(x) for x in val if str(x)])
+            return str(val)
+
+        filename = meta.get("filename") or file_path.name
+        title = meta.get("title") or file_path.stem
+        authors = _to_scalar(meta.get("authors"))
+        published_date = _to_scalar(meta.get("published_date"))
+        topic = _to_scalar(meta.get("topic"))
+        tags = _to_scalar(meta.get("tags"))
+
+        # Optional numeric timestamp for filtering
+        published_date_unix = None
+        try:
+            if meta.get("published_date"):
+                # Accept YYYY-MM-DD or ISO formats
+                dt = datetime.fromisoformat(str(meta.get("published_date")))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                published_date_unix = int(dt.timestamp())
+        except Exception:
+            published_date_unix = None
+
+        # Load pages with LangChain's PyPDFLoader (one Document per page)
+        try:
+            loader = PyPDFLoader(str(file_path))
+            page_docs = loader.load()
+        except Exception as e:
+            logger.exception(f"Failed to load PDF with PyPDFLoader: {file_path}: {e}")
+            return
+
+        if not page_docs:
+            logger.warning(f"No pages extracted from PDF: {file_path}")
+            return
+
+        # Split each page into chunks for embedding
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1200,
+            chunk_overlap=150,
+            separators=["\n\n", "\n", " ", ""]
         )
 
-        logger.info(f"Loaded research note: {meta_data['title']}.")
+        documents = []
+        for pdoc in page_docs:
+            page_num = int(pdoc.metadata.get("page", 0)) + 1  # 1-based
+            page_text = pdoc.page_content or ""
+            if not page_text.strip():
+                continue
+            chunks = splitter.split_text(page_text)
+
+            for idx, chunk in enumerate(chunks):
+                md = {
+                    "filename": filename,
+                    "path": str(meta.get("path") or file_path),
+                    "ext": ".pdf",
+                    "title": title,
+                    "authors": authors,
+                    "published_date": published_date,
+                    "published_date_unix": published_date_unix if published_date_unix is not None else None,
+                    "topic": topic,
+                    "tags": tags,
+                    "source": "pdf-library",
+                    "page": page_num,
+                    "section": f"Page {page_num}",
+                }
+                # Remove None values to avoid validator issues
+                md = {k: v for k, v in md.items() if v is not None}
+                documents.append(Document(page_content=chunk, metadata=md))
+
+        if not documents:
+            logger.warning(f"No text chunks produced from PDF: {file_path}")
+            return
+
+        # Upsert in batches
+        BATCH = 100
+        for i in range(0, len(documents), BATCH):
+            batch = documents[i:i + BATCH]
+            try:
+                self.vectorstore.add_documents(batch)
+            except Exception as e:
+                logger.exception(f"Error upserting PDF chunks (batch {i}//{BATCH}) for {file_path}: {e}")
+                # continue with next batch
+                continue
+
+        logger.info(f"Loaded PDF into vector store: {file_path} (pages={len(page_docs)}, chunks={len(documents)})")
 
 
     async def load_all_documents(self, path: str, **kwargs):
-        pass
+        root = Path(path)
+        if not root.exists() or not root.is_dir():
+            logger.error(f"PDF root does not exist or is not a directory: {root}")
+            return
 
+        for pdf_path in root.rglob("*.pdf"):
+            meta = {
+                "filename": pdf_path.name,
+                "path": str(pdf_path),
+                "title": pdf_path.stem,
+                "authors": "",
+                "published_date": "",
+                "topic": "",
+                "tags": "",
+            }
+            try:
+                await self.load_document(str(pdf_path), meta_data=meta)
+            except Exception as e:
+                logger.exception(f"Failed to load PDF {pdf_path}: {e}")
+                continue
 
-_H2_RX = re.compile(r"(?m)^##\s+")
-
-def _page_starts_from_h2(text: str) -> list[int]:
-    """Return sorted char offsets where pages start: 0 and every H2 line."""
-    starts = [0]
-    starts.extend(m.start() for m in _H2_RX.finditer(text))
-    # unique + sorted
-    return sorted(set(starts))
-
-def _page_of(pos: int, starts: list[int]) -> tuple[int, int]:
-    """
-    Given a GLOBAL char position, return (page_num, page_char_offset).
-    page_num is 1-based. offset is chars from the page start.
-    """
-    i = bisect.bisect_right(starts, pos) - 1
-    start_char = starts[i] if i >= 0 else 0
-    return i + 1, pos - start_char

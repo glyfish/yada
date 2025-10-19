@@ -12,7 +12,7 @@ from apps.agentic.core.constants import (GITHUB_ACCOUNTS, GITHUB_API, RESEARCH_N
 from git import Repo
 from apps.agentic.core.document_loaders.github_document_loader import GitHubChromaDocumentLoader
 from apps.agentic.core.document_loaders.research_note_document_loader import ResearchNoteChromaDocumentLoader
-from apps.agentic.core.document_loaders.document_library_loader import PDFDocumentLoader
+from apps.agentic.core.document_loaders.document_library_loader import DocumentLibraryLoader
 from langchain_community.vectorstores import Chroma
 
 
@@ -198,7 +198,7 @@ Load specified PDF document to the document library.
 class LoadPDFDocumentPayload(BaseModel):
     filename: str
     title: str
-    authors: str
+    authors: list[str]
     published_date: str
     topic: str
     tags: list[str]
@@ -217,11 +217,11 @@ async def load_pdf_document(payload: LoadPDFDocumentPayload):
         "tags": ",".join(payload.tags)
     }
 
-    doc_loader = PDFDocumentLoader()
+    doc_loader = DocumentLibraryLoader()
 
     logger.debug((f"Received request to load research note: "
-                  f"file_name={meta_data['filename']}, title={meta_data['title']}, author={meta_data['author']}, "
-                  f"start_date={meta_data['start_date']}, topic={meta_data['topic']}, tags={meta_data['tags']}."))
+                  f"file_name={meta_data['filename']}, title={meta_data['title']}, authors={meta_data['authors']}, "
+                  f"published_date={meta_data['published_date']}, topic={meta_data['topic']}, tags={meta_data['tags']}."))
 
     await doc_loader.load_document(pdf_path, meta_data=meta_data)
 

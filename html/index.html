@@ -276,6 +276,7 @@
         const GITHUB_LOAD_ALL_REPOS = "/api/document/load_all_github_repos";
         const GITHUB_LOAD_REPO = "/api/document/load_github_repo";
         const RESEARCH_NOTE_LOAD = "/api/document/load_research_note";
+        const PDF_LOAD_DOCUMENT = "/api/document/load_pdf_document";
         const YADA_REQUEST = "/api/request";
 
         van.derive(() => {
@@ -368,6 +369,117 @@
             loadBtn.addEventListener("click", submit);
             [filenameInput, titleInput, authorInput, startDateInput, tagsInput].forEach(el => el.addEventListener("keydown", e => {                if (e.key === "Enter") { e.preventDefault(); submit(); }
             }));
+        };
+
+        // Load PDF Document Dialog
+        const handleLoadPDFDocumentDialog = () => {
+            const dialog = document.createElement("dialog");
+            dialog.className = "modal";
+            dialog.innerHTML = `
+                <form method="dialog" novalidate>
+                <label for="pdf-filename">Filename:</label>
+                <input id="pdf-filename" name="filename" type="text" placeholder="paper.pdf" required>
+
+                <label for="pdf-title">Title:</label>
+                <input id="pdf-title" name="title" type="text" placeholder="Paper Title" required>
+
+                <label for="pdf-authors">Authors:</label>
+                <input id="pdf-authors" name="authors" type="text" placeholder="Last, First; Last, First" required>
+
+                <label for="pdf-date">Published Date:</label>
+                <input id="pdf-date" name="published_date" type="date" required>
+
+                <label for="pdf-topic">Topic:</label>
+                <textarea id="pdf-topic" name="topic" rows="3" placeholder="e.g., Thermodynamics, RNNs, ..." required></textarea>
+
+                <label for="pdf-tags">Tags:</label>
+                <input id="pdf-tags" name="tags" type="text" placeholder="comma,separated,tags" required>
+
+                <menu>
+                    <button type="button" class="btn" id="cancelPDFBtn">Cancel</button>
+                    <button type="button" class="btn primary" id="loadPDFBtn">Load PDF Document</button>
+                </menu>
+                </form>
+            `;
+            document.body.appendChild(dialog);
+            dialog.showModal();
+
+            const form          = dialog.querySelector("form");
+            const cancelBtn     = dialog.querySelector("#cancelPDFBtn");
+            const loadBtn       = dialog.querySelector("#loadPDFBtn");
+            const filenameInput = dialog.querySelector("input[name='filename']");
+            const titleInput    = dialog.querySelector("input[name='title']");
+            const authorsInput  = dialog.querySelector("input[name='authors']");
+            const dateInput     = dialog.querySelector("input[name='published_date']");
+            const topicInput    = dialog.querySelector("textarea[name='topic']");
+            const tagsInput     = dialog.querySelector("input[name='tags']");
+
+            requestAnimationFrame(() => filenameInput.focus());
+
+            const close = () => { dialog.close(); dialog.remove(); };
+            cancelBtn.addEventListener("click", close);
+            dialog.addEventListener("cancel", e => { e.preventDefault(); close(); }); // Esc
+
+            const submit = async () => {
+                // Built-in HTML5 required checks
+                if (!form.reportValidity()) return;
+
+                // Custom checks: authors/tags must parse to non-empty arrays
+                authorsInput.setCustomValidity("");
+                tagsInput.setCustomValidity("");
+
+                const authors = (authorsInput.value || "")
+                    .split(/[;,]/).map(s => s.trim()).filter(Boolean);
+                const tags = (tagsInput.value || "")
+                    .split(",").map(s => s.trim()).filter(Boolean);
+
+                if (authors.length === 0) {
+                    authorsInput.setCustomValidity("Provide at least one author (comma or semicolon separated).");
+                    form.reportValidity();
+                    authorsInput.setCustomValidity("");
+                    return;
+                }
+                if (tags.length === 0) {
+                    tagsInput.setCustomValidity("Provide at least one tag (comma separated).");
+                    form.reportValidity();
+                    tagsInput.setCustomValidity("");
+                    return;
+                }
+
+                const payload = {
+                    filename: filenameInput.value.trim(),
+                    title:    titleInput.value.trim(),
+                    authors,                                   // array of strings
+                    published_date: dateInput.value,           // YYYY-MM-DD
+                    topic:    topicInput.value.trim(),
+                    tags                                      // array of strings
+                };
+
+                const prev = loadBtn.textContent;
+                loadBtn.disabled = true;
+                loadBtn.textContent = "Loading…";
+                try {
+                    const res = await fetch(PDF_LOAD_DOCUMENT, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(payload)
+                    });
+                    const result = await res.json().catch(() => ({}));
+                    if (!res.ok) throw new Error(result?.detail || result?.message || `Request failed (${res.status})`);
+                    alert(result.status || "PDF load requested.");
+                    close();
+                } catch (err) {
+                    alert(`Error loading PDF: ${err.message || err}`);
+                } finally {
+                    loadBtn.disabled = false;
+                    loadBtn.textContent = prev;
+                }
+            };
+
+            loadBtn.addEventListener("click", submit);
+            [filenameInput, titleInput, authorsInput, dateInput, topicInput, tagsInput].forEach(el =>
+                el.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); submit(); } })
+            );
         };
 
         // Load Repository Dialog
@@ -502,6 +614,10 @@
                             { onclick: handleLoadResearchNoteDialog, style: "margin-left: 0.5rem; min-width: 175px;" },
                             "Load Research Note"
                         ),
+                        button(
+                            { onclick: handleLoadPDFDocumentDialog, style: "margin-left: 0.5rem; min-width: 175px;" },
+                            "Load PDF Document"
+                        )
                     ),
                     // Textarea on its own row
                     textarea({
