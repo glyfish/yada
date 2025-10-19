@@ -3,7 +3,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import BaseMessage, HumanMessage
 from langgraph.graph import END
 
-from apps.agentic.core.messages import WorkerState
+from apps.agentic.core.agents.messages import WorkerState
 
 
 def load_api_key(filepath=".keys/.chatgpt_key"):

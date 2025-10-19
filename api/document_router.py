@@ -6,11 +6,13 @@ import requests
 from urllib.parse import urlparse
 
 from lib.logger import get_logger
-from apps.agentic.core.constants import (GITHUB_ACCOUNTS, GITHUB_API, RESEARCH_NOTES_LOCAL_PATH)
+from apps.agentic.core.constants import (GITHUB_ACCOUNTS, GITHUB_API, RESEARCH_NOTES_LOCAL_PATH,
+                                         PDF_DOCUMENT_LIBRARY_LOCAL_PATH)
 
 from git import Repo
-from apps.agentic.core.github_document_loader import GitHubChromaDocumentLoader
-from apps.agentic.core.research_note_document_loader import ResearchNoteChromaDocumentLoader
+from apps.agentic.core.document_loaders.github_document_loader import GitHubChromaDocumentLoader
+from apps.agentic.core.document_loaders.research_note_document_loader import ResearchNoteChromaDocumentLoader
+from apps.agentic.core.document_loaders.document_library_loader import PDFDocumentLoader
 from langchain_community.vectorstores import Chroma
 
 
@@ -188,3 +190,39 @@ async def load_research_note(payload: LoadResearchNotePayload):
     await doc_loader.load_document(note_path, meta_data=meta_data)
 
     return {"status": "Success", "message": f"Loaded research note: {payload.title}."}
+
+
+"""
+Load specified PDF document to the document library.
+"""
+class LoadPDFDocumentPayload(BaseModel):
+    filename: str
+    title: str
+    authors: str
+    published_date: str
+    topic: str
+    tags: list[str]
+
+@router.post("/document/load_pdf_document")
+async def load_pdf_document(payload: LoadPDFDocumentPayload):
+
+    pdf_path = os.path.join(PDF_DOCUMENT_LIBRARY_LOCAL_PATH, payload.filename)
+    meta_data = {
+        "filename": payload.filename,
+        "path": pdf_path,
+        "title": payload.title,
+        "authors": payload.authors,
+        "published_date": payload.published_date,
+        "topic": payload.topic,
+        "tags": ",".join(payload.tags)
+    }
+
+    doc_loader = PDFDocumentLoader()
+
+    logger.debug((f"Received request to load research note: "
+                  f"file_name={meta_data['filename']}, title={meta_data['title']}, author={meta_data['author']}, "
+                  f"start_date={meta_data['start_date']}, topic={meta_data['topic']}, tags={meta_data['tags']}."))
+
+    await doc_loader.load_document(pdf_path, meta_data=meta_data)
+
+    return {"status": "Success", "message": f"Loaded PDF document: {payload.title}."}
