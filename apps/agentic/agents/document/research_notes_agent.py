@@ -14,8 +14,8 @@ from langgraph.prebuilt import tools_condition
 from langchain.tools.retriever import create_retriever_tool
 from langgraph.prebuilt import ToolNode
 
-from apps.agentic.core.chroma_rag_agent import ChromaRAGAgent
-from apps.agentic.core.research_note_document_loader import ResearchNoteChromaDocumentLoader
+from apps.agentic.core.agents.chroma_rag_agent import ChromaRAGAgent
+from apps.agentic.core.document_loaders.research_note_document_loader import ResearchNoteChromaDocumentLoader
 from lib.logger import get_logger
 
 logger = get_logger("YADA")
@@ -208,7 +208,7 @@ class ResearchNoteAgent(ChromaRAGAgent):
             body = f"```{fence_lang}\n{full_text}\n```"
 
         final = header + body
-        final = self._clamp_markdown(final, max_chars=40_000)  # tune the budget
+        final = self._clamp_markdown(final, max_chars=20_000)  # tune the budget
         return final
 
 

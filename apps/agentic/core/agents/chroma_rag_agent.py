@@ -14,8 +14,8 @@ from langgraph.prebuilt import tools_condition
 from langchain.tools.retriever import create_retriever_tool
 from langgraph.prebuilt import ToolNode
 
-from apps.agentic.core.chroma_document_loader import ChromaDocumentLoader
-from apps.agentic.core.messages import WorkerState
+from apps.agentic.core.document_loaders.chroma_document_loader import ChromaDocumentLoader
+from apps.agentic.core.agents.messages import WorkerState
 from apps.agentic.core.utils import build_llm
 
 from lib.logger import get_logger

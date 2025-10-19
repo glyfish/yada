@@ -6,7 +6,7 @@ from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.prebuilt import ToolNode
 from langchain_core.tools import tool
 
-from apps.agentic.core.tool_agent import ToolAgent
+from apps.agentic.core.agents.tool_agent import ToolAgent
 
 import os
 import sys

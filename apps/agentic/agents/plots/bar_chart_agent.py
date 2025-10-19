@@ -6,7 +6,7 @@ from langgraph.graph import StateGraph, START, END
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.tools import tool
 
-from apps.agentic.core.messages import WorkerState
+from apps.agentic.core.agents.messages import WorkerState
 from apps.agentic.core.utils import build_llm
 
 import os
@@ -17,7 +17,7 @@ import matplotlib
 matplotlib.use("Agg")
 from matplotlib import pyplot
 
-from apps.agentic.core.tool_agent import ToolAgent
+from apps.agentic.core.agents.tool_agent import ToolAgent
 
 from lib import config
 from lib.plots import bar

@@ -17,6 +17,12 @@ RESEARCH_NOTES_DB_NAME = "research_notes"
 RESEARCH_NOTES_COLLECTION_NAME = "research-notes"
 RESEARCH_NOTES_LOCAL_PATH = "./research_notes"
 
+# PDF document library constants
+PDF_DOCUMENT_LIBRARY_DB_NAME = "pdf_document_library"
+PDF_DOCUMENT_LIBRARY_COLLECTION_NAME = "pdf-documents"
+PDF_DOCUMENT_LIBRARY_LOCAL_PATH = "./document_library"
+
+# Programming language mapping based on file extensions
 PROGRAMMING_LANGUAGE_MAP = {
     ".py": "python",
     ".rb": "ruby",

@@ -16,8 +16,8 @@ from langgraph.prebuilt import ToolNode
 
 from apps.agentic.core.constants import (GITHUB_DB_NAME, GITHUB_COLLECTION_NAME, GITHUB_LOCAL_PATH,
                                          PROGRAMMING_LANGUAGE_MAP)
-from apps.agentic.core.chroma_rag_agent import ChromaRAGAgent
-from apps.agentic.core.github_document_loader import GitHubChromaDocumentLoader
+from apps.agentic.core.agents.chroma_rag_agent import ChromaRAGAgent
+from apps.agentic.core.document_loaders.github_document_loader import GitHubChromaDocumentLoader
 from lib.logger import get_logger
 
 logger = get_logger("YADA")

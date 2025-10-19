@@ -5,14 +5,14 @@ import langchain
 
 from lib.logger import get_logger
 
-from apps.agentic.core.messages import get_last_message, WorkerState
+from apps.agentic.core.agents.messages import get_last_message, WorkerState
 from apps.agentic.core.utils import build_llm
 from apps.agentic.agents.search_agent import SearchAgent
-from apps.agentic.agents.bar_chart_agent import BarChartAgent
-from apps.agentic.agents.time_series_plot_agent import TimeSeriesPlotAgent
-from apps.agentic.agents.code_repo_agent import CodeRepoAgent
-from apps.agentic.agents.research_notes_agent import ResearchNoteAgent 
-from apps.agentic.core.query_filters import build_filter_and_query
+from apps.agentic.agents.plots.bar_chart_agent import BarChartAgent
+from apps.agentic.agents.plots.time_series_plot_agent import TimeSeriesPlotAgent
+from apps.agentic.agents.document.code_repo_agent import CodeRepoAgent
+from apps.agentic.agents.document.research_notes_agent import ResearchNoteAgent 
+from apps.agentic.core.agents.query_filters import build_filter_and_query
 
 
 logger = get_logger("YADA")
