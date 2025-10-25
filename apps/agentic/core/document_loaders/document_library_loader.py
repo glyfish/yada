@@ -12,8 +12,8 @@ from langchain_core.documents import Document
 from langchain_community.document_loaders import PyPDFLoader
 
 from apps.agentic.core.document_loaders.chroma_document_loader import ChromaDocumentLoader
-from apps.agentic.core.constants import (RESEARCH_NOTES_COLLECTION_NAME, RESEARCH_NOTES_DB_NAME, 
-                                         RESEARCH_NOTES_LOCAL_PATH, DB_PATH)
+from apps.agentic.core.constants import (PDF_DOCUMENT_LIBRARY_COLLECTION_NAME, PDF_DOCUMENT_LIBRARY_DB_NAME, 
+                                         DB_PATH)
 
 from lib.utils import get_param_throw_if_missing
 
@@ -37,7 +37,7 @@ class DocumentLibraryLoader(ChromaDocumentLoader):
     """
 
     def __init__(self, db_path=DB_PATH):
-        super().__init__(RESEARCH_NOTES_DB_NAME, RESEARCH_NOTES_COLLECTION_NAME, db_path)
+        super().__init__(PDF_DOCUMENT_LIBRARY_DB_NAME, PDF_DOCUMENT_LIBRARY_COLLECTION_NAME, db_path)
     
 
     async def load_document(self, path: str, **kwargs):
@@ -153,24 +153,4 @@ class DocumentLibraryLoader(ChromaDocumentLoader):
 
 
     async def load_all_documents(self, path: str, **kwargs):
-        root = Path(path)
-        if not root.exists() or not root.is_dir():
-            logger.error(f"PDF root does not exist or is not a directory: {root}")
-            return
-
-        for pdf_path in root.rglob("*.pdf"):
-            meta = {
-                "filename": pdf_path.name,
-                "path": str(pdf_path),
-                "title": pdf_path.stem,
-                "authors": "",
-                "published_date": "",
-                "topic": "",
-                "tags": "",
-            }
-            try:
-                await self.load_document(str(pdf_path), meta_data=meta)
-            except Exception as e:
-                logger.exception(f"Failed to load PDF {pdf_path}: {e}")
-                continue
-
+        pass
