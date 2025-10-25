@@ -291,24 +291,24 @@
             const dialog = document.createElement("dialog");
             dialog.className = "modal";
             dialog.innerHTML = `
-                <form method="dialog" novalidate>
+                <form method="dialog" novalidate autocomplete="off">
                     <label for="rn-filename">Filename:</label>
-                    <input id="rn-filename" name="filename" type="text" placeholder="my_note.md" required>
+                    <input id="rn-filename" name="filename" type="text" placeholder="my_note.md" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text"  required>
 
                     <label for="rn-title">Title:</label>
-                    <input id="rn-title" name="title" type="text" placeholder="My Research Note">
+                    <input id="rn-title" name="title" type="text" placeholder="My Research Note" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text">
 
                     <label for="rn-author">Author:</label>
-                    <input id="rn-author" name="author" type="text" placeholder="Troy Stribling">
+                    <input id="rn-author" name="author" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text"  placeholder="Troy Stribling">
 
                     <label for="rn-start-date">Start Date:</label>
-                    <input id="rn-start-date" name="start_date" type="date">
+                    <input id="rn-start-date" name="start_date" type="date" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text">
 
                     <label for="rn-topic">Topic:</label>
-                    <textarea id="rn-topic" name="topic" rows="3" placeholder="e.g., Signal Processing"></textarea>
+                    <textarea id="rn-topic" name="topic" rows="3" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="e.g., Signal Processing"></textarea>
 
                     <label for="rn-tags">Tags:</label>
-                    <input id="rn-tags" name="tags" type="text" placeholder="comma,separated,tags">
+                    <input id="rn-tags" name="tags" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" placeholder="comma,separated,tags">
 
                     <menu>
                         <button type="button" class="btn" id="cancelRNBtn">Cancel</button>
@@ -376,24 +376,24 @@
             const dialog = document.createElement("dialog");
             dialog.className = "modal";
             dialog.innerHTML = `
-                <form method="dialog" novalidate>
+                <form method="dialog" novalidate autocomplete="off">
                 <label for="pdf-filename">Filename:</label>
-                <input id="pdf-filename" name="filename" type="text" placeholder="paper.pdf" required>
+                <input id="pdf-filename" name="filename" type="text" placeholder="paper.pdf"autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
 
                 <label for="pdf-title">Title:</label>
-                <input id="pdf-title" name="title" type="text" placeholder="Paper Title" required>
+                <input id="pdf-title" name="title" type="text" placeholder="Paper Title"autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
 
                 <label for="pdf-authors">Authors:</label>
-                <input id="pdf-authors" name="authors" type="text" placeholder="Last, First; Last, First" required>
+                <input id="pdf-authors" name="authors" type="text" placeholder="Last, First; Last, First"autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
 
                 <label for="pdf-date">Published Date:</label>
-                <input id="pdf-date" name="published_date" type="date" required>
+                <input id="pdf-date" name="published_date" type="date"autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
 
                 <label for="pdf-topic">Topic:</label>
-                <textarea id="pdf-topic" name="topic" rows="3" placeholder="e.g., Thermodynamics, RNNs, ..." required></textarea>
+                <textarea id="pdf-topic" name="topic" rows="3" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="e.g., Thermodynamics, RNNs, ..."autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required></textarea>
 
                 <label for="pdf-tags">Tags:</label>
-                <input id="pdf-tags" name="tags" type="text" placeholder="comma,separated,tags" required>
+                <input id="pdf-tags" name="tags" type="text" placeholder="comma,separated,tags"autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
 
                 <menu>
                     <button type="button" class="btn" id="cancelPDFBtn">Cancel</button>
@@ -487,11 +487,11 @@
             const dialog = document.createElement("dialog");
             dialog.className = "modal";
             dialog.innerHTML = `
-                <form method="dialog" novalidate>
+                <form method="dialog" novalidate autocomplete="off">
                     <label for="gh-account">GitHub Account:</label>
-                    <input id="gh-account" name="account" type="text" required>
+                    <input id="gh-account" name="account" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
                     <label for="gh-repo">Repository Name:</label>
-                    <input id="gh-repo" name="repo" type="text" required>
+                    <input id="gh-repo" name="repo" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text"  required>
                     <menu>
                         <button type="button" class="btn" id="cancelRepoBtn">Cancel</button>
                         <button type="button" class="btn primary" id="loadRepoBtn">Load Repo</button>
