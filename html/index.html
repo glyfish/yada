@@ -176,6 +176,50 @@
             text-align: center !important;
             margin: 1rem auto !important;
         }
+        .markdown-feed {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .result-card {
+            border: 1px solid #ddd; border-radius: 10px; background: #fff;
+            overflow: hidden;
+        }
+        .result-head {
+            padding: .5rem .75rem; font-weight: 600; background: #f7f7f7; border-bottom: 1px solid #eee;
+        }
+        .result-body { padding: .75rem .9rem; }
+        .pdf-wrap { border-top: 1px solid #eee; background: #fafafa; }
+        .pdf-bar { display: flex; align-items: center; gap: .5rem; padding: .5rem .75rem; border-bottom: 1px solid #eee; background: #f7f7f7; }
+        .pdf-bar .spacer { flex: 1; }
+        .pdf-frame { width: 100%; height: 65vh; border: 0; background: #2b2b2b; }
+        /* Dropdown menu for "Load Documents" */
+        .dropdown { display: inline-block; position: relative; }
+        .dropdown-menu {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            min-width: 260px;
+            padding: .5rem;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-shadow: 0 10px 24px rgba(0,0,0,.1);
+            z-index: 1000;
+        }
+        .dropdown-menu .menu-item {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            width: 100%;
+            text-align: left;
+            background: #fff;
+            border: 1px solid #eee;
+            border-radius: 6px;
+            padding: .45rem .6rem;
+            cursor: pointer;
+        }
+        .dropdown-menu .menu-item:hover { background: #f7f7f7; }
     </style>
     <!-- MathJax v3 config + loader -->
     <script>
@@ -270,8 +314,9 @@
         const { add, state } = van;
 
         const textValue = state("");
-        const markdownHTML = state("");
         const isLoading = state(false);
+        const feedCount = state(0);
+        const showLoadMenu = state(false);
         
         const GITHUB_LOAD_ALL_REPOS = "/api/document/load_all_github_repos";
         const GITHUB_LOAD_REPO = "/api/document/load_github_repo";
@@ -279,12 +324,12 @@
         const PDF_LOAD_DOCUMENT = "/api/document/load_pdf_document";
         const YADA_REQUEST = "/api/request";
 
-        van.derive(() => {
-          // read the state to register dependency
-          const _ = markdownHTML.val;
-          // schedule render after DOM updates
-          queueMicrotask(() => renderMarkdown(markdownHTML.val));
-        });
+        // Close dropdown on outside click / ESC
+        document.addEventListener("click", () => { showLoadMenu.val = false; });
+        document.addEventListener("keydown", (e) => { if (e.key === "Escape") showLoadMenu.val = false; });
+
+        const FEED_MAX_CARDS = 40;
+        const FEED_MAX_CHARS = 80000;
 
         // Load Research Note (Markdown) Dialog
         const handleLoadResearchNoteDialog = () => {
@@ -482,6 +527,132 @@
             );
         };
 
+        // ===== Feed helpers: detect PDF, scoped markdown render, prepend card =====
+        function extractPdfHint(md) {
+            const s = String(md || "");
+            // From 'Path: /…/file.pdf' (header produced by read_file)
+            const pathMatch = s.match(/^\s*Path:\s*(.+?\.pdf)\s*$/mi);
+            if (pathMatch) return { path: pathMatch[1], page: null };
+
+            // From a link to your endpoint
+            const urlMatch = s.match(/\/api\/document\/pdf\?path=([^\)\s#]+)(?:#page=(\d+))?/i);
+            if (urlMatch) return { path: decodeURIComponent(urlMatch[1]), page: urlMatch[2] ? +urlMatch[2] : null };
+
+            // Any absolute-looking .pdf path
+            const loose = s.match(/(\/[^\s)]+\.pdf)/i);
+            if (loose) return { path: loose[1], page: null };
+
+            return null;
+        }
+
+        // Clamp very large markdown bodies (keep head+tail)
+        function clampMarkdown(md, max) {
+            const text = String(md ?? "");
+            if (!max || text.length <= max) {
+                return { text, truncated: false, full: text };
+            }
+            const head = text.slice(0, Math.floor(max * 0.65));
+            const tail = text.slice(-Math.floor(max * 0.25));
+            // try to close any dangling code fences in head part
+            const fenceOpen = (head.match(/```/g) || []).length % 2 === 1;
+            const middle = "\n\n…\n\n<!-- clipped -->\n\n";
+            const safeHead = fenceOpen ? (head + "\n```") : head;
+            return { text: safeHead + middle + tail, truncated: true, full: text };
+        }
+
+        async function renderMarkdownInto(container, mdText) {
+            const { text, blocks } = protectMathBlocks(mdText || "");
+            let html = marked.parse(text);
+            html = restoreMathTokens(html, blocks);
+            container.innerHTML = html;
+            // highlight just in this container
+            if (window.hljs) container.querySelectorAll("pre code").forEach(b => window.hljs.highlightElement(b));
+            // MathJax just for this container
+            if (window.MathJax?.typesetPromise) {
+                if (window.MathJax.typesetClear) MathJax.typesetClear([container]);
+                await window.MathJax.typesetPromise([container]).catch(() => {});
+            }
+        }
+
+        async function prependResultCard(markdown, pdfMeta /* optional: {path, page} */) {
+          const feed = document.getElementById("results-feed");
+            const sc = document.scrollingElement || document.documentElement;
+            const before = sc.scrollTop, prevH = sc.scrollHeight;
+
+            const card = document.createElement("section");
+            card.className = "result-card";
+
+            const head = document.createElement("div");
+            head.className = "result-head";
+            head.textContent = new Date().toLocaleString();
+
+            const body = document.createElement("div");
+            body.className = "result-body markdown-output";
+
+            card.appendChild(head);
+            card.appendChild(body);
+
+            // Optional PDF panel alongside markdown
+            const pdf = pdfMeta || extractPdfHint(markdown);
+            if (pdf?.path) {
+                const viewer = document.createElement("div");
+                viewer.className = "pdf-wrap";
+                const url = `/api/document/pdf?path=${encodeURIComponent(pdf.path)}${pdf.page ? `#page=${pdf.page}` : ""}`;
+                viewer.innerHTML = `<div class="pdf-bar"><span>Source PDF</span><span class="spacer"></span><a class="btn" href="${url}" target="_blank" rel="noopener">Open in new tab</a></div><iframe class="pdf-frame" src="${url}" title="PDF"></iframe>`;
+                card.appendChild(viewer);
+            }
+
+            // Clamp huge responses by default
+            const clamped = clampMarkdown(markdown, FEED_MAX_CHARS);
+
+            feed.insertBefore(card, feed.firstChild);
+            // Update feed count after adding a card
+            feedCount.val = feed.children.length;
+            updateResponsesHeader();
+            await renderMarkdownInto(body, clamped.text);
+
+            // Expand-on-demand for truncated items
+            if (clamped.truncated) {
+                const moreRow = document.createElement("div");
+                moreRow.style = "display:flex;justify-content:flex-end;padding:.5rem .9rem;";
+                const btn = document.createElement("button");
+                btn.className = "btn";
+                btn.textContent = "Show full";
+                btn.onclick = async () => {
+                    btn.disabled = true;
+                    await renderMarkdownInto(body, clamped.full);
+                    moreRow.remove();
+                };
+                moreRow.appendChild(btn);
+                card.appendChild(moreRow);
+            }
+
+            // Preserve reader position (so adding at the top scrolls “down”)
+            const delta = (sc.scrollHeight - prevH);
+            sc.scrollTop = before + delta;
+
+            // Cap total cards to avoid DOM bloat
+            while (feed.children.length > FEED_MAX_CARDS) {
+                feed.removeChild(feed.lastChild);
+            }
+            // Keep reactive count in sync
+            feedCount.val = feed.children.length;
+            updateResponsesHeader();
+        }
+
+        function clearFeed() {
+            const feed = document.getElementById("results-feed");
+            while (feed.firstChild) feed.removeChild(feed.firstChild);
+            feedCount.val = 0;
+            updateResponsesHeader();
+        }
+
+        function updateResponsesHeader() {
+            const h = document.getElementById("responses-header");
+            if (!h) return;
+            h.style.display = feedCount.val > 0 ? "block" : "none";
+        }
+
         // Load Repository Dialog
         const handleLoadGitHubRepoDialog = () => {
             const dialog = document.createElement("dialog");
@@ -580,7 +751,8 @@
                     body: JSON.stringify({ input: textValue.val })
                 });
                 const data = await response.json();
-                markdownHTML.val = data.result;
+                // Prepend a new result card; if backend returns PDFs, pass the first one
+                await prependResultCard(data.result, (data.pdfs && data.pdfs[0]) || null);
             } catch (err) {
                 alert(`Error: ${err.message}`);
             } finally {
@@ -592,31 +764,59 @@
             div(
                 div({ class: "input-container" },
                     // Button row (own wrapper and margin)
-                    div({ class: "button-wrapper", style: "margin-bottom: 1.0rem; text-align: left;" },
-                        button(
-                            {
-                                onclick: handleGitHubLoadAllRepos,
-                                disabled: () => gitHubLoadAllReposLoading.val,
-                                style: "margin-right: 0.5rem; min-width: 175px;"
-                            },
-                            // Spinner always present, visibility toggled via inline style
-                            span({
-                                class: "button-spinner",
-                                style: () => (gitHubLoadAllReposLoading.val ? "display: inline-block;" : "display: none;")
-                            }),
-                            "Update GitHub Repos"                        
-                        ),
-                        button(
-                            { onclick: handleLoadGitHubRepoDialog, style: "margin-left: 0.5rem; min-width: 175px;" },
-                            "Update GitHub Repo"
-                        ),
-                        button(
-                            { onclick: handleLoadResearchNoteDialog, style: "margin-left: 0.5rem; min-width: 175px;" },
-                            "Load Research Note"
-                        ),
-                        button(
-                            { onclick: handleLoadPDFDocumentDialog, style: "margin-left: 0.5rem; min-width: 175px;" },
-                            "Load PDF Document"
+                    div({ class: "button-wrapper", style: "margin-bottom: 1.0rem; text-align: left; position: relative;" },
+                        div({ class: "dropdown" },
+                            button(
+                                {
+                                    class: "btn",
+                                    style: "min-width: 175px;",
+                                    onclick: (e) => { e.stopPropagation(); showLoadMenu.val = !showLoadMenu.val; }
+                                },
+                                "Load Documents ", span({ style: "opacity:.6; margin-left:.25rem;" }, "▾")
+                            ),
+                            div(
+                                { class: "dropdown-menu", style: () => showLoadMenu.val ? "display:block" : "display:none" },
+                                // Update GitHub Repos
+                                button(
+                                    {
+                                        class: "menu-item",
+                                        onclick: async (e) => {
+                                            e.stopPropagation();
+                                            showLoadMenu.val = false;
+                                            await handleGitHubLoadAllRepos();
+                                        }
+                                    },
+                                    span({
+                                        class: "button-spinner",
+                                        style: () => (gitHubLoadAllReposLoading.val ? "display: inline-block;" : "display: none;")
+                                    }),
+                                    "Update GitHub Repos"
+                                ),
+                                // Update GitHub Repo
+                                button(
+                                    {
+                                        class: "menu-item",
+                                        onclick: (e) => { e.stopPropagation(); showLoadMenu.val = false; handleLoadGitHubRepoDialog(); }
+                                    },
+                                    "Update GitHub Repo"
+                                ),
+                                // Load Research Note
+                                button(
+                                    {
+                                        class: "menu-item",
+                                        onclick: (e) => { e.stopPropagation(); showLoadMenu.val = false; handleLoadResearchNoteDialog(); }
+                                    },
+                                    "Load Research Note"
+                                ),
+                                // Load PDF Document
+                                button(
+                                    {
+                                        class: "menu-item",
+                                        onclick: (e) => { e.stopPropagation(); showLoadMenu.val = false; handleLoadPDFDocumentDialog(); }
+                                    },
+                                    "Load PDF Document"
+                                )
+                            )
                         )
                     ),
                     // Textarea on its own row
@@ -630,10 +830,12 @@
                         }
                     }),
                     // Submit button row
-                    div({ class: "button-wrapper", style: "margin-top: 0.5rem;" },
-                        button({ onclick: handleYadaRequestSubmit }, "Submit")
+                    div({ class: "button-wrapper", style: "margin-top: .5rem; display:flex; gap:.5rem;" },
+                        button({ onclick: handleYadaRequestSubmit }, "Submit"),
+                        button({ onclick: clearFeed }, "Clear")
                     ),
-                    h3({ style: () => markdownHTML.val ? "display:block" : "display:none" }, "YADA Response"),
+                    // Header is toggled via updateResponsesHeader()
+                    h3({ id: "responses-header", style: "display:none" }, "YADA Responses"),                    
                     div({
                         id: "spinner-overlay",
                         style: () => isLoading.val
@@ -642,9 +844,7 @@
                     },
                         div({ class: "spinner" })
                     ),
-                    div(
-                        { class: "markdown-output", style: () => markdownHTML.val ? "display:block" : "display:none" }
-                    )
+                    div({ id: "results-feed", class: "markdown-feed" })
                 )
             )
         );

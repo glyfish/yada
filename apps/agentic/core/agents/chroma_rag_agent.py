@@ -172,6 +172,7 @@ class ChromaRAGAgent(ABC):
         docs = last_message.content
 
         # Build full-file section from the top retrieved file(s)
+        files_section = ""
         try:
             hits = self.retriever.invoke(question)
 
@@ -186,7 +187,7 @@ class ChromaRAGAgent(ABC):
                 if len(top_files) >= 1:
                     break
 
-            files_section = self.read_file(top_files)
+            files_section = self.read_file(top_files) or ""
         except Exception as e:
             logger.error(f"Full-file append skipped because of error: {e}")
 
@@ -194,9 +195,7 @@ class ChromaRAGAgent(ABC):
         prompt = hub.pull("rlm/rag-prompt")
         logger.debug(f"RAG Agent generate prompt: {prompt}")
 
-        llm = build_llm()
-
-        rag_chain = prompt | llm | StrOutputParser()
+        rag_chain = prompt | self.llm | StrOutputParser()
         answer_text = rag_chain.invoke({"context": docs, "question": question})
         final_text = answer_text + (files_section if files_section else "")
         return {"messages": [final_text]}    
