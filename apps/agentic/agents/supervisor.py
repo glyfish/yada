@@ -129,7 +129,8 @@ class SupervisorAgent:
                                                 bar_chart_generator=team[1],
                                                 time_series_generator=team[2],
                                                 code_repository_search=team[3],
-                                                research_notes_search=team[4])
+                                                research_notes_search=team[4],
+                                                document_library_search=team[5])
         logger.debug(f"Supervisor prompt: {formatted_system_prompt}")
 
         return  prompt.partial(options=", ".join(options), 
@@ -138,7 +139,8 @@ class SupervisorAgent:
                                bar_chart_generator=team[1],
                                time_series_generator=team[2],
                                code_repository_search=team[3],
-                               research_notes_search=team[4])
+                               research_notes_search=team[4],
+                               document_library_search=team[5])
 
 
 
