@@ -192,7 +192,7 @@ class ChromaRAGAgent(ABC):
 
 
         prompt = hub.pull("rlm/rag-prompt")
-        logger.debug(f"Code repository generate prompt: {prompt}")
+        logger.debug(f"RAG Agent generate prompt: {prompt}")
 
         llm = build_llm()
 
