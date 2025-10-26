@@ -193,7 +193,13 @@
         .pdf-bar { display: flex; align-items: center; gap: .5rem; padding: .5rem .75rem; border-bottom: 1px solid #eee; background: #f7f7f7; }
         .pdf-bar .spacer { flex: 1; }
         .pdf-frame { width: 100%; height: 65vh; border: 0; background: #2b2b2b; }
-        /* Dropdown menu for "Load Documents" */
+        .page-chips {
+            display: flex; flex-wrap: wrap; gap: .4rem; padding: .5rem .75rem; border-bottom: 1px solid #eee; background: #fafafa;
+        }
+        .page-chip {
+            padding: .2rem .55rem; border: 1px solid #ddd; border-radius: 999px; background: #fff; cursor: pointer; font-size: .9rem;
+        }
+        .page-chip:hover { background: #f5f5f5; }
         .dropdown { display: inline-block; position: relative; }
         .dropdown-menu {
             position: absolute;
@@ -533,6 +539,31 @@
             // From 'Path: /…/file.pdf' (header produced by read_file)
             const pathMatch = s.match(/^\s*Path:\s*(.+?\.pdf)\s*$/mi);
             if (pathMatch) return { path: pathMatch[1], page: null };
+            
+            // From 'File: name.pdf' (basename only)
+            const fileMatch = s.match(/^\s*File:\s*(.+?\.pdf)\s*$/mi);
+            if (fileMatch) return { file: fileMatch[1], page: null };
+
+            // Optional 'Pages: 3,5-7' header → turn into [3,5,6,7]
+            let pages = null;
+            const pagesMatch = s.match(/^\s*Pages:\s*([0-9,\-\s]+)\s*$/mi);
+            if (pagesMatch) {
+                const raw = pagesMatch[1];
+                const expand = (tok) => {
+                    const t = tok.trim();
+                    if (!t) return [];
+                    if (t.includes("-")) {
+                        const [a,b] = t.split("-").map(n => parseInt(n,10));
+                        if (Number.isInteger(a) && Number.isInteger(b) && a <= b) {
+                            return Array.from({length: b - a + 1}, (_,i) => a + i);
+                        }
+                        return [];
+                    }
+                    const n = parseInt(t,10);
+                    return Number.isInteger(n) ? [n] : [];
+                };
+                pages = raw.split(",").flatMap(expand);
+            }
 
             // From a link to your endpoint
             const urlMatch = s.match(/\/api\/document\/pdf\?path=([^\)\s#]+)(?:#page=(\d+))?/i);
@@ -593,15 +624,51 @@
             card.appendChild(body);
 
             // Optional PDF panel alongside markdown
-            const pdf = pdfMeta || extractPdfHint(markdown);
-            if (pdf?.path) {
+            // Merge hint from JSON (pdfMeta) and header parsing (extractPdfHint)
+            const hintFromMd = extractPdfHint(markdown) || {};
+            const pdf = Object.assign({}, hintFromMd, pdfMeta || {});
+            if (pdf?.path || pdf?.file) {
                 const viewer = document.createElement("div");
                 viewer.className = "pdf-wrap";
-                const url = `/api/document/pdf?path=${encodeURIComponent(pdf.path)}${pdf.page ? `#page=${pdf.page}` : ""}`;
-                viewer.innerHTML = `<div class="pdf-bar"><span>Source PDF</span><span class="spacer"></span><a class="btn" href="${url}" target="_blank" rel="noopener">Open in new tab</a></div><iframe class="pdf-frame" src="${url}" title="PDF"></iframe>`;
+
+                const qp = pdf.path
+                    ? `path=${encodeURIComponent(pdf.path)}`
+                    : `name=${encodeURIComponent(pdf.file)}`;
+                const baseUrl = `/api/document/pdf?${qp}`;
+                const startUrl = `${baseUrl}${pdf.page ? `#page=${pdf.page}` : ""}`;
+
+                // Bar + chips + iframe
+                const bar = document.createElement("div");
+                bar.className = "pdf-bar";
+                bar.innerHTML = `<span>Source PDF</span><span class="spacer"></span><a class="btn" href="${startUrl}" target="_blank" rel="noopener">Open in new tab</a>`;
+                viewer.appendChild(bar);
+
+                // Page chips if provided (either via pdf.pages in JSON or “Pages:” header)
+                const pages = pdf.pages && Array.isArray(pdf.pages) ? pdf.pages
+                               : (hintFromMd.pages && Array.isArray(hintFromMd.pages) ? hintFromMd.pages : null);
+                if (pages && pages.length) {
+                    const chips = document.createElement("div");
+                    chips.className = "page-chips";
+                    pages.forEach(n => {
+                        const b = document.createElement("button");
+                        b.className = "page-chip";
+                        b.textContent = String(n);
+                        b.onclick = (e) => {
+                            e.preventDefault();
+                            frame.src = `${baseUrl}#page=${n}`;
+                        };
+                        chips.appendChild(b);
+                    });
+                    viewer.appendChild(chips);
+                }
+
+                const frame = document.createElement("iframe");
+                frame.className = "pdf-frame";
+                frame.src = startUrl;
+                viewer.appendChild(frame);
                 card.appendChild(viewer);
             }
-
+            
             // Clamp huge responses by default
             const clamped = clampMarkdown(markdown, FEED_MAX_CHARS);
 
