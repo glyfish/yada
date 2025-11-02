@@ -36,6 +36,9 @@ class ResearchNoteAgent(ChromaRAGAgent):
     - section: Section number within the research note (e.g., section:2)
     - section: Range of section within the research note (e.g., section:2-5)
 
+    Example Queries:
+    - title: Thermodynamics Look in my research notes for the definition of a Carnot Cycle.
+
     """
 
     def __init__(self, query):

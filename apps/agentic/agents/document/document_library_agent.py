@@ -7,7 +7,7 @@ from typing import Dict
 
 from langchain import hub
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.graph import StateGraph, START, END
 from langchain.prompts import PromptTemplate
 from langgraph.prebuilt import tools_condition
@@ -34,6 +34,10 @@ class DocumentLibraryAgent(ChromaRAGAgent):
     - topic: Research topic (e.g., topic:AI)
     - published_date: Start date of work on the research note (e.g., date:2023-01-01)
     - tag: Tag associated with the research note (e.g., tag:physics)
+
+    Example Queries:
+    - Look in the document library for the definition of a stochastic matrix.
+
     """
 
     def __init__(self, query):
@@ -205,3 +209,98 @@ class DocumentLibraryAgent(ChromaRAGAgent):
         except Exception as e:
             logger.error(f"read_file failed: {e}")
             return ""
+
+
+    def _generate(self, state):
+        """
+        Generate an answer for PDF-library queries.
+        Includes:
+        - normal RAG answer
+        - optional file dump via read_file(top_files)
+        - pdf_hint {path, pages[]} so UI can render iframe + page chips
+        """
+
+        messages = state["messages"]
+        question = messages[0].content
+        last_message = messages[-1]
+        docs = last_message.content
+
+        # 1. try to build files_section (full file dump or clamped)
+        files_section = ""
+        pdf_hint = None
+        try:
+            hits = self.retriever.invoke(question)
+
+            # pick top file for full dump
+            seen, top_files = set(), []
+            for d in hits:
+                path = (d.metadata or {}).get("path")
+                if not path or path in seen:
+                    continue
+                seen.add(path)
+                top_files.append(d)
+                if len(top_files) >= 1:
+                    break
+
+            files_section = self.read_file(top_files) or ""
+
+            # collect PDF metadata
+            by_path_pages = {}
+            for d in hits:
+                meta = d.metadata or {}
+                pth = meta.get("path")
+                if not pth:
+                    continue
+                pages_meta = meta.get("pages") or meta.get("page")
+                if isinstance(pages_meta, int):
+                    page_list = [pages_meta]
+                elif isinstance(pages_meta, list):
+                    page_list = [pg for pg in pages_meta if isinstance(pg, int)]
+                else:
+                    page_list = []
+                if pth not in by_path_pages:
+                    by_path_pages[pth] = set()
+                for pg in page_list:
+                    by_path_pages[pth].add(pg)
+
+            # choose first path
+            for d in hits:
+                meta = d.metadata or {}
+                pth = meta.get("path")
+                if pth and pth in by_path_pages:
+                    pdf_hint = {
+                        "path": pth,
+                        "pages": sorted(by_path_pages[pth]) if by_path_pages[pth] else None,
+                    }
+                    break
+
+        except Exception as e:
+            logger.error(f"PDF Agent file expansion failed: {e}")
+            files_section = ""
+            pdf_hint = None
+
+        # 2. run RAG prompt to get answer_text
+        prompt = hub.pull("rlm/rag-prompt")
+        rag_chain = prompt | self.llm | StrOutputParser()
+        answer_text = rag_chain.invoke({"context": docs, "question": question})
+
+        # 3. build base final_text (what you want the user to read)
+        final_text = answer_text + (files_section if files_section else "")
+
+        # 4. append pdf_hint footer in-band as JSON, if present
+        if pdf_hint:
+            import json
+            hint_json = json.dumps(pdf_hint)
+            final_text = (
+                final_text
+                + "\n\n```json\n__PDF_HINT_START__\n"
+                + hint_json
+                + "\n__PDF_HINT_END__\n```\n"
+            )
+
+        # 5. return a NORMAL AIMessage so LangGraph stays happy
+        return {
+            "messages": [
+                AIMessage(content=final_text)
+            ]
+        }
