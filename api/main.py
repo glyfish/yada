@@ -2,6 +2,8 @@
 import os
 import json
 import re
+import uuid
+from typing import Optional
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -32,6 +34,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 class RequestPayload(BaseModel):
     input: str
+    session_id: Optional[str] = None
 
 
 # Regex to pull out the embedded PDF hint block (if any)
@@ -43,10 +46,11 @@ PDF_HINT_RE = re.compile(
 
 @app.post("/api/request")
 async def generate_markdown(req: RequestPayload):
-    logger.debug(f"YADA request: {req.input}")
+    session_id = req.session_id or str(uuid.uuid4())
+    logger.debug(f"YADA request [{session_id}]: {req.input}")
 
     supervisor = SupervisorAgent()
-    state = await supervisor.process_request(req.input)
+    state = await supervisor.process_request(req.input, session_id=session_id)
 
     # state should be {"messages": [...]} from the final worker
     messages = state.get("messages", [])
@@ -54,7 +58,7 @@ async def generate_markdown(req: RequestPayload):
 
     if last_msg is None:
         # Nothing came back at all
-        return {"result": ""}
+        return {"result": "", "session_id": session_id}
 
     # Get the raw text content from the final message
     try:
@@ -80,7 +84,7 @@ async def generate_markdown(req: RequestPayload):
         # Strip the hint block from the visible markdown we send to UI
         raw_text = PDF_HINT_RE.sub("", raw_text).strip()
 
-    resp = {"result": raw_text}
+    resp = {"result": raw_text, "session_id": session_id}
     if pdfs_list:
         resp["pdfs"] = pdfs_list
 

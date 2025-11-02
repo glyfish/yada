@@ -1,3 +1,5 @@
+from typing import Optional
+
 from lib.logger import get_logger
 
 from langchain_core.messages import HumanMessage
@@ -38,7 +40,7 @@ class SupervisorAgent:
         return self._agent
     
     
-    async def process_request(self, request: str) -> WorkerState:
+    async def process_request(self, request: str, session_id: Optional[str] = None) -> WorkerState:
         """
         Process a user request and initialize the state.
 
@@ -65,7 +67,11 @@ class SupervisorAgent:
         state: WorkerState = {"messages": [HumanMessage(content=clean_request)]}
 
         # ask supervisor LLM which nodes to run
-        supervisor_output = await self.agent.ainvoke(state)
+        config = {}
+        if session_id is not None:
+            config = {"configurable": {"thread_id": session_id}}
+
+        supervisor_output = await self.agent.ainvoke(state, config)
         routes = [item.strip() for item in supervisor_output.content.split(",")]
         logger.debug(f"Supervisor decided to call: {routes}")
 
@@ -81,7 +87,7 @@ class SupervisorAgent:
                 raise RuntimeError(f"Unknown worker: {node_name}")
 
             worker = self._workers[node_name]
-            state = await worker(state, {})
+            state = await worker(state, config)
             logger.debug(f"State after {node_name}: {state}")
 
         # CRITICAL: return the final state AS-IS
@@ -182,4 +188,3 @@ class SupervisorAgent:
             "research_notes_search": self._create_agent_node(ResearchNoteAgent(query).agent, "research_notes_search"),
             "document_library_search": self._create_agent_node(DocumentLibraryAgent(query).agent, "document_library_search"),
         }
-
