@@ -34,13 +34,6 @@ class RequestPayload(BaseModel):
     input: str
 
 
-# Regex to pull out the embedded PDF hint block (if any)
-PDF_HINT_RE = re.compile(
-    r"```json\s*__PDF_HINT_START__\s*(\{.*?\})\s*__PDF_HINT_END__\s*```",
-    re.DOTALL,
-)
-
-
 @app.post("/api/request")
 async def generate_markdown(req: RequestPayload):
     logger.debug(f"YADA request: {req.input}")
@@ -66,20 +59,6 @@ async def generate_markdown(req: RequestPayload):
     pdfs_list = []
 
     # Look for an embedded PDF hint block at the end of the answer
-    m = PDF_HINT_RE.search(raw_text)
-    if m:
-        json_blob = m.group(1).strip()
-        try:
-            pdf_hint = json.loads(json_blob)
-            if isinstance(pdf_hint, dict):
-                # Shape it for the UI. UI expects: { path, pages }
-                pdfs_list.append(pdf_hint)
-        except Exception as e:
-            logger.error(f"Failed to decode pdf_hint JSON: {e}")
-
-        # Strip the hint block from the visible markdown we send to UI
-        raw_text = PDF_HINT_RE.sub("", raw_text).strip()
-
     resp = {"result": raw_text}
     if pdfs_list:
         resp["pdfs"] = pdfs_list
