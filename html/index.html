@@ -180,6 +180,10 @@
             display: flex;
             flex-direction: column;
             gap: 1rem;
+            /* Constrain answer cards to ~notebook page width (8.5in) */
+            max-width: 8.5in;
+            margin-left: auto;
+            margin-right: auto;
         }
         .result-card {
             border: 1px solid #ddd; border-radius: 10px; background: #fff;
@@ -193,13 +197,6 @@
         .pdf-bar { display: flex; align-items: center; gap: .5rem; padding: .5rem .75rem; border-bottom: 1px solid #eee; background: #f7f7f7; }
         .pdf-bar .spacer { flex: 1; }
         .pdf-frame { width: 100%; height: 65vh; border: 0; background: #2b2b2b; }
-        .page-chips {
-            display: flex; flex-wrap: wrap; gap: .4rem; padding: .5rem .75rem; border-bottom: 1px solid #eee; background: #fafafa;
-        }
-        .page-chip {
-            padding: .2rem .55rem; border: 1px solid #ddd; border-radius: 999px; background: #fff; cursor: pointer; font-size: .9rem;
-        }
-        .page-chip:hover { background: #f5f5f5; }
         .dropdown { display: inline-block; position: relative; }
         .dropdown-menu {
             position: absolute;
@@ -225,7 +222,33 @@
             padding: .45rem .6rem;
             cursor: pointer;
         }
-        .dropdown-menu .menu-item:hover { background: #f7f7f7; }
+        .dropdown-menu .menu-item:hover { 
+            background: #f7f7f7; 
+        }
+        .user-question {
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background: #fafafa;
+            padding: .5rem .75rem;
+            margin-bottom: .75rem;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-size: .9rem;
+            line-height: 1.4;
+        }
+        .user-question .label {
+            display: block;
+            font-size: .7rem;
+            font-weight: 600;
+            color: #555;
+            text-transform: uppercase;
+            letter-spacing: .03em;
+            margin-bottom: .25rem;
+        }
+        .user-question .text {
+            white-space: pre-wrap;
+            word-break: break-word;
+            color: #000;
+        }
     </style>
     <!-- MathJax v3 config + loader -->
     <script>
@@ -612,8 +635,48 @@
             return parts[parts.length - 1];
         }
 
-        async function prependResultCard(markdown, pdfMeta /* optional: {path, page} */) {
-          const feed = document.getElementById("results-feed");
+        // For PDF answers: pull out the AI summary / explanation section,
+        // but drop the raw scraped page dump.
+        // Heuristic:
+        //   - Stop before a line that starts with "File:", "Path:", "Title:", "Authors:",
+        //     "Published:", "Topic:", "Tags:", "--- Page", or "```text".
+        //   - Also stop before a lone "-----" divider.
+        function extractPdfSummary(md) {
+            if (!md) return "";
+            const lines = String(md).split(/\r?\n/);
+            const kept = [];
+            for (const line of lines) {
+                const trimmed = line.trim();
+
+                // hard stop markers that mean "below here is raw source dump"
+                if (
+                    /^File:/i.test(trimmed) ||
+                    /^Path:/i.test(trimmed) ||
+                    /^Title:/i.test(trimmed) ||
+                    /^Authors?:/i.test(trimmed) ||
+                    /^Published/i.test(trimmed) ||
+                    /^Topic:/i.test(trimmed) ||
+                    /^Tags:/i.test(trimmed) ||
+                    /^---\s*Page\b/i.test(trimmed) ||
+                    /^```/.test(trimmed) ||
+                    /^[-]{2,}$/.test(trimmed)          // "-----"
+                ) {
+                    break;
+                }
+
+                kept.push(line);
+            }
+
+            // Trim trailing blank lines
+            while (kept.length && kept[kept.length - 1].trim() === "") {
+                kept.pop();
+            }
+
+            return kept.join("\n").trim();
+        }
+
+        async function prependResultCard(userPrompt, markdown, pdfMeta /* optional */) {
+            const feed = document.getElementById("results-feed");
             const sc = document.scrollingElement || document.documentElement;
             const before = sc.scrollTop, prevH = sc.scrollHeight;
 
@@ -624,30 +687,43 @@
             head.className = "result-head";
             head.textContent = new Date().toLocaleString();
 
+            // Outer body for this card
             const body = document.createElement("div");
-            body.className = "result-body markdown-output";
+            body.className = "result-body";
+
+            // Prompt block
+            const qDiv = document.createElement("div");
+            qDiv.className = "user-question";
+            qDiv.innerHTML = `
+                <span class="label">Request</span>
+                <div class="text"></div>
+            `;
+            qDiv.querySelector(".text").textContent = userPrompt || "";
+
+            // Answer block (this is where we render markdown)
+            const aDiv = document.createElement("div");
+            aDiv.className = "markdown-output";
+
+            body.appendChild(qDiv);
+            body.appendChild(aDiv);
+
+            // figure out if there's a PDF
+            const hintFromMd = extractPdfHint(markdown) || {};
+            const pdf = Object.assign({}, hintFromMd, pdfMeta || {});
+            const hasPdf = !!(pdf && (pdf.path || pdf.file));
 
             card.appendChild(head);
             card.appendChild(body);
 
-            // Optional PDF panel alongside markdown
-            // Merge hint from JSON (pdfMeta) and header parsing (extractPdfHint)
-            const hintFromMd = extractPdfHint(markdown) || {};
-            const pdf = Object.assign({}, hintFromMd, pdfMeta || {});
-            if (pdf?.path || pdf?.file) {
+            if (hasPdf) {
                 const fileNameForBackend = basename(pdf.file || pdf.path || "");
-
                 if (fileNameForBackend) {
                     const viewer = document.createElement("div");
                     viewer.className = "pdf-wrap";
 
-                    // Always call backend with ?name=<basename.pdf>
                     const baseUrl = `${PDF_STREAM_DOCUMENT}?name=${encodeURIComponent(fileNameForBackend)}`;
-
-                    // If we have a preferred page, use #page=
                     const startUrl = `${baseUrl}${pdf.page ? `#page=${pdf.page}` : ""}`;
 
-                    // Header bar with "Open in new tab"
                     const bar = document.createElement("div");
                     bar.className = "pdf-bar";
                     bar.innerHTML = `
@@ -657,71 +733,60 @@
                     `;
                     viewer.appendChild(bar);
 
-                    // Page chips (either from pdf.pages on JSON or Pages: header)
-                    const pages = pdf.pages && Array.isArray(pdf.pages)
-                        ? pdf.pages
-                        : (hintFromMd.pages && Array.isArray(hintFromMd.pages) ? hintFromMd.pages : null);
-
-                    let frame; // define before using it in onclick closures
-
-                    if (pages && pages.length) {
-                        const chips = document.createElement("div");
-                        chips.className = "page-chips";
-                        pages.forEach(n => {
-                            const b = document.createElement("button");
-                            b.className = "page-chip";
-                            b.textContent = String(n);
-                            b.onclick = (e) => {
-                                e.preventDefault();
-                                frame.src = `${baseUrl}#page=${n}`;
-                            };
-                            chips.appendChild(b);
-                        });
-                        viewer.appendChild(chips);
-                    }
-
-                    // Iframe viewer
-                    frame = document.createElement("iframe");
+                    const frame = document.createElement("iframe");
                     frame.className = "pdf-frame";
                     frame.src = startUrl;
                     viewer.appendChild(frame);
 
                     card.appendChild(viewer);
                 }
-            }            // Clamp huge responses by default
-            const clamped = clampMarkdown(markdown, FEED_MAX_CHARS);
-
-            feed.insertBefore(card, feed.firstChild);
-            // Update feed count after adding a card
-            feedCount.val = feed.children.length;
-            updateResponsesHeader();
-            await renderMarkdownInto(body, clamped.text);
-
-            // Expand-on-demand for truncated items
-            if (clamped.truncated) {
-                const moreRow = document.createElement("div");
-                moreRow.style = "display:flex;justify-content:flex-end;padding:.5rem .9rem;";
-                const btn = document.createElement("button");
-                btn.className = "btn";
-                btn.textContent = "Show full";
-                btn.onclick = async () => {
-                    btn.disabled = true;
-                    await renderMarkdownInto(body, clamped.full);
-                    moreRow.remove();
-                };
-                moreRow.appendChild(btn);
-                card.appendChild(moreRow);
             }
 
-            // Preserve reader position (so adding at the top scrolls “down”)
+            // Insert card before rendering, so MathJax/etc. can run after it's in DOM
+            feed.insertBefore(card, feed.firstChild);
+            feedCount.val = feed.children.length;
+            updateResponsesHeader();
+
+            // Render the answer text into aDiv
+            if (!hasPdf) {
+                // normal RAG / code / math answer
+                const clamped = clampMarkdown(markdown, FEED_MAX_CHARS);
+                await renderMarkdownInto(aDiv, clamped.text);
+
+                if (clamped.truncated) {
+                    const moreRow = document.createElement("div");
+                    moreRow.style = "display:flex;justify-content:flex-end;padding:.5rem .9rem;";
+                    const btn = document.createElement("button");
+                    btn.className = "btn";
+                    btn.textContent = "Show full";
+                    btn.onclick = async () => {
+                        btn.disabled = true;
+                        await renderMarkdownInto(aDiv, clamped.full);
+                        moreRow.remove();
+                    };
+                    moreRow.appendChild(btn);
+                    card.appendChild(moreRow);
+                }
+            } else {
+                // PDF answer:
+                // show ONLY summary text above the PDF viewer, not the full raw page dump
+                const summaryOnly = extractPdfSummary(markdown);
+                if (summaryOnly) {
+                    await renderMarkdownInto(aDiv, summaryOnly);
+                } else {
+                    // If we got no usable summary, just hide the empty answer div
+                    aDiv.style.display = "none";
+                }
+            }
+
+            // keep scroll position stable after prepend
             const delta = (sc.scrollHeight - prevH);
             sc.scrollTop = before + delta;
 
-            // Cap total cards to avoid DOM bloat
+            // Cap feed length
             while (feed.children.length > FEED_MAX_CARDS) {
                 feed.removeChild(feed.lastChild);
             }
-            // Keep reactive count in sync
             feedCount.val = feed.children.length;
             updateResponsesHeader();
         }
@@ -837,8 +902,11 @@
                     body: JSON.stringify({ input: textValue.val })
                 });
                 const data = await response.json();
-                // Prepend a new result card; if backend returns PDFs, pass the first one
-                await prependResultCard(data.result, (data.pdfs && data.pdfs[0]) || null);
+                await prependResultCard(
+                    textValue.val,                // the prompt that was just sent
+                    data.result,                  // model / RAG answer
+                    (data.pdfs && data.pdfs[0]) || null  // pdf hint (optional)
+                );
             } catch (err) {
                 alert(`Error: ${err.message}`);
             } finally {
@@ -921,7 +989,10 @@
                         button({ onclick: clearFeed }, "Clear")
                     ),
                     // Header is toggled via updateResponsesHeader()
-                    h3({ id: "responses-header", style: "display:none" }, "YADA Responses"),                    
+                    h3({
+                        id: "responses-header",
+                        style: "display:none; margin-top:4rem;"
+                    }, "YADA Responses"),
                     div({
                         id: "spinner-overlay",
                         style: () => isLoading.val
