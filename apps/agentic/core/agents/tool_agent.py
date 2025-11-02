@@ -7,6 +7,7 @@ from langgraph.prebuilt import tools_condition
 from langchain_core.tools import BaseTool
 from lib.logger import get_logger
 from langgraph.prebuilt import ToolNode
+from apps.agentic.core.checkpointer import checkpointer
 
 logger = get_logger("YADA")
 
@@ -123,7 +124,7 @@ class ToolAgent(ABC):
             )
         )
 
-        return graph.compile()
+        return graph.compile(checkpointer=checkpointer)
     
 
     @abstractmethod   

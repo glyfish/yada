@@ -17,6 +17,7 @@ from langgraph.prebuilt import ToolNode
 from apps.agentic.core.document_loaders.chroma_document_loader import ChromaDocumentLoader
 from apps.agentic.core.agents.messages import WorkerState
 from apps.agentic.core.utils import build_llm
+from apps.agentic.core.checkpointer import checkpointer
 
 from lib.logger import get_logger
 
@@ -239,7 +240,7 @@ class ChromaRAGAgent(ABC):
             .add_edge("retrieve", "generate") 
             .add_edge("generate", END)
         )
-        return graph.compile()
+        return graph.compile(checkpointer=checkpointer)
 
 
     @abstractmethod

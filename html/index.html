@@ -345,6 +345,7 @@
         const textValue = state("");
         const isLoading = state(false);
         const feedCount = state(0);
+        const sessionId = state(null);
         const showLoadMenu = state(false);
 
         let inputTextareaEl;
@@ -792,11 +793,17 @@
             updateResponsesHeader();
         }
 
-        function clearFeed() {
+        function startNewChat() {
+            sessionId.val = null;
             const feed = document.getElementById("results-feed");
             while (feed.firstChild) feed.removeChild(feed.firstChild);
             feedCount.val = 0;
             updateResponsesHeader();
+            textValue.val = "";
+            if (inputTextareaEl) {
+                inputTextareaEl.value = "";
+                inputTextareaEl.style.height = "auto";
+            }
         }
 
         function updateResponsesHeader() {
@@ -901,10 +908,13 @@
             const promptBeforeSend = textValue.val;
 
             try {
+                const payload = { input: promptBeforeSend };
+                if (sessionId.val) payload.session_id = sessionId.val;
+
                 const response = await fetch(YADA_REQUEST, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ input: promptBeforeSend })
+                    body: JSON.stringify(payload)
                 });
 
                 if (!response.ok) {
@@ -919,6 +929,9 @@
                 }
 
                 const data = await response.json();
+                if (data?.session_id) {
+                    sessionId.val = data.session_id;
+                }
 
                 await prependResultCard(
                     promptBeforeSend,
@@ -1019,7 +1032,7 @@
                     // Submit/Clear row
                     div({ class: "button-wrapper", style: "margin-top: .5rem; display:flex; gap:.5rem;" },
                         button({ onclick: handleYadaRequestSubmit }, "Submit"),
-                        button({ onclick: clearFeed }, "Clear")
+                        button({ onclick: startNewChat, disabled: () => isLoading.val }, "New Chat")
                     ),
 
                     // Header toggled dynamically
