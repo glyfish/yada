@@ -328,6 +328,7 @@
         const GITHUB_LOAD_REPO = "/api/document/load_github_repo";
         const RESEARCH_NOTE_LOAD = "/api/document/load_research_note";
         const PDF_LOAD_DOCUMENT = "/api/document/load_pdf_document";
+        const PDF_STREAM_DOCUMENT = "/api/document/stream_pdf_document";
         const YADA_REQUEST = "/api/request";
 
         // Close dropdown on outside click / ESC
@@ -605,6 +606,12 @@
             }
         }
 
+        function basename(p) {
+            if (!p) return "";
+            const parts = p.split("/");
+            return parts[parts.length - 1];
+        }
+
         async function prependResultCard(markdown, pdfMeta /* optional: {path, page} */) {
           const feed = document.getElementById("results-feed");
             const sc = document.scrollingElement || document.documentElement;
@@ -628,48 +635,60 @@
             const hintFromMd = extractPdfHint(markdown) || {};
             const pdf = Object.assign({}, hintFromMd, pdfMeta || {});
             if (pdf?.path || pdf?.file) {
-                const viewer = document.createElement("div");
-                viewer.className = "pdf-wrap";
+                const fileNameForBackend = basename(pdf.file || pdf.path || "");
 
-                const qp = pdf.path
-                    ? `path=${encodeURIComponent(pdf.path)}`
-                    : `name=${encodeURIComponent(pdf.file)}`;
-                const baseUrl = `/api/document/pdf?${qp}`;
-                const startUrl = `${baseUrl}${pdf.page ? `#page=${pdf.page}` : ""}`;
+                if (fileNameForBackend) {
+                    const viewer = document.createElement("div");
+                    viewer.className = "pdf-wrap";
 
-                // Bar + chips + iframe
-                const bar = document.createElement("div");
-                bar.className = "pdf-bar";
-                bar.innerHTML = `<span>Source PDF</span><span class="spacer"></span><a class="btn" href="${startUrl}" target="_blank" rel="noopener">Open in new tab</a>`;
-                viewer.appendChild(bar);
+                    // Always call backend with ?name=<basename.pdf>
+                    const baseUrl = `${PDF_STREAM_DOCUMENT}?name=${encodeURIComponent(fileNameForBackend)}`;
 
-                // Page chips if provided (either via pdf.pages in JSON or “Pages:” header)
-                const pages = pdf.pages && Array.isArray(pdf.pages) ? pdf.pages
-                               : (hintFromMd.pages && Array.isArray(hintFromMd.pages) ? hintFromMd.pages : null);
-                if (pages && pages.length) {
-                    const chips = document.createElement("div");
-                    chips.className = "page-chips";
-                    pages.forEach(n => {
-                        const b = document.createElement("button");
-                        b.className = "page-chip";
-                        b.textContent = String(n);
-                        b.onclick = (e) => {
-                            e.preventDefault();
-                            frame.src = `${baseUrl}#page=${n}`;
-                        };
-                        chips.appendChild(b);
-                    });
-                    viewer.appendChild(chips);
+                    // If we have a preferred page, use #page=
+                    const startUrl = `${baseUrl}${pdf.page ? `#page=${pdf.page}` : ""}`;
+
+                    // Header bar with "Open in new tab"
+                    const bar = document.createElement("div");
+                    bar.className = "pdf-bar";
+                    bar.innerHTML = `
+                        <span>Source PDF</span>
+                        <span class="spacer"></span>
+                        <a class="btn" href="${startUrl}" target="_blank" rel="noopener">Open in new tab</a>
+                    `;
+                    viewer.appendChild(bar);
+
+                    // Page chips (either from pdf.pages on JSON or Pages: header)
+                    const pages = pdf.pages && Array.isArray(pdf.pages)
+                        ? pdf.pages
+                        : (hintFromMd.pages && Array.isArray(hintFromMd.pages) ? hintFromMd.pages : null);
+
+                    let frame; // define before using it in onclick closures
+
+                    if (pages && pages.length) {
+                        const chips = document.createElement("div");
+                        chips.className = "page-chips";
+                        pages.forEach(n => {
+                            const b = document.createElement("button");
+                            b.className = "page-chip";
+                            b.textContent = String(n);
+                            b.onclick = (e) => {
+                                e.preventDefault();
+                                frame.src = `${baseUrl}#page=${n}`;
+                            };
+                            chips.appendChild(b);
+                        });
+                        viewer.appendChild(chips);
+                    }
+
+                    // Iframe viewer
+                    frame = document.createElement("iframe");
+                    frame.className = "pdf-frame";
+                    frame.src = startUrl;
+                    viewer.appendChild(frame);
+
+                    card.appendChild(viewer);
                 }
-
-                const frame = document.createElement("iframe");
-                frame.className = "pdf-frame";
-                frame.src = startUrl;
-                viewer.appendChild(frame);
-                card.appendChild(viewer);
-            }
-            
-            // Clamp huge responses by default
+            }            // Clamp huge responses by default
             const clamped = clampMarkdown(markdown, FEED_MAX_CHARS);
 
             feed.insertBefore(card, feed.firstChild);

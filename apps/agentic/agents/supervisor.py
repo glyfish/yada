@@ -54,29 +54,38 @@ class SupervisorAgent:
         clean_request, query = build_filter_and_query(request)
         logger.debug(f"Processed request: {clean_request}, {query}")
 
+        # build workers (they close over query in CodeRepoAgent, ResearchNoteAgent, etc)
         self._create_workers(query)
+
+        # build the supervisor routing LLM
         prompt = self._create_prompt()
         self._agent = prompt | self._llm
 
-        agent_msg = {"messages": [HumanMessage(content=clean_request)]}
-        supervisor_output = await self.agent.ainvoke(agent_msg)
-        next_nodes = [item.strip() for item in supervisor_output.content.split(",")]
-        logger.debug(f"Supervisor decided to call: {next_nodes}")
+        # initial graph state: just the user question
+        state: WorkerState = {"messages": [HumanMessage(content=clean_request)]}
 
-        if "FINISH" in next_nodes:
+        # ask supervisor LLM which nodes to run
+        supervisor_output = await self.agent.ainvoke(state)
+        routes = [item.strip() for item in supervisor_output.content.split(",")]
+        logger.debug(f"Supervisor decided to call: {routes}")
+
+        # If supervisor says FINISH, just return the initial state (no tool chosen)
+        if "FINISH" in routes:
             logger.debug("No further action required. Finishing conversation.")
-            return agent_msg
+            return state
 
-        for node in next_nodes:
-            logger.debug(f"Calling node: {node}")
-            
-            if node not in self._workers:
-                raise RuntimeError(f"Unknown worker: {node}")
+        # Execute workers in order, feeding each one's output into the next
+        for node_name in routes:
+            logger.debug(f"Calling node: {node_name}")
+            if node_name not in self._workers:
+                raise RuntimeError(f"Unknown worker: {node_name}")
 
-            worker = self._workers[node]
-            agent_msg = await worker(agent_msg, {})
+            worker = self._workers[node_name]
+            state = await worker(state, {})
+            logger.debug(f"State after {node_name}: {state}")
 
-        return agent_msg
+        # CRITICAL: return the final state AS-IS
+        return state
 
 
     def _create_prompt(self):
@@ -148,15 +157,19 @@ class SupervisorAgent:
         async def node(state, config):
             logger.debug(f"Invoking worker: {node_name}")
             logger.debug(f"Request Message: {get_last_message(state).content}")
+
             result = await agent.ainvoke(state, config)
-            last_message = get_last_message(result)
-            content = last_message.content
-            logger.debug(f"{node_name} response Message: {content}")
-            return {
-                "messages": [
-                    HumanMessage(content=content, name=node_name)
-                ]
-            }
+
+            # For debugging, we can still log what came back
+            try:
+                last_message = get_last_message(result)
+                logger.debug(f"{node_name} response Message: {last_message.content}")
+            except Exception:
+                logger.debug(f"{node_name} returned non-standard result: {result}")
+
+            # CRITICAL: return the agent result directly, don't rewrap
+            return result
+
         return node
 
 

@@ -1,9 +1,12 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 import os
 import requests
 from urllib.parse import urlparse
+from pathlib import Path
+from fastapi.responses import FileResponse
 
 from lib.logger import get_logger
 from apps.agentic.core.constants import (GITHUB_ACCOUNTS, GITHUB_API, RESEARCH_NOTES_LOCAL_PATH,
@@ -15,6 +18,7 @@ from apps.agentic.core.document_loaders.research_note_document_loader import Res
 from apps.agentic.core.document_loaders.document_library_loader import DocumentLibraryLoader
 from langchain_community.vectorstores import Chroma
 
+DOCUMENT_LIBRARY_DIR = Path("./document_library").resolve()
 
 router = APIRouter()
 logger = get_logger("YADA")
@@ -226,3 +230,51 @@ async def load_pdf_document(payload: LoadPDFDocumentPayload):
     await doc_loader.load_document(pdf_path, meta_data=meta_data)
 
     return {"status": "Success", "message": f"Loaded PDF document: {payload.title}."}
+
+
+"""
+Stream specified PDF document
+"""
+@router.get("/document/stream_pdf_document")
+async def serve_pdf(
+    name: str = Query(..., description="basename of the PDF, e.g. foo.pdf")
+):
+    """
+    Return a PDF in a browser-displayable way (no download prompt).
+    The front end calls this like:
+      /api/document/pdf?name=Discrete%20State%20Markov%20Chain%20Equilibrium.pdf
+    """
+
+    # 1. Lock it to just a filename, to avoid "../../etc/passwd" nonsense
+    safe_name = Path(name).name
+    if safe_name != name:
+        # user tried to include a path
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    # 2. Build absolute path under your pdf library dir
+    pdf_path = (DOCUMENT_LIBRARY_DIR / safe_name).resolve()
+
+    # 3. Double-check it's still under the allowed root
+    if not str(pdf_path).startswith(str(DOCUMENT_LIBRARY_DIR)):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    # 4. Check that it actually exists
+    if not pdf_path.exists() or not pdf_path.is_file():
+        raise HTTPException(status_code=404, detail="PDF not found")
+
+    # 5. Read the bytes
+    data = pdf_path.read_bytes()
+
+    # 6. Return them with headers that tell the browser:
+    #    - it's a PDF
+    #    - render inline (DON'T force download)
+    return Response(
+        content=data,
+        media_type="application/pdf",
+        headers={
+            # this is the important part:
+            "Content-Disposition": f'inline; filename="{safe_name}"',
+            # optional: reduce caching weirdness while you're iterating
+            "Cache-Control": "no-store",
+        },
+    )
