@@ -346,7 +346,9 @@
         const isLoading = state(false);
         const feedCount = state(0);
         const showLoadMenu = state(false);
-        
+
+        let inputTextareaEl;
+
         const GITHUB_LOAD_ALL_REPOS = "/api/document/load_all_github_repos";
         const GITHUB_LOAD_REPO = "/api/document/load_github_repo";
         const RESEARCH_NOTE_LOAD = "/api/document/load_research_note";
@@ -442,8 +444,7 @@
                 }
             };
             loadBtn.addEventListener("click", submit);
-            [filenameInput, titleInput, authorInput, startDateInput, tagsInput].forEach(el => el.addEventListener("keydown", e => {                if (e.key === "Enter") { e.preventDefault(); submit(); }
-            }));
+            [filenameInput, titleInput, authorInput, startDateInput, tagsInput].forEach(el => el.addEventListener("keydown", e => {if (e.key === "Enter") { e.preventDefault(); submit(); }}));
         };
 
         // Load PDF Document Dialog
@@ -895,29 +896,67 @@
         // Main Page
         const handleYadaRequestSubmit = async () => {
             isLoading.val = true;
+
+            // Take a snapshot of what was asked
+            const promptBeforeSend = textValue.val;
+
             try {
                 const response = await fetch(YADA_REQUEST, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ input: textValue.val })
+                    body: JSON.stringify({ input: promptBeforeSend })
                 });
+
+                if (!response.ok) {
+                    // don't clear on error
+                    let msg = `Request failed (${response.status})`;
+                    try {
+                        const errBody = await response.json();
+                        if (errBody?.detail) msg = errBody.detail;
+                        else if (errBody?.message) msg = errBody.message;
+                    } catch (_) {}
+                    throw new Error(msg);
+                }
+
                 const data = await response.json();
+
                 await prependResultCard(
-                    textValue.val,                // the prompt that was just sent
-                    data.result,                  // model / RAG answer
-                    (data.pdfs && data.pdfs[0]) || null  // pdf hint (optional)
+                    promptBeforeSend,
+                    data.result,
+                    (data.pdfs && data.pdfs[0]) || null
                 );
+
+                // SUCCESS: clear textarea content + reset height
+                textValue.val = "";
+                if (inputTextareaEl) {
+                    inputTextareaEl.value = "";
+                    inputTextareaEl.style.height = "auto";
+                }
             } catch (err) {
                 alert(`Error: ${err.message}`);
+                // DO NOT clear textValue or textarea on error
             } finally {
                 isLoading.val = false;
             }
         };
 
+        // Build the textarea node first so we can keep a reference
+        inputTextareaEl = textarea({
+            rows: 4,
+            placeholder: "Ask something...",
+            oninput: e => {
+                // auto-resize logic
+                e.target.style.height = "auto";
+                e.target.style.height = e.target.scrollHeight + "px";
+                textValue.val = e.target.value;
+            }
+        });
+
+        // Now mount the whole app, reusing that same textarea node
         add(document.getElementById("app"),
             div(
                 div({ class: "input-container" },
-                    // Button row (own wrapper and margin)
+                    // Button row
                     div({ class: "button-wrapper", style: "margin-bottom: 1.0rem; text-align: left; position: relative;" },
                         div({ class: "dropdown" },
                             button(
@@ -973,26 +1012,23 @@
                             )
                         )
                     ),
-                    // Textarea on its own row
-                    textarea({
-                        rows: 4,
-                        placeholder: "Ask something...",
-                        oninput: e => {
-                            e.target.style.height = 'auto';
-                            e.target.style.height = e.target.scrollHeight + 'px';
-                            textValue.val = e.target.value;
-                        }
-                    }),
-                    // Submit button row
+
+                    // Our referenced textarea node
+                    inputTextareaEl,
+
+                    // Submit/Clear row
                     div({ class: "button-wrapper", style: "margin-top: .5rem; display:flex; gap:.5rem;" },
                         button({ onclick: handleYadaRequestSubmit }, "Submit"),
                         button({ onclick: clearFeed }, "Clear")
                     ),
-                    // Header is toggled via updateResponsesHeader()
+
+                    // Header toggled dynamically
                     h3({
                         id: "responses-header",
                         style: "display:none; margin-top:4rem;"
                     }, "YADA Responses"),
+
+                    // Spinner overlay
                     div({
                         id: "spinner-overlay",
                         style: () => isLoading.val
@@ -1001,11 +1037,12 @@
                     },
                         div({ class: "spinner" })
                     ),
+
+                    // Feed container
                     div({ id: "results-feed", class: "markdown-feed" })
                 )
             )
         );
-
 </script>
 </body>
 </html>
