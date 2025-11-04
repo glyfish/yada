@@ -139,6 +139,15 @@
             margin: .5rem 0 0;
             padding: 0;
         }
+        .dialog-input-with-button {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            width: 100%;
+        }
+        .dialog-input-with-button input[type="text"] {
+            flex: 1 1 auto;
+        }
         .btn {
             padding: .5rem 1rem;
             font-size: 1rem;
@@ -397,7 +406,11 @@
             dialog.innerHTML = `
                 <form method="dialog" novalidate autocomplete="off">
                     <label for="rn-filename">Filename:</label>
-                    <input id="rn-filename" name="filename" type="text" placeholder="my_note.md" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text"  required>
+                    <div class="dialog-input-with-button">
+                        <input id="rn-filename" name="filename" type="text" placeholder="my_note.md" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
+                        <input id="rn-file" type="file" accept=".md,.markdown,.txt" style="display:none">
+                        <button type="button" class="btn secondary" id="rn-file-btn">Browse…</button>
+                    </div>
 
                     <label for="rn-title">Title:</label>
                     <input id="rn-title" name="title" type="text" placeholder="My Research Note" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text">
@@ -432,6 +445,17 @@
             const startDateInput = dialog.querySelector("input[name='start_date']");
             const topicInput     = dialog.querySelector("textarea[name='topic']");
             const tagsInput      = dialog.querySelector("input[name='tags']");
+            const fileInput      = dialog.querySelector("#rn-file");
+            const fileButton     = dialog.querySelector("#rn-file-btn");
+
+            if (fileButton && fileInput) {
+                fileButton.addEventListener("click", () => fileInput.click());
+                fileInput.addEventListener("change", () => {
+                    if (fileInput.files && fileInput.files[0]) {
+                        filenameInput.value = fileInput.files[0].name;
+                    }
+                });
+            }
 
             requestAnimationFrame(() => filenameInput.focus());
 
@@ -481,7 +505,11 @@
             dialog.innerHTML = `
                 <form method="dialog" novalidate autocomplete="off">
                 <label for="pdf-filename">Filename:</label>
-                <input id="pdf-filename" name="filename" type="text" placeholder="paper.pdf"autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
+                <div class="dialog-input-with-button">
+                    <input id="pdf-filename" name="filename" type="text" placeholder="paper.pdf" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
+                    <input id="pdf-file" type="file" accept=".pdf" style="display:none">
+                    <button type="button" class="btn secondary" id="pdf-file-btn">Browse…</button>
+                </div>
 
                 <label for="pdf-title">Title:</label>
                 <input id="pdf-title" name="title" type="text" placeholder="Paper Title"autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
@@ -516,6 +544,17 @@
             const dateInput     = dialog.querySelector("input[name='published_date']");
             const topicInput    = dialog.querySelector("textarea[name='topic']");
             const tagsInput     = dialog.querySelector("input[name='tags']");
+            const fileInput     = dialog.querySelector("#pdf-file");
+            const fileButton    = dialog.querySelector("#pdf-file-btn");
+
+            if (fileButton && fileInput) {
+                fileButton.addEventListener("click", () => fileInput.click());
+                fileInput.addEventListener("change", () => {
+                    if (fileInput.files && fileInput.files[0]) {
+                        filenameInput.value = fileInput.files[0].name;
+                    }
+                });
+            }
 
             requestAnimationFrame(() => filenameInput.focus());
 
