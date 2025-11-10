@@ -26,16 +26,14 @@ logger = get_logger("YADA")
 
 class ChromaRAGAgent(ABC):
 
-    def __init__(self, tool_name: str, tool_description: str, document_prompt: str, doc_loader: ChromaDocumentLoader,
+    def __init__(self, retriever_tool_name: str, retriever_tool_description: str, document_prompt: str, doc_loader: ChromaDocumentLoader,
                  query: Dict[str, Any]={}):
-        self.tool_name = tool_name
-        self.tool_description = tool_description
+        self.retriever_tool_name = retriever_tool_name
+        self.retriever_tool_description = retriever_tool_description
         self._query = query
 
         self._llm = build_llm()
         self._doc_loader = doc_loader
-
-        logger.debug(f"Chroma query: {query}")
 
         self._vectorstore = self._doc_loader.vectorstore
         self._retriever = self._vectorstore.as_retriever(
@@ -45,12 +43,11 @@ class ChromaRAGAgent(ABC):
 
         self._retriever_tool = create_retriever_tool(
             self._retriever,
-            tool_name,
-            tool_description,
+            retriever_tool_name,
+            retriever_tool_description,
             document_prompt=document_prompt,
             document_separator="\n\n-----\n\n",)
         self._tools = [self._retriever_tool]
-        self._retriever_tool_node = ToolNode(self._tools)
         self._tooled_llm = self._llm.bind_tools(self._tools)
         self._agent = self._create_agent()
 
@@ -77,14 +74,6 @@ class ChromaRAGAgent(ABC):
         Get the tools available to the GitHub agent.
         """
         return self._tools
-
-
-    @property
-    def retriever_tool(self):
-        """
-        Get the retriever tool for the GitHub agent.
-        """
-        return self._retriever_tool
 
 
     @property
@@ -120,15 +109,6 @@ class ChromaRAGAgent(ABC):
         """
 
         return self._tooled_llm
-
-
-    @property
-    def retriever_tool_node(self):
-        """
-        Get the retriever tool node.
-        """
-
-        return self._retriever_tool_node
 
 
     @property
