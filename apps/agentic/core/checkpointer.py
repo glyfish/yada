@@ -6,7 +6,7 @@ from lib.logger import get_logger
 logger = get_logger("YADA")
 
 try:
-    from langgraph.checkpoint.sqlite import SqliteSaver
+    from langgraph.checkpoint.sqlite import AsyncSqliteSaver
 except ImportError as exc:
     logger.warning(
         "SqliteSaver not available (%s). Falling back to in-memory checkpointing.",
@@ -25,7 +25,7 @@ else:
     _db_path = _default_dir / "state.sqlite"
 
     # SqliteSaver handles locking internally; a single instance can be reused safely.
-    checkpointer = SqliteSaver(str(_db_path))
+    checkpointer = AsyncSqliteSaver(str(_db_path))
 
 
 __all__ = ["checkpointer"]
