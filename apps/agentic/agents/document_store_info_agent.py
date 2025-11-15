@@ -17,6 +17,9 @@ from apps.agentic.core.constants import GITHUB_LOCAL_PATH, DB_PATH
 from apps.agentic.core.document_loaders.research_note_document_loader import (
     ResearchNoteChromaDocumentLoader,
 )
+from apps.agentic.core.document_loaders.document_library_loader import (
+    DocumentLibraryLoader,
+)
 
 from lib.logger import get_logger
 
@@ -79,6 +82,44 @@ class ResearchNoteTitleQueryInput(BaseModel):
     )
 
 
+class DocumentLibraryMetadataListInput(BaseModel):
+    """Schema for slicing PDF document library metadata rows."""
+
+    max_results: int = Field(
+        default=100,
+        ge=1,
+        le=1000,
+        description="Maximum number of PDF document metadata rows to return (default 100).",
+    )
+    start_after: str | None = Field(
+        default=None,
+        description="Filename or path after which to start the listing (exclusive).",
+    )
+
+
+class DocumentLibraryTitleQueryInput(BaseModel):
+    """Schema for filtering PDF document titles by metadata."""
+
+    author: str | None = Field(
+        default=None,
+        description="Author name to filter by (case-insensitive substring match).",
+    )
+    topic: str | None = Field(
+        default=None,
+        description="Topic text to filter by (case-insensitive substring match).",
+    )
+    tag: str | None = Field(
+        default=None,
+        description="Require that the document contains this tag (case-insensitive).",
+    )
+    limit: int = Field(
+        default=25,
+        ge=1,
+        le=200,
+        description="Maximum number of titles to return (default 25).",
+    )
+
+
 
 class DocumentStoreInfoAgent(ToolAgent):
     """
@@ -91,6 +132,8 @@ class DocumentStoreInfoAgent(ToolAgent):
             DocumentStoreInfoAgent.filenames_for_repository,
             DocumentStoreInfoAgent.research_note_metadata_summary,
             DocumentStoreInfoAgent.research_note_titles_by_metadata,
+            DocumentStoreInfoAgent.document_library_metadata_summary,
+            DocumentStoreInfoAgent.document_library_titles_by_metadata,
         ]
         tool_node_name = "document_info_tool_node"
 
@@ -109,6 +152,8 @@ class DocumentStoreInfoAgent(ToolAgent):
         - List repository names and filenames for code repositories.
         - Summarize metadata for research notes, including filename, title, author, topic, and tags.
         - Filter research note titles using author/topic/tag metadata.
+        - Summarize metadata for PDF documents, including filename, title, authors, published date, topic, and tags.
+        - Filter PDF document titles using author/topic/tag metadata.
         Call the appropriate tool when the user asks about any of these data sources.
         """
 
@@ -122,22 +167,16 @@ class DocumentStoreInfoAgent(ToolAgent):
 
 
     @staticmethod
-    @lru_cache(maxsize=1)
-    def _research_note_metadata(db_path=DB_PATH) -> list[dict]:
-        """
-        Aggregate research note metadata from the Chroma collection, one row per file.
-        """
-
-        loader = ResearchNoteChromaDocumentLoader(db_path)
+    def _collect_metadata_rows(loader, row_factory) -> list[dict]:
         collection = getattr(loader.vectorstore, "_collection", None)
         if collection is None:
-            logger.warning("Research note vector store collection unavailable.")
+            logger.warning("Vector store collection unavailable for loader %s", loader)
             return []
 
         try:
             result = collection.get(include=["metadatas"], limit=100_000)
         except Exception as exc:
-            logger.error("Failed to read research note metadata: %s", exc)
+            logger.error("Failed to read metadata: %s", exc)
             return []
 
         metadatas = result.get("metadatas") or []
@@ -152,10 +191,44 @@ class DocumentStoreInfoAgent(ToolAgent):
             if path in aggregated:
                 continue
 
+            aggregated[path] = row_factory(meta, path)
+
+        return list(aggregated.values())
+
+
+    @staticmethod
+    def _paginate_metadata_rows(rows: list[dict], max_results: int, start_after: str | None) -> list[dict]:
+        if not rows:
+            return []
+
+        sorted_rows = sorted(rows, key=lambda r: (r.get("filename") or r.get("path") or "").lower())
+        start_index = 0
+        if start_after:
+            token = start_after.lower()
+            for idx, row in enumerate(sorted_rows):
+                filename = (row.get("filename") or "").lower()
+                path = (row.get("path") or "").lower()
+                if token in {filename, path}:
+                    start_index = idx + 1
+                    break
+
+        end_index = min(start_index + max_results, len(sorted_rows))
+        return sorted_rows[start_index:end_index]
+
+
+    @staticmethod
+    @lru_cache(maxsize=1)
+    def _research_note_metadata(db_path=DB_PATH) -> list[dict]:
+        """
+        Aggregate research note metadata from the Chroma collection, one row per file.
+        """
+
+        loader = ResearchNoteChromaDocumentLoader(db_path)
+
+        def _row_factory(meta, path):
             tags = meta.get("tags") or ""
             normalized_tags = [t.strip() for t in str(tags).split(",") if t.strip()]
-
-            aggregated[path] = {
+            return {
                 "filename": meta.get("filename") or Path(path).name,
                 "path": path,
                 "title": meta.get("title") or Path(path).stem,
@@ -164,7 +237,34 @@ class DocumentStoreInfoAgent(ToolAgent):
                 "tags": normalized_tags,
             }
 
-        return list(aggregated.values())
+        return DocumentStoreInfoAgent._collect_metadata_rows(loader, _row_factory)
+
+
+    @staticmethod
+    @lru_cache(maxsize=1)
+    def _document_library_metadata(db_path=DB_PATH) -> list[dict]:
+        """
+        Aggregate PDF document metadata from the Chroma collection, one row per file.
+        """
+
+        loader = DocumentLibraryLoader(db_path)
+
+        def _row_factory(meta, path):
+            tags = meta.get("tags") or ""
+            normalized_tags = [t.strip() for t in str(tags).split(",") if t.strip()]
+            authors = meta.get("authors") or ""
+            normalized_authors = [a.strip() for a in str(authors).split(",") if a.strip()]
+            return {
+                "filename": meta.get("filename") or Path(path).name,
+                "path": path,
+                "title": meta.get("title") or Path(path).stem,
+                "authors": normalized_authors,
+                "published_date": meta.get("published_date") or "",
+                "topic": meta.get("topic") or "",
+                "tags": normalized_tags,
+            }
+
+        return DocumentStoreInfoAgent._collect_metadata_rows(loader, _row_factory)
     
     
     @staticmethod
@@ -248,23 +348,27 @@ class DocumentStoreInfoAgent(ToolAgent):
         """
 
         rows = DocumentStoreInfoAgent._research_note_metadata()
-        if not rows:
-            return []
+        return DocumentStoreInfoAgent._paginate_metadata_rows(rows, max_results, start_after)
 
-        rows = sorted(rows, key=lambda r: (r.get("filename") or r.get("path") or "").lower())
 
-        start_index = 0
-        if start_after:
-            token = start_after.lower()
-            for idx, row in enumerate(rows):
-                filename = (row.get("filename") or "").lower()
-                path = (row.get("path") or "").lower()
-                if token == filename or token == path:
-                    start_index = idx + 1
-                    break
+    @staticmethod
+    @tool(args_schema=DocumentLibraryMetadataListInput)
+    def document_library_metadata_summary(
+        max_results: int = 100, start_after: str | None = None
+    ) -> list[dict]:
+        """
+        Return metadata (filename, title, authors, published date, topic, tags) for PDF documents.
 
-        end_index = min(start_index + max_results, len(rows))
-        return rows[start_index:end_index]
+        Parameters
+        ----------
+        max_results: int
+            Maximum number of metadata rows to return (default 100, capped at 1,000).
+        start_after: str | None
+            Filename or path to start after (pagination aid).
+        """
+
+        rows = DocumentStoreInfoAgent._document_library_metadata()
+        return DocumentStoreInfoAgent._paginate_metadata_rows(rows, max_results, start_after)
 
 
     @staticmethod
@@ -320,6 +424,67 @@ class DocumentStoreInfoAgent(ToolAgent):
                 "title": item.get("title"),
                 "filename": item.get("filename"),
                 "author": item.get("author"),
+                "topic": item.get("topic"),
+                "tags": item.get("tags"),
+            }
+            for item in filtered
+        ]
+
+
+    @staticmethod
+    @tool(args_schema=DocumentLibraryTitleQueryInput)
+    def document_library_titles_by_metadata(
+        author: str | None = None,
+        topic: str | None = None,
+        tag: str | None = None,
+        limit: int = 25,
+    ) -> list[dict]:
+        """
+        Return PDF document titles filtered by metadata fields.
+
+        Parameters
+        ----------
+        author: str | None
+            Case-insensitive substring match on the author names.
+        topic: str | None
+            Case-insensitive substring match on the topic.
+        tag: str | None
+            Case-insensitive tag match (must be present in tags list).
+        limit: int
+            Maximum number of results to return (default 25, capped at 200).
+        """
+
+        rows = DocumentStoreInfoAgent._document_library_metadata()
+        if not rows:
+            return []
+
+        filtered = []
+        author_token = author.lower() if author else None
+        topic_token = topic.lower() if topic else None
+        tag_token = tag.lower() if tag else None
+
+        for row in rows:
+            row_authors = [a.lower() for a in (row.get("authors") or [])]
+            row_topic = (row.get("topic") or "").lower()
+            row_tags = [t.lower() for t in (row.get("tags") or [])]
+
+            if author_token and not any(author_token in a for a in row_authors):
+                continue
+            if topic_token and topic_token not in row_topic:
+                continue
+            if tag_token and tag_token not in row_tags:
+                continue
+
+            filtered.append(row)
+            if len(filtered) >= limit:
+                break
+
+        return [
+            {
+                "title": item.get("title"),
+                "filename": item.get("filename"),
+                "authors": item.get("authors"),
+                "published_date": item.get("published_date"),
                 "topic": item.get("topic"),
                 "tags": item.get("tags"),
             }
