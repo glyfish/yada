@@ -8,13 +8,18 @@ from langchain_core.tools import tool
 import os
 import sys
 import numpy
+from functools import lru_cache
 
 from pathlib import Path
 
 from apps.agentic.core.agents.tool_agent import ToolAgent
-from apps.agentic.core.constants import GITHUB_LOCAL_PATH
+from apps.agentic.core.constants import GITHUB_LOCAL_PATH, DB_PATH
+from apps.agentic.core.document_loaders.research_note_document_loader import (
+    ResearchNoteChromaDocumentLoader,
+)
 
 from lib.logger import get_logger
+
 logger = get_logger("YADA")
 
 
@@ -36,6 +41,45 @@ class RepositoryFilesInput(BaseModel):
     )
 
 
+class ResearchNoteMetadataListInput(BaseModel):
+    """Schema for slicing research note metadata rows."""
+
+    max_results: int = Field(
+        default=100,
+        ge=1,
+        le=1000,
+        description="Maximum number of research note metadata rows to return (default 100).",
+    )
+    start_after: str | None = Field(
+        default=None,
+        description="Filename or path after which to start the listing (exclusive).",
+    )
+
+
+class ResearchNoteTitleQueryInput(BaseModel):
+    """Schema for filtering research note titles by metadata."""
+
+    author: str | None = Field(
+        default=None,
+        description="Author name to filter by (case-insensitive substring match).",
+    )
+    topic: str | None = Field(
+        default=None,
+        description="Topic text to filter by (case-insensitive substring match).",
+    )
+    tag: str | None = Field(
+        default=None,
+        description="Require that the note contains this tag (case-insensitive).",
+    )
+    limit: int = Field(
+        default=25,
+        ge=1,
+        le=200,
+        description="Maximum number of titles to return (default 25).",
+    )
+
+
+
 class DocumentStoreInfoAgent(ToolAgent):
     """
     Handle requests for information about document libraries.
@@ -45,6 +89,8 @@ class DocumentStoreInfoAgent(ToolAgent):
         tools = [
             DocumentStoreInfoAgent.repository_names,
             DocumentStoreInfoAgent.filenames_for_repository,
+            DocumentStoreInfoAgent.research_note_metadata_summary,
+            DocumentStoreInfoAgent.research_note_titles_by_metadata,
         ]
         tool_node_name = "document_info_tool_node"
 
@@ -59,9 +105,11 @@ class DocumentStoreInfoAgent(ToolAgent):
     
         system_prompt = """
         You are an expert in retrieving information about the contents of documents available in all
-        the document stores. The types of information you can collect is enabled by the tools you can access.
-        The tools will allow you to list the file names, document titles, authors and other information
-        available in the document metadata.
+        the document stores. The tools allow you to:
+        - List repository names and filenames for code repositories.
+        - Summarize metadata for research notes, including filename, title, author, topic, and tags.
+        - Filter research note titles using author/topic/tag metadata.
+        Call the appropriate tool when the user asks about any of these data sources.
         """
 
         logger.debug(f"DocumentInfoAgent Agent prompt: {system_prompt}")
@@ -71,6 +119,52 @@ class DocumentStoreInfoAgent(ToolAgent):
             MessagesPlaceholder(variable_name="messages"),
             ("system", "If you choose to call a tool, do so; otherwise, provide your findings in plain text."),
         ])
+
+
+    @staticmethod
+    @lru_cache(maxsize=1)
+    def _research_note_metadata(db_path=DB_PATH) -> list[dict]:
+        """
+        Aggregate research note metadata from the Chroma collection, one row per file.
+        """
+
+        loader = ResearchNoteChromaDocumentLoader(db_path)
+        collection = getattr(loader.vectorstore, "_collection", None)
+        if collection is None:
+            logger.warning("Research note vector store collection unavailable.")
+            return []
+
+        try:
+            result = collection.get(include=["metadatas"], limit=100_000)
+        except Exception as exc:
+            logger.error("Failed to read research note metadata: %s", exc)
+            return []
+
+        metadatas = result.get("metadatas") or []
+        aggregated: dict[str, dict] = {}
+
+        for meta in metadatas:
+            if not meta:
+                continue
+            path = meta.get("path") or meta.get("filename")
+            if not path:
+                continue
+            if path in aggregated:
+                continue
+
+            tags = meta.get("tags") or ""
+            normalized_tags = [t.strip() for t in str(tags).split(",") if t.strip()]
+
+            aggregated[path] = {
+                "filename": meta.get("filename") or Path(path).name,
+                "path": path,
+                "title": meta.get("title") or Path(path).stem,
+                "author": meta.get("author") or "",
+                "topic": meta.get("topic") or "",
+                "tags": normalized_tags,
+            }
+
+        return list(aggregated.values())
     
     
     @staticmethod
@@ -135,3 +229,99 @@ class DocumentStoreInfoAgent(ToolAgent):
                     break
 
         return files
+
+
+    @staticmethod
+    @tool(args_schema=ResearchNoteMetadataListInput)
+    def research_note_metadata_summary(
+        max_results: int = 100, start_after: str | None = None
+    ) -> list[dict]:
+        """
+        Return metadata (filename, title, author, topic, tags) for research notes.
+
+        Parameters
+        ----------
+        max_results: int
+            Maximum number of metadata rows to return (default 100, capped at 1,000).
+        start_after: str | None
+            Filename or path to start after (pagination aid).
+        """
+
+        rows = DocumentStoreInfoAgent._research_note_metadata()
+        if not rows:
+            return []
+
+        rows = sorted(rows, key=lambda r: (r.get("filename") or r.get("path") or "").lower())
+
+        start_index = 0
+        if start_after:
+            token = start_after.lower()
+            for idx, row in enumerate(rows):
+                filename = (row.get("filename") or "").lower()
+                path = (row.get("path") or "").lower()
+                if token == filename or token == path:
+                    start_index = idx + 1
+                    break
+
+        end_index = min(start_index + max_results, len(rows))
+        return rows[start_index:end_index]
+
+
+    @staticmethod
+    @tool(args_schema=ResearchNoteTitleQueryInput)
+    def research_note_titles_by_metadata(
+        author: str | None = None,
+        topic: str | None = None,
+        tag: str | None = None,
+        limit: int = 25,
+    ) -> list[dict]:
+        """
+        Return research note titles filtered by metadata fields.
+
+        Parameters
+        ----------
+        author: str | None
+            Case-insensitive substring match on the author name.
+        topic: str | None
+            Case-insensitive substring match on the topic.
+        tag: str | None
+            Case-insensitive tag match (must be present in tags list).
+        limit: int
+            Maximum number of results to return (default 25, capped at 200).
+        """
+
+        rows = DocumentStoreInfoAgent._research_note_metadata()
+        if not rows:
+            return []
+
+        filtered = []
+        author_token = author.lower() if author else None
+        topic_token = topic.lower() if topic else None
+        tag_token = tag.lower() if tag else None
+
+        for row in rows:
+            row_author = (row.get("author") or "").lower()
+            row_topic = (row.get("topic") or "").lower()
+            row_tags = [t.lower() for t in (row.get("tags") or [])]
+
+            if author_token and author_token not in row_author:
+                continue
+            if topic_token and topic_token not in row_topic:
+                continue
+            if tag_token and tag_token not in row_tags:
+                continue
+
+            filtered.append(row)
+            if len(filtered) >= limit:
+                break
+
+        return [
+            {
+                "title": item.get("title"),
+                "filename": item.get("filename"),
+                "author": item.get("author"),
+                "topic": item.get("topic"),
+                "tags": item.get("tags"),
+            }
+            for item in filtered
+        ]
