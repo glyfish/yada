@@ -2,8 +2,8 @@ import os
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import BaseMessage, HumanMessage
 from langgraph.graph import END
-
-from apps.agentic.core.agents.messages import WorkerState
+from langchain_core.tracers.langchain import LangChainTracer
+from langchain.callbacks.manager import CallbackManager
 
 
 def load_api_key(filepath=".keys/.chatgpt_key"):
@@ -16,7 +16,7 @@ def set_chatgpt_env(filedir=".keys"):
     os.environ["OPENAI_API_KEY"] = load_api_key(filepath)
 
 
-def set_langsmith_env(project_name="pr-crushing-rowing-30", tracing=False, filedir=".keys"):
+def set_langsmith_env(project_name="yada", tracing=True, filedir=".keys"):
     filepath = os.path.join(filedir, ".langsmith_key")
     os.environ["LANGSMITH_API_KEY"] = load_api_key(filepath)
     os.environ["LANGCHAIN_TRACING_V2"] = "true" if tracing else "false"
@@ -58,10 +58,25 @@ def log_output(x):
     return x
 
 
+def _build_tracer():
+    if os.environ.get("LANGCHAIN_TRACING_V2", "").lower() != "true":
+        return None
+    api_key = os.environ.get("LANGCHAIN_API_KEY") or os.environ.get("LANGSMITH_API_KEY")
+    if not api_key:
+        return None
+
+    # LangChainTracer reads credentials from environment variables; ensure they're set.
+    os.environ.setdefault("LANGCHAIN_API_KEY", api_key)
+
+    project = os.environ.get("LANGCHAIN_PROJECT")
+    tracer = LangChainTracer(project_name=project)
+    return CallbackManager([tracer])
+
+
 def build_llm(model="gpt-4.1") -> ChatOpenAI:
     """
-    Build an LLM with a custom model name.
+    Build an LLM with a custom model name and optional LangSmith tracing callbacks.
     """
 
-    return ChatOpenAI(model=model, temperature=1)
-
+    callbacks = _build_tracer()
+    return ChatOpenAI(model=model, temperature=1, callbacks=callbacks)
