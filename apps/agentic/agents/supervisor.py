@@ -9,6 +9,7 @@ import langchain
 
 from apps.agentic.core.agents.messages import get_last_message, WorkerState
 from apps.agentic.core.utils import build_llm
+from langsmith.run_helpers import traceable
 
 from apps.agentic.agents.search_agent import SearchAgent
 from apps.agentic.agents.document.document_library_agent import DocumentLibraryAgent
@@ -41,6 +42,7 @@ class SupervisorAgent:
         return self._agent
     
     
+    @traceable(run_type="chain", name="SupervisorAgent.process_request")
     async def process_request(self, request: str, session_id: Optional[str] = None) -> WorkerState:
         """
         Process a user request and initialize the state.
@@ -203,7 +205,7 @@ class SupervisorAgent:
             # CRITICAL: return the agent result directly, don't rewrap
             return result
 
-        return node
+        return traceable(run_type="chain", name=node_name)(node)
 
 
     def _create_workers(self, query):

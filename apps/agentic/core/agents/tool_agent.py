@@ -8,6 +8,7 @@ from langchain_core.tools import BaseTool
 from lib.logger import get_logger
 from langgraph.prebuilt import ToolNode
 from apps.agentic.core.checkpointer import checkpointer
+from langsmith.run_helpers import traceable
 
 logger = get_logger("YADA")
 
@@ -25,6 +26,10 @@ class ToolAgent(ABC):
         self._llm = build_llm()
         self._prompt = self.create_prompt()
         self._tooled_llm = self._llm.bind_tools(self._tools)
+        self._model_runner = traceable(
+            run_type="chain",
+            name=f"{self.__class__.__name__}.model",
+        )(self._invoke_model)
         self._agent = self._create_agent()
 
 
@@ -110,7 +115,7 @@ class ToolAgent(ABC):
 
         graph = (
             StateGraph(WorkerState)
-            .add_node("model", self._invoke_model)
+            .add_node("model", self._model_runner)
             .add_node("tools", self.tool_node)
             .add_edge(START, "model")
             .add_edge("tools", "model")
