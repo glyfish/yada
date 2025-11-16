@@ -18,6 +18,7 @@ from apps.agentic.core.document_loaders.chroma_document_loader import ChromaDocu
 from apps.agentic.core.agents.messages import WorkerState
 from apps.agentic.core.utils import build_llm
 from apps.agentic.core.checkpointer import checkpointer
+from langsmith.run_helpers import traceable
 
 from lib.logger import get_logger
 
@@ -120,6 +121,7 @@ class ChromaRAGAgent(ABC):
         return self._query
 
     
+    @traceable(run_type="chain", name="ChromaRAGAgent._invoke_model")
     async def _invoke_model(self, state: WorkerState, config=None) -> WorkerState:
         """
         Invoke the agent with the current state.
