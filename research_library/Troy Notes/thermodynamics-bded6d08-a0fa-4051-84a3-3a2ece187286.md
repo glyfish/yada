@@ -102,7 +102,7 @@ $$
 Q=\Delta u+\omega
 $$
 
-Where $Q=$ heat,$A U=$ change in internal energy and $\omega=$ work.
+Where $Q=$ heat, $\Delta u=$ change in internal energy and $\omega=$ work.
 2) Satisfies an equation of state of the form
 
 $$

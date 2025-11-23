@@ -17,9 +17,9 @@ Supported qualifiers (case-insensitive):
   # Research Notes
   notes:            # optional switch; also adds {"source":"research_notes"}
   title:"..."       | title:<word>
-  author:"..."      | author:<word>
+  authors:"..."     | authors:<word>, csv list of authors, matches substring
   topic:"..."       | topic:<word>
-  tag:<word>        # matches substring in CSV 'tags' field you store
+  tags:<word>       # matches substring in CSV 'tags' field you store
   section:<n>
   section:<lo>-<hi>
 
@@ -49,9 +49,9 @@ QUAL_NOTES   = re.compile(r"\bnotes:\s*(?:true|yes|1)?\b", re.I)
 
 # Quoted or single-token capture for multiword fields
 QUAL_TITLE   = re.compile(r'\btitle:\s*(?:"([^"]+)"|([^\s]+))', re.I)
-QUAL_AUTHOR  = re.compile(r'\bauthor:\s*(?:"([^"]+)"|([^\s]+))', re.I)
+QUAL_AUTHORS = re.compile(r'\bauthors:\s*(?:"([^"]+)"|([^\s]+))', re.I)
 QUAL_TOPIC   = re.compile(r'\btopic:\s*(?:"([^"]+)"|([^\s]+))', re.I)
-QUAL_TAG     = re.compile(r"\btag:\s*([^\s,]+)\b", re.I)
+QUAL_TAGS    = re.compile(r"\btags:\s*([^\s,]+)\b", re.I)
 
 QUAL_PAGE    = re.compile(r"\bpage:\s*(\d+)\b", re.I)
 QUAL_PAGES   = re.compile(r"\bpages?:\s*(\d+)\s*-\s*(\d+)\b", re.I)
@@ -138,21 +138,21 @@ def build_filter_and_query(q: str) -> Tuple[str, Optional[Dict[str, Any]]]:
         conditions.append({"title": _pick(m)})
         q = QUAL_TITLE.sub("", q).strip()
 
-    m = QUAL_AUTHOR.search(q)
+    m = QUAL_AUTHORS.search(q)
     if m:
-        conditions.append({"author": _pick(m)})
-        q = QUAL_AUTHOR.sub("", q).strip()
+        conditions.append({"authors": _pick(m)})
+        q = QUAL_AUTHORS.sub("", q).strip()
 
     m = QUAL_TOPIC.search(q)
     if m:
         conditions.append({"topic": _pick(m)})
         q = QUAL_TOPIC.sub("", q).strip()
 
-    m = QUAL_TAG.search(q)
+    m = QUAL_TAGS.search(q)
     if m:
         # 'tags' is expected to be a CSV string (scalar) in metadata
         conditions.append({"tags": m.group(1)})
-        q = QUAL_TAG.sub("", q).strip()
+        q = QUAL_TAGS.sub("", q).strip()
 
     m = QUAL_PAGE.search(q)
     if m:

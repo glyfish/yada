@@ -14,8 +14,8 @@ from pathlib import Path
 
 from apps.agentic.core.agents.tool_agent import ToolAgent
 from apps.agentic.core.constants import GITHUB_LOCAL_PATH, DB_PATH
-from apps.agentic.core.document_loaders.research_note_document_loader import (
-    ResearchNoteChromaDocumentLoader,
+from apps.agentic.core.document_loaders.research_library_document_loader import (
+    ResearchLibraryChromaDocumentLoader,
 )
 from apps.agentic.core.document_loaders.document_library_loader import (
     DocumentLibraryLoader,
@@ -223,7 +223,7 @@ class DocumentStoreInfoAgent(ToolAgent):
         Aggregate research note metadata from the Chroma collection, one row per file.
         """
 
-        loader = ResearchNoteChromaDocumentLoader(db_path)
+        loader = ResearchLibraryChromaDocumentLoader(db_path)
 
         def _row_factory(meta, path):
             tags = meta.get("tags") or ""

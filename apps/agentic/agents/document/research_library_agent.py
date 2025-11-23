@@ -15,13 +15,13 @@ from langchain.tools.retriever import create_retriever_tool
 from langgraph.prebuilt import ToolNode
 
 from apps.agentic.core.agents.chroma_rag_agent import ChromaRAGAgent
-from apps.agentic.core.document_loaders.research_note_document_loader import ResearchNoteChromaDocumentLoader
+from apps.agentic.core.document_loaders.research_library_document_loader import ResearchLibraryChromaDocumentLoader
 from lib.logger import get_logger
 
 logger = get_logger("YADA")
 
 
-class ResearchNoteAgent(ChromaRAGAgent):
+class ResearchLibraryAgent(ChromaRAGAgent):
     """
     Research Note Agent that uses a vector store index of research notes to answer questions about research topics.
     It is designed to handle queries related to research notes, topics, authors, dates, and tags.
@@ -72,7 +72,7 @@ class ResearchNoteAgent(ChromaRAGAgent):
         )
         document_prompt = PromptTemplate.from_template(template=prompt_template)
 
-        super().__init__(tool_name, tool_description, document_prompt, ResearchNoteChromaDocumentLoader(), query)
+        super().__init__(tool_name, tool_description, document_prompt, ResearchLibraryChromaDocumentLoader(), query)
 
 
     def read_file(self, top_files):
@@ -102,6 +102,12 @@ class ResearchNoteAgent(ChromaRAGAgent):
 
         # Try to fetch all chunks for this file directly from the collection
         full_text = ""
+        target_section = None
+        try:
+            target_section = int(md0.get("section"))
+        except Exception:
+            target_section = None
+
         try:
             vs = self.doc_loader.vectorstore
             coll = getattr(vs, "_collection", None)
@@ -117,6 +123,17 @@ class ResearchNoteAgent(ChromaRAGAgent):
             metas = res.get("metadatas") or []
 
             items = list(zip(docs, metas))
+            if target_section is not None:
+                filtered = []
+                for doc, meta in items:
+                    try:
+                        sec = int((meta or {}).get("section", 0))
+                    except Exception:
+                        sec = 0
+                    if sec == target_section:
+                        filtered.append((doc, meta))
+                if filtered:
+                    items = filtered
 
             def _sort_key(item):
                 _doc, m = item
@@ -157,6 +174,11 @@ class ResearchNoteAgent(ChromaRAGAgent):
         except Exception:
             # Fallback: stitch from the already-returned top_files if they share the same path
             same_path = [d for d in top_files if (d.metadata or {}).get("path") == path]
+            if target_section is not None:
+                same_path = [
+                    d for d in same_path
+                    if _safe_int((d.metadata or {}).get("section")) == target_section
+                ] or same_path
             def _tf_key(d):
                 m = d.metadata or {}
                 try:
@@ -211,7 +233,7 @@ class ResearchNoteAgent(ChromaRAGAgent):
             body = f"```{fence_lang}\n{full_text}\n```"
 
         final = header + body
-        final = self._clamp_markdown(final, max_chars=20_000)  # tune the budget
+        final = self._clamp_markdown(final, max_chars=20_000) 
         return final
 
 
@@ -264,3 +286,10 @@ class ResearchNoteAgent(ChromaRAGAgent):
             "to narrow the result, or open the file to see more._\n"
         )
         return chunk
+
+
+def _safe_int(value, default=None):
+    try:
+        return int(value)
+    except Exception:
+        return default

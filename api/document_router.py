@@ -9,12 +9,16 @@ from pathlib import Path
 from fastapi.responses import FileResponse
 
 from lib.logger import get_logger
-from apps.agentic.core.constants import (GITHUB_ACCOUNTS, GITHUB_API, RESEARCH_NOTES_LOCAL_PATH,
-                                         PDF_DOCUMENT_LIBRARY_LOCAL_PATH)
+from apps.agentic.core.constants import (
+    GITHUB_ACCOUNTS,
+    GITHUB_API,
+    RESEARCH_LIBRARY_LOCAL_PATH,
+    PDF_DOCUMENT_LIBRARY_LOCAL_PATH,
+)
 
 from git import Repo
 from apps.agentic.core.document_loaders.github_document_loader import GitHubChromaDocumentLoader
-from apps.agentic.core.document_loaders.research_note_document_loader import ResearchNoteChromaDocumentLoader
+from apps.agentic.core.document_loaders.research_library_document_loader import ResearchLibraryChromaDocumentLoader
 from apps.agentic.core.document_loaders.document_library_loader import DocumentLibraryLoader
 from langchain_community.vectorstores import Chroma
 
@@ -22,6 +26,40 @@ DOCUMENT_LIBRARY_DIR = Path("./document_library").resolve()
 
 router = APIRouter()
 logger = get_logger("YADA")
+
+
+def _resolve_research_note_path(filename: str) -> Path:
+    """Return an absolute path inside RESEARCH_LIBRARY_LOCAL_PATH for the provided filename."""
+    base_dir = Path(RESEARCH_LIBRARY_LOCAL_PATH).resolve()
+    if not base_dir.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Research library directory '{base_dir}' not found.",
+        )
+
+    # First, treat the filename as a relative path beneath the base directory
+    candidate = (base_dir / filename).resolve()
+    try:
+        candidate.relative_to(base_dir)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="Filename must be inside the research library directory.",
+        )
+
+    if candidate.exists() and candidate.is_file():
+        return candidate
+
+    # Fall back to searching by basename anywhere under the research library
+    matches = list(base_dir.rglob(Path(filename).name))
+    for match in matches:
+        if match.is_file():
+            return match
+
+    raise HTTPException(
+        status_code=404,
+        detail=f"Research document '{filename}' not found under {base_dir}.",
+    )
 
 def clone_or_pull(repo_name, repo_url, local_path):
     logger.debug(f"CHECKING {repo_name} from {repo_url} to {local_path}")
@@ -163,37 +201,55 @@ async def load_github_repo(payload: GitHubRepoLoadPayload):
 """
 Load specified research note into the document store.
 """
-class LoadResearchNotePayload(BaseModel):
+class LoadResearchDocumentPayload(BaseModel):
     filename:str
     title: str
-    author: str
-    start_date: str
+    authors: str
+    date: str
     topic: str
     tags: list[str]
 
-@router.post("/document/load_research_note")
-async def load_research_note(payload: LoadResearchNotePayload):
+@router.post("/document/load_research_document")
+async def load_research_document(payload: LoadResearchDocumentPayload):
 
-    note_path = os.path.join(RESEARCH_NOTES_LOCAL_PATH, payload.filename)
+    note_path = _resolve_research_note_path(payload.filename)
     meta_data = {
         "filename": payload.filename,
-        "path": note_path,
+        "path": str(note_path),
         "title": payload.title,
-        "author": payload.author,
-        "start_date": payload.start_date,
+        "authors": payload.authors,
+        "date": payload.date,
         "topic": payload.topic,
         "tags": ",".join(payload.tags)
     }
 
-    doc_loader = ResearchNoteChromaDocumentLoader()
+    doc_loader = ResearchLibraryChromaDocumentLoader()
 
     logger.debug((f"Received request to load research note: "
-                  f"file_name={meta_data['filename']}, title={meta_data['title']}, author={meta_data['author']}, "
-                  f"start_date={meta_data['start_date']}, topic={meta_data['topic']}, tags={meta_data['tags']}."))
+                  f"file_name={meta_data['filename']}, title={meta_data['title']}, authors={meta_data['authors']}, "
+                  f"start_date={meta_data['date']}, topic={meta_data['topic']}, tags={meta_data['tags']}."))
 
-    await doc_loader.load_document(note_path, meta_data=meta_data)
+    await doc_loader.load_document(str(note_path), meta_data=meta_data)
 
     return {"status": "Success", "message": f"Loaded research note: {payload.title}."}
+
+
+"""
+List existing research library documents relative to the ./research_library directory.
+"""
+@router.get("/document/research_library_files")
+async def list_research_library_files():
+    base_dir = Path(RESEARCH_LIBRARY_LOCAL_PATH).resolve()
+    if not base_dir.exists():
+        logger.warning("Research library directory %s does not exist", base_dir)
+        return {"files": []}
+
+    files = sorted(
+        str(path.relative_to(base_dir))
+        for path in base_dir.rglob("*")
+        if path.is_file()
+    )
+    return {"files": files}
 
 
 """

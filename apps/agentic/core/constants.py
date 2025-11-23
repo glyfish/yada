@@ -13,9 +13,9 @@ GITHUB_LOCAL_PATH = ".repos"
 CHROMA_DB_MAX_BATCH_SIZE = 1000
 
 # Research note constants
-RESEARCH_NOTES_DB_NAME = "research_notes"
-RESEARCH_NOTES_COLLECTION_NAME = "research-notes"
-RESEARCH_NOTES_LOCAL_PATH = "./research_notes"
+RESEARCH_LIBRARY_DB_NAME = "research_library"
+RESEARCH_LIBRARY_COLLECTION_NAME = "research-library"
+RESEARCH_LIBRARY_LOCAL_PATH = "./research_library"
 
 # PDF document library constants
 PDF_DOCUMENT_LIBRARY_DB_NAME = "pdf_document_library"

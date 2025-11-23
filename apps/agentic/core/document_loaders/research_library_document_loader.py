@@ -10,47 +10,47 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter, MarkdownHead
 from langchain_core.documents import Document
 
 from apps.agentic.core.document_loaders.chroma_document_loader import ChromaDocumentLoader
-from apps.agentic.core.constants import (RESEARCH_NOTES_COLLECTION_NAME, RESEARCH_NOTES_DB_NAME, 
-                                         RESEARCH_NOTES_LOCAL_PATH, DB_PATH)
+from apps.agentic.core.constants import (RESEARCH_LIBRARY_COLLECTION_NAME, RESEARCH_LIBRARY_DB_NAME, 
+                                         RESEARCH_LIBRARY_LOCAL_PATH, DB_PATH)
 
 from lib.utils import get_param_throw_if_missing
 
 logger = get_logger("YADA")
 
 
-class ResearchNoteChromaDocumentLoader(ChromaDocumentLoader):
+class ResearchLibraryChromaDocumentLoader(ChromaDocumentLoader):
     """
-    Document loader for Research Note files stored as **Markdown** only. The documents are split
+    Document loader for Research Library files stored as **Markdown** only. The documents are split
     by H2 headers and then further split into smaller chunks for embedding.
 
     Metadata added to each document
     ------------------------------
     - filename: Base name of the file
     - path: File path relative to the research notes root
-    - title: Title of the research note.
-    - author: Author of the research note
-    - start_date: Start date of the research note
-    - topic: Topic of the research note
-    - tags: Comma-separated list of tags associated with the research note
+    - title: Title of the research document.
+    - authors: Authors of the research document
+    - date: Published date of the research document
+    - topic: Topic of the research document
+    - tags: Comma-separated list of tags associated with the research document
     - ext: File extension
-    - images: Comma-separated list of image URLs in the note (if any)
+    - images: Comma-separated list of image URLs in the document (if any)
     - h2: Section titles (from H2 headers)
-    - section: Section number (1-based) within the note
+    - section: Section number (1-based) within the document
     - section_char_offset: Character offset within the section
     """
 
     def __init__(self, db_path=DB_PATH):
-        super().__init__(RESEARCH_NOTES_DB_NAME, RESEARCH_NOTES_COLLECTION_NAME, db_path)
+        super().__init__(RESEARCH_LIBRARY_DB_NAME, RESEARCH_LIBRARY_COLLECTION_NAME, db_path)
     
 
     async def load_document(self, path: str, **kwargs):
         """
-        Load a **Markdown** research note into the ChromaDB collection.
+        Load a **Markdown** research document into the ChromaDB collection.
         """
 
         meta_data = get_param_throw_if_missing("meta_data", **kwargs)
         filename = meta_data["filename"]
-        logger.info(f"Loading research note from {path}.")
+        logger.info(f"Loading research document from {path}.")
 
         async with aiofiles.open(path, "r", encoding="utf-8", errors="ignore") as f:
             md = await f.read()
@@ -124,10 +124,10 @@ class ResearchNoteChromaDocumentLoader(ChromaDocumentLoader):
             self.vectorstore.add_documents(chunks[i:i + BATCH])
 
         logger.info(
-            f"Loaded research note into collection {self.collection_name}: '{title}' with {len(chunks)} chunks."
+            f"Loaded research document into collection {self.collection_name}: '{title}' with {len(chunks)} chunks."
         )
 
-        logger.info(f"Loaded research note: {meta_data['title']}.")
+        logger.info(f"Loaded research document: {meta_data['title']}.")
 
 
     async def load_all_documents(self, path: str, **kwargs):

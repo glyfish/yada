@@ -10,7 +10,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 from apps.agentic.core.document_loaders.chroma_document_loader import ChromaDocumentLoader
 from apps.agentic.core.constants import (GITHUB_LOCAL_PATH, GITHUB_EXCLUDED_REPOS, CHROMA_DB_MAX_BATCH_SIZE,
-                                         RESEARCH_NOTES_LOCAL_PATH, GITHUB_DB_NAME, GITHUB_COLLECTION_NAME,
+                                         RESEARCH_LIBRARY_LOCAL_PATH, GITHUB_DB_NAME, GITHUB_COLLECTION_NAME,
                                          DB_PATH)
 logger = get_logger("YADA")
 
