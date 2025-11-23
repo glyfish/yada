@@ -16,8 +16,8 @@ from apps.agentic.agents.document.document_library_agent import DocumentLibraryA
 from apps.agentic.agents.plots.bar_chart_agent import BarChartAgent
 from apps.agentic.agents.plots.time_series_plot_agent import TimeSeriesPlotAgent
 from apps.agentic.agents.document.code_repo_agent import CodeRepoAgent
-from apps.agentic.agents.document.research_notes_agent import ResearchNoteAgent
-from apps.agentic.agents.document_store_info_agent import DocumentStoreInfoAgent
+from apps.agentic.agents.document.research_library_agent import ResearchLibraryAgent
+from apps.agentic.agents.document.document_store_info_agent import DocumentStoreInfoAgent
 
 from apps.agentic.core.agents.query_filters import build_filter_and_query
 
@@ -59,7 +59,7 @@ class SupervisorAgent:
         clean_request, query = build_filter_and_query(request)
         logger.debug(f"Processed request: {clean_request}, {query}")
 
-        # build workers (they close over query in CodeRepoAgent, ResearchNoteAgent, etc)
+        # build workers (they close over query in CodeRepoAgent, ResearchDocumentAgent, etc)
         self._create_workers(query)
 
         # build the supervisor routing LLM
@@ -116,10 +116,10 @@ class SupervisorAgent:
                 Searches Troy Stribling's code repositories for relevant code snippets and generates 
                 reports as requested. If there is a mention of 'my code', 'my repo(s)', 'my project', 'YADA', 'glyfish', 
                 'troystribling', a file path, a filename, or a function/class, you MUST call the 'Troy Stribling Code Repository Agent'.
-            * {research_notes_search} 
-                Searches Troy Stribling's research notes for relevant information and generates
-                reports as requested. If there is a mention of 'my research', 'my notes', 'my papers', 'my articles',
-                'Troy Stribling research notes', you MUST call the 'Troy Stribling Research Notes Agent'.
+            * {research_library_search} 
+                Searches Troy Stribling's research library for relevant information and generates
+                reports as requested. If there is a mention of 'my research', 'my documents', 'my papers', 'my articles',
+                'Troy Stribling research documents', you MUST call the 'Troy Stribling Research Library Agent'.
             * {document_library_search} 
                 Searches PDF document library for relevant information and generates 
                 reports as requested. If there is a mention of 'document library', 'pdf documents', 'articles', 'documents'
@@ -128,7 +128,7 @@ class SupervisorAgent:
                 Retrieves information requested from the specified document store. If there is a request
                 referencing one of the known document stores for the document filenames, titles, authors or other
                 data available in the document store meta data you MUST call the Document Information Agent.
-                The available document stores are: Code Repositories, Research Notes and Document Library.
+                The available document stores are: Code Repositories, Research Documents and Document Library.
                 
                 Example {document_store_info} Questions
                 1. What repositories are available in my code repositories.
@@ -142,8 +142,7 @@ class SupervisorAgent:
         Map pronouns:
             * 'my code', 'code database' → Troy Stribling’s indexed repos in the vector store.
             * 'code database' → Troy Stribling’s indexed repos in the vector store.
-            * 'my research', → Troy Stribling’s indexed research notes in the vector store.
-            * 'my notes' → Troy Stribling’s indexed research notes in the vector store.
+            * 'my research', → Troy Stribling’s indexed research library in the vector store.
                 
         Your Task
             You task is to determine which of the agents should process the user request and respond with the name of the all agents
@@ -164,25 +163,25 @@ class SupervisorAgent:
             )
         ])
 
-        formatted_system_prompt = prompt.format(messages=[], 
-                                                options=", ".join(options), 
-                                                team_members=", ".join(team), 
-                                                researcher=team[0], 
+        formatted_system_prompt = prompt.format(messages=[],
+                                                options=", ".join(options),
+                                                team_members=", ".join(team),
+                                                researcher=team[0],
                                                 bar_chart_generator=team[1],
                                                 time_series_generator=team[2],
                                                 code_repository_search=team[3],
-                                                research_notes_search=team[4],
+                                                research_library_search=team[4],
                                                 document_library_search=team[5],
                                                 document_store_info=team[6])
         logger.debug(f"Supervisor prompt: {formatted_system_prompt}")
 
-        return  prompt.partial(options=", ".join(options), 
-                               team_members=", ".join(team), 
-                               researcher=team[0], 
+        return  prompt.partial(options=", ".join(options),
+                               team_members=", ".join(team),
+                               researcher=team[0],
                                bar_chart_generator=team[1],
                                time_series_generator=team[2],
                                code_repository_search=team[3],
-                               research_notes_search=team[4],
+                               research_library_search=team[4],
                                document_library_search=team[5],
                                document_store_info=team[6])
 
@@ -214,7 +213,7 @@ class SupervisorAgent:
             "bar_chart_generator": self._create_agent_node(BarChartAgent().agent, "bar_chart_generator"),
             "time_series_generator": self._create_agent_node(TimeSeriesPlotAgent().agent, "time_series_generator"),
             "code_repository_search": self._create_agent_node(CodeRepoAgent(query).agent, "code_repository_search"),
-            "research_notes_search": self._create_agent_node(ResearchNoteAgent(query).agent, "research_notes_search"),
+            "research_library_search": self._create_agent_node(ResearchLibraryAgent(query).agent, "research_library_search"),
             "document_library_search": self._create_agent_node(DocumentLibraryAgent(query).agent, "document_library_search"),
             "document_store_info": self._create_agent_node(DocumentStoreInfoAgent().agent, "document_store_info"),
         }

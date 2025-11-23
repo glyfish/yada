@@ -387,7 +387,7 @@
 
         const GITHUB_LOAD_ALL_REPOS = "/api/document/load_all_github_repos";
         const GITHUB_LOAD_REPO = "/api/document/load_github_repo";
-        const RESEARCH_NOTE_LOAD = "/api/document/load_research_note";
+        const RESEARCH_NOTE_LOAD = "/api/document/load_research_document";
         const PDF_LOAD_DOCUMENT = "/api/document/load_pdf_document";
         const PDF_STREAM_DOCUMENT = "/api/document/stream_pdf_document";
         const YADA_REQUEST = "/api/request";
@@ -399,27 +399,27 @@
         const FEED_MAX_CARDS = 40;
         const FEED_MAX_CHARS = 80000;
 
-        // Load Research Note (Markdown) Dialog
-        const handleLoadResearchNoteDialog = () => {
+        // Load Research Document (Markdown) Dialog
+        const handleLoadResearchDocumentDialog = () => {
             const dialog = document.createElement("dialog");
             dialog.className = "modal";
             dialog.innerHTML = `
                 <form method="dialog" novalidate autocomplete="off">
                     <label for="rn-filename">Filename:</label>
                     <div class="dialog-input-with-button">
-                        <input id="rn-filename" name="filename" type="text" placeholder="my_note.md" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
+                        <input id="rn-filename" name="filename" type="text" placeholder="document.md" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
                         <input id="rn-file" type="file" accept=".md,.markdown,.txt" style="display:none">
                         <button type="button" class="btn secondary" id="rn-file-btn">Browse…</button>
                     </div>
 
                     <label for="rn-title">Title:</label>
-                    <input id="rn-title" name="title" type="text" placeholder="My Research Note" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text">
+                    <input id="rn-title" name="title" type="text" placeholder="My Research Library" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text">
 
-                    <label for="rn-author">Author:</label>
-                    <input id="rn-author" name="author" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text"  placeholder="Troy Stribling">
+                    <label for="rn-authors">Authors:</label>
+                    <input id="rn-authors" name="authors" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text"  placeholder="Troy Stribling">
 
-                    <label for="rn-start-date">Start Date:</label>
-                    <input id="rn-start-date" name="start_date" type="date" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text">
+                    <label for="rn-document-date">Date:</label>
+                    <input id="rn-document-date" name="document_date" type="date" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text">
 
                     <label for="rn-topic">Topic:</label>
                     <textarea id="rn-topic" name="topic" rows="3" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="e.g., Signal Processing"></textarea>
@@ -429,7 +429,7 @@
 
                     <menu>
                         <button type="button" class="btn" id="cancelRNBtn">Cancel</button>
-                        <button type="button" class="btn primary" id="loadRNBtn">Load Research Note</button>
+                        <button type="button" class="btn primary" id="loadRNBtn">Load Research Document</button>
                     </menu>
                 </form>
             `;
@@ -439,14 +439,14 @@
             const cancelBtn = dialog.querySelector("#cancelRNBtn");
             const loadBtn   = dialog.querySelector("#loadRNBtn");
 
-            const filenameInput  = dialog.querySelector("input[name='filename']");
-            const titleInput     = dialog.querySelector("input[name='title']");
-            const authorInput    = dialog.querySelector("input[name='author']");
-            const startDateInput = dialog.querySelector("input[name='start_date']");
-            const topicInput     = dialog.querySelector("textarea[name='topic']");
-            const tagsInput      = dialog.querySelector("input[name='tags']");
-            const fileInput      = dialog.querySelector("#rn-file");
-            const fileButton     = dialog.querySelector("#rn-file-btn");
+            const filenameInput     = dialog.querySelector("input[name='filename']");
+            const titleInput        = dialog.querySelector("input[name='title']");
+            const authorsInput      = dialog.querySelector("input[name='authors']");
+            const dateInput         = dialog.querySelector("input[name='document_date']");
+            const topicInput        = dialog.querySelector("textarea[name='topic']");
+            const tagsInput         = dialog.querySelector("input[name='tags']");
+            const fileInput         = dialog.querySelector("#rn-file");
+            const fileButton        = dialog.querySelector("#rn-file-btn");
 
             if (fileButton && fileInput) {
                 fileButton.addEventListener("click", () => fileInput.click());
@@ -467,12 +467,12 @@
                 // Only filename is required for now
                 if (!dialog.querySelector("form").reportValidity()) return;
                 const payload = {
-                    filename: filenameInput.value.trim(),
-                    title:    titleInput.value.trim(),
-                    author:   authorInput.value.trim(),
-                    start_date: startDateInput.value,
-                    topic:    topicInput.value.trim(),
-                    tags:     (tagsInput.value || "").split(",").map(s => s.trim()).filter(Boolean)
+                    filename:       filenameInput.value.trim(),
+                    title:          titleInput.value.trim(),
+                    authors:        authorsInput.value.trim(),
+                    date:           dateInput.value,
+                    topic:          topicInput.value.trim(),
+                    tags:          (tagsInput.value || "").split(",").map(s => s.trim()).filter(Boolean)
                 };
                 const prev = loadBtn.textContent;
                 loadBtn.disabled = true;
@@ -485,9 +485,9 @@
                     });
                     const result = await res.json().catch(() => ({}));
                     if (!res.ok) throw new Error(result?.detail || result?.message || `Request failed (${res.status})`);
-                    alert(result.status || "Research note load requested.");
+                    alert(result.status || "Research document load requested.");
                 } catch (err) {
-                    alert(`Error loading research note: ${err.message || err}`);
+                    alert(`Error loading research document: ${err.message || err}`);
                 } finally {
                     loadBtn.disabled = false;
                     loadBtn.textContent = prev;
@@ -495,7 +495,7 @@
                 }
             };
             loadBtn.addEventListener("click", submit);
-            [filenameInput, titleInput, authorInput, startDateInput, tagsInput].forEach(el => el.addEventListener("keydown", e => {if (e.key === "Enter") { e.preventDefault(); submit(); }}));
+            [filenameInput, titleInput, authorsInput, dateInput, tagsInput].forEach(el => el.addEventListener("keydown", e => {if (e.key === "Enter") { e.preventDefault(); submit(); }}));
         };
 
         // Load PDF Document Dialog
@@ -1071,13 +1071,13 @@
                                     },
                                     "Update GitHub Repo"
                                 ),
-                                // Load Research Note
+                                // Load Research Document
                                 button(
                                     {
                                         class: "menu-item",
-                                        onclick: (e) => { e.stopPropagation(); showLoadMenu.val = false; handleLoadResearchNoteDialog(); }
+                                        onclick: (e) => { e.stopPropagation(); showLoadMenu.val = false; handleLoadResearchDocumentDialog(); }
                                     },
-                                    "Load Research Note"
+                                    "Load Research Document"
                                 ),
                                 // Load PDF Document
                                 button(
