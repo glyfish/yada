@@ -100,119 +100,80 @@ class ResearchLibraryAgent(ChromaRAGAgent):
         else:
             lang = ""  # generic fence
 
-        # Try to fetch all chunks for this file directly from the collection
-        full_text = ""
-        target_section = None
-        try:
-            target_section = int(md0.get("section"))
-        except Exception:
-            target_section = None
+        # Stitch a window of chunks around the retrieved hit
+        def _section_and_offset(meta):
+            sec = _safe_int(meta.get("section"), 1)
+            off = _safe_int(meta.get("section_char_offset"))
+            if off is None:
+                off = _safe_int(meta.get("start_index"), 0)
+            return sec if sec is not None else 1, off if off is not None else 0
 
-        try:
-            vs = self.doc_loader.vectorstore
-            coll = getattr(vs, "_collection", None)
-            if coll is None:
-                raise RuntimeError("Chroma collection not accessible")
+        context_window = 1  # number of chunks before/after the target chunk
+        items: list[tuple[str, dict]] = []
+        coll = getattr(self.doc_loader.vectorstore, "_collection", None)
+        if coll is not None:
+            try:
+                res = coll.get(
+                    where={"path": path},
+                    include=["metadatas", "documents"],
+                    limit=100_000,
+                )
+                docs = res.get("documents") or []
+                metas = res.get("metadatas") or []
+                items = list(zip(docs, metas))
+            except Exception as exc:
+                logger.warning("Failed to fetch chunks for %s: %s", path, exc)
 
-            res = coll.get(
-                where={"path": path},                    # notes don’t include 'source' in your current metadata
-                include=["metadatas", "documents"],
-                limit=100_000,
-            )
-            docs = res.get("documents") or []
-            metas = res.get("metadatas") or []
-
-            items = list(zip(docs, metas))
-            if target_section is not None:
-                filtered = []
-                for doc, meta in items:
-                    try:
-                        sec = int((meta or {}).get("section", 0))
-                    except Exception:
-                        sec = 0
-                    if sec == target_section:
-                        filtered.append((doc, meta))
-                if filtered:
-                    items = filtered
-
-            def _sort_key(item):
-                _doc, m = item
-                m = m or {}
-                # section (1-based), default to 1 if missing
-                try:
-                    sec = int(m.get("section", 1))
-                except Exception:
-                    sec = 1
-                # prefer section_char_offset; fallback to start_index; then 0
-                off = m.get("section_char_offset")
-                if off is None:
-                    off = m.get("start_index") or 0
-                try:
-                    off = int(off)
-                except Exception:
-                    off = 0
-                return (sec, off)
-
-            items.sort(key=_sort_key)
-            # Insert section headings (## {h2}) once per section
-            out_parts = []
-            current_sec = None
-            for doc, m in items:
-                m = m or {}
-                try:
-                    sec = int(m.get("section", 1))
-                except Exception:
-                    sec = 1
-                if current_sec != sec:
-                    current_sec = sec
-                    h2 = m.get("h2")
-                    if h2:
-                        out_parts.append(f"\n\n## {h2}\n\n")
-                out_parts.append(doc or "")
-            full_text = "".join(out_parts)
- 
-        except Exception:
-            # Fallback: stitch from the already-returned top_files if they share the same path
+        # Fallback to the already retrieved top_files if collection fetch failed
+        if not items:
             same_path = [d for d in top_files if (d.metadata or {}).get("path") == path]
-            if target_section is not None:
-                same_path = [
-                    d for d in same_path
-                    if _safe_int((d.metadata or {}).get("section")) == target_section
-                ] or same_path
-            def _tf_key(d):
-                m = d.metadata or {}
-                try:
-                    sec = int(m.get("section", 1))
-                except Exception:
-                    sec = 1
-                off = m.get("section_char_offset")
-                if off is None:
-                    off = m.get("start_index") or 0
-                try:
-                    off = int(off)
-                except Exception:
-                    off = 0
-                return (sec, off)
-            same_path.sort(key=_tf_key)
-            # Insert section headings (## {h2}) once per section in fallback too
-            out_parts = []
-            current_sec = None
-            for d in same_path:
-                m = d.metadata or {}
-                try:
-                    sec = int(m.get("section", 1))
-                except Exception:
-                    sec = 1
-                if current_sec != sec:
-                    current_sec = sec
-                    h2 = m.get("h2")
-                    if h2:
-                        out_parts.append(f"\n\n## {h2}\n\n")
-                out_parts.append(d.page_content or "")
-            full_text = "".join(out_parts)
-
-            if not full_text:
+            if not same_path:
                 return ""
+            items = [(d.page_content or "", d.metadata or {}) for d in same_path]
+
+        items.sort(key=lambda pair: _section_and_offset(pair[1]))
+
+        target_section = _safe_int(md0.get("section"))
+        target_offset = _safe_int(md0.get("section_char_offset"))
+        if target_offset is None:
+            target_offset = _safe_int(md0.get("start_index"))
+
+        pivot_idx = 0
+        if target_section is not None:
+            best_idx = None
+            best_score = None
+            for idx, (_doc, meta) in enumerate(items):
+                sec, off = _section_and_offset(meta)
+                if sec != target_section:
+                    continue
+                if target_offset is None:
+                    best_idx = idx
+                    break
+                diff = abs(off - target_offset)
+                if best_score is None or diff < best_score:
+                    best_idx = idx
+                    best_score = diff
+            if best_idx is not None:
+                pivot_idx = best_idx
+
+        start = max(0, pivot_idx - context_window)
+        end = min(len(items), pivot_idx + context_window + 1)
+        window_items = items[start:end]
+
+        out_parts = []
+        current_sec = None
+        for doc, meta in window_items:
+            sec, _ = _section_and_offset(meta)
+            if current_sec != sec:
+                current_sec = sec
+                h2 = meta.get("h2")
+                if h2:
+                    out_parts.append(f"\n\n## {h2}\n\n")
+            out_parts.append(doc or "")
+
+        full_text = "".join(out_parts)
+        if not full_text:
+            return ""
 
         # Lightweight header with useful metadata
         title = md0.get("title") or path
