@@ -79,32 +79,28 @@ class CodeRepoAgent(ChromaRAGAgent):
 
 
     def read_file(self, top_files):
+        if not top_files:
+            return ""
+
         files_section = ""
         for d in top_files:
-            acct   = d.metadata.get("account")
-            repo   = d.metadata.get("repo")
-            commit = d.metadata.get("commit")
-            ts     = d.metadata.get("commit_ts")
-            path   = d.metadata.get("path")
-
-            # Try reading from the local filesystem clone
-            file_path = Path(GITHUB_LOCAL_PATH) / (acct or "") / (repo or "") / (path or "")
-            full = None
-            try:
-                full = file_path.read_text(encoding="utf-8", errors="ignore")
-            except Exception:
-                full = None
-
-            if not full:
+            if not d or not getattr(d, "page_content", None):
                 continue
 
-            if len(full) > 30000:
-                full = full[:30000] + "\n\n<!-- truncated -->\n"
+            metadata = d.metadata or {}
+            acct   = metadata.get("account")
+            repo   = metadata.get("repo")
+            commit = metadata.get("commit")
+            ts     = metadata.get("commit_ts")
+            path   = metadata.get("path")
 
-            # Derive extension from metadata or file path and map to a markdown fence language
+            content = d.page_content or ""
+            if len(content) > 30000:
+                content = content[:30000] + "\n\n<!-- truncated -->\n"
+
             name_lower = Path(path).name.lower() if path else ""
             ext_path = Path(path).suffix.lower() if path else ""
-            ext = (d.metadata.get("ext") or ext_path or "").lower()
+            ext = (metadata.get("ext") or ext_path or "").lower()
 
             if not ext:
                 if name_lower == "makefile":
@@ -117,6 +113,6 @@ class CodeRepoAgent(ChromaRAGAgent):
                 lang = PROGRAMMING_LANGUAGE_MAP.get(ext, "plaintext")
 
             header = f"### {path}\n{acct}/{repo}@{commit}, {ts}"
-            files_section += ("\n\n-----\n\n#\n" + header + f"\n\n```{lang}\n{full}\n```\n")
+            files_section += ("\n\n-----\n\n#\n" + header + f"\n\n```{lang}\n{content}\n```\n")
 
         return files_section
