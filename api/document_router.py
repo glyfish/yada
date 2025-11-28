@@ -22,6 +22,7 @@ from apps.agentic.core.document_loaders.research_library_document_loader import 
 from apps.agentic.core.document_loaders.document_library_loader import DocumentLibraryLoader
 from langchain_community.vectorstores import Chroma
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DOCUMENT_LIBRARY_DIR = Path("./document_library").resolve()
 
 router = APIRouter()
@@ -213,9 +214,14 @@ class LoadResearchDocumentPayload(BaseModel):
 async def load_research_document(payload: LoadResearchDocumentPayload):
 
     note_path = _resolve_research_note_path(payload.filename)
+    try:
+        relative_note_path = note_path.relative_to(PROJECT_ROOT)
+    except ValueError:
+        relative_note_path = note_path
+
     meta_data = {
         "filename": payload.filename,
-        "path": str(note_path),
+        "path": str(relative_note_path),
         "title": payload.title,
         "authors": payload.authors,
         "date": payload.date,
