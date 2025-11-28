@@ -1,0 +1,87 @@
+- filename: fileanalytic-mechanics-2-e26f51a6-20e3-4f03-a441-234ae51f5317.md
+  path: research_library/Troy Notes/analytic-mechanics-2-e26f51a6-20e3-4f03-a441-234ae51f5317.md
+  title: Analytic Mechanics
+  authors: Troy Stribling
+  published_date: 11/12/2018
+  topic: Review of fundamentals of analytic mechanics.
+  tags: notes, physics, mechanics
+
+- filename: carnot-8d44967b-c078-4902-980c-f834d26088a5.md
+  path: research_library/Jaynes/carnot-8d44967b-c078-4902-980c-f834d26088a5.md
+  title: The Evolution of Carnot’s Principle
+  authors: E. T. Jaynes
+  published_date: 7/8/1996
+  topic: Review of historical development of the Second Law of Thermodynamics.
+  tags: jaynes, thermodynamics
+
+- filename: autoregessive-proccess-170b6a29-0984-4ad5-892a-08add48c9d89.md
+  path: research_library/Troy Notes/autoregessive-proccess-170b6a29-0984-4ad5-892a-08add48c9d89.md
+  title: Autoregressive Processes
+  authors: Troy Stribling
+  published_date: Aug 26, 2019
+  topic: Review of autoregressive model properties, parameter estimation and simulation.
+  tags: notes, probability, modeling
+
+- filename: bayesian-data-analysis-3528c615-be76-42cf-8ab8-2db1e49fd5a0.md
+  path: research_library/Troy Notes/bayesian-data-analysis-3528c615-be76-42cf-8ab8-2db1e49fd5a0.md
+  title: Bayesian Data Analysis
+  authors: Troy Stribling
+  published_date: May 28, 2017
+  topic: Review of topics in probability involving Bayesian data analysis including sampling and Markov chains.
+  tags: notes, probability, modeling
+
+- filename: brownian-motion-16d6b3a0-9781-4a76-807e-15642a39eaeb.md
+  path: research_library/Troy Notes/brownian-motion-16d6b3a0-9781-4a76-807e-15642a39eaeb.md
+  title: Brownian Motion
+  authors: Troy Stribling
+  published_date: Feb. 5, 2017
+  topic: Discussion of properties of brownian motion.
+  tags: notes, probability, modeling
+
+- filename: discrete-models-of-financial-markets-32910fed-c54c-4930-97d7-5b2113e6f173.md
+  path: research_library/Troy Notes/discrete-models-of-financial-markets-32910fed-c54c-4930-97d7-5b2113e6f173.md
+  title: Discrete Models of Financial Markets
+  authors: Troy Stribling
+  published_date: May 2, 2021
+  topic: Discussion of discrete statistical model of finical processes that includes, price modeling, option pricing and portfolio management.
+  tags: notes, probability, finance
+
+- filename: fractional-brownian-motion-12cf13ae-5178-43bf-9757-f725893ab74e.md
+  path: research_library/Troy Notes/fractional-brownian-motion-12cf13ae-5178-43bf-9757-f725893ab74e.md
+  title: Fractional Brownian Motion
+  authors: Troy Stribling
+  published_date: May 2, 2019
+  topic: Fundamentals of fractional Brownian motion.
+  tags: notes, probability, modeling
+
+- filename: functions-volume-1-0fbb7d2a-11cc-4804-aa92-ed83f08bdf62.md
+  path: research_library/Troy Notes/functions-volume-1-0fbb7d2a-11cc-4804-aa92-ed83f08bdf62.md
+  title: Functions
+  authors: Troy Stribling
+  published_date: Feb. 19, 2017
+  topic: Discussion of special functions used in mathematical analysis and probability distributions.
+  tags: notes, math, probability, modeling
+
+- filename: geometry-a327e4e5-5506-4d05-879d-bb13e58fade1.md
+  path: research_library/Troy Notes/geometry-a327e4e5-5506-4d05-879d-bb13e58fade1.md
+  title: Geometry
+  authors: Troy Stribling
+  published_date: Jan 30, 2019
+  topic: Fundamentals of analytic geometry.
+  tags: notes, math
+
+- filename: hamiltonian-monte-carlo-daa2ebd1-72df-4f3b-8573-488e0a24ab2a.md
+  path: research_library/Troy Notes/hamiltonian-monte-carlo-daa2ebd1-72df-4f3b-8573-488e0a24ab2a.md
+  title: Hamiltonian Monte Carlo
+  authors: Troy Stribling
+  published_date: March 23 2019
+  topic: Detailed analysis of Hamiltonian Monte sampling including derivations and simulations.
+  tags: notes, math, probability, modeling
+
+- filename: linear-algebra-bed930cc-fe0d-496a-aa30-634ee36b064d.md
+  path: research_library/Troy Notes/inear-algebra-bed930cc-fe0d-496a-aa30-634ee36b064d.md
+  title: Linear Algebra
+  authors: Troy Stribling
+  published_date: Jan 30, 2019
+  topic: Discussion of discrete Fourier transforms.
+  tags: notes, math
