@@ -30,8 +30,6 @@ def num_tokens(text):
 class ChromaDocumentLoader(ABC):
 
     def __init__(self, db_name: str, collection_name: str, db_path: str=DB_PATH):
-        logger.info(f"Create document loader: db_name={db_name}, db_path={db_path}, collection_name={collection_name}.")
-        print(os.listdir(db_path), os.getcwd(), db_path)
         self._db_name = db_name
         self._collection_name = collection_name
         self._db_path = os.path.join(db_path, db_name)

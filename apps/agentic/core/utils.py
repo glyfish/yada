@@ -122,3 +122,11 @@ def load_research_documents_metadata(yaml_path: str | Path | None = None) -> lis
             raise ValueError(f"Metadata entry must be a mapping, received {type(entry).__name__}")
 
     return records
+
+
+async def load_research_documents(doc_loader, research_library_files_path):
+    document_meta_data = load_research_documents_metadata(research_library_files_path)
+    for meta_data in document_meta_data:
+        note_path = os.path.join("../..", meta_data["path"])
+        print(f"Loading research document: {note_path}")
+        await doc_loader.load_document(str(note_path), meta_data=meta_data)
