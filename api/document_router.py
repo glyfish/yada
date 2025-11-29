@@ -241,24 +241,6 @@ async def load_research_document(payload: LoadResearchDocumentPayload):
 
 
 """
-List existing research library documents relative to the ./research_library directory.
-"""
-@router.get("/document/research_library_files")
-async def list_research_library_files():
-    base_dir = Path(RESEARCH_LIBRARY_LOCAL_PATH).resolve()
-    if not base_dir.exists():
-        logger.warning("Research library directory %s does not exist", base_dir)
-        return {"files": []}
-
-    files = sorted(
-        str(path.relative_to(base_dir))
-        for path in base_dir.rglob("*")
-        if path.is_file()
-    )
-    return {"files": files}
-
-
-"""
 Load specified PDF document to the document library.
 """
 class LoadPDFDocumentPayload(BaseModel):
