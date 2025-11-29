@@ -1,10 +1,16 @@
 import os
+import yaml
+
+from pathlib import Path
+from typing import Iterable
+
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import BaseMessage, HumanMessage
 from langgraph.graph import END
 from langchain_core.tracers.langchain import LangChainTracer
 from langchain.callbacks.manager import CallbackManager
 
+from apps.agentic.core.constants import RESEARCH_DOCUMENTS_METADATA_FILE
 
 def load_api_key(filepath=".keys/.chatgpt_key"):
     with open(filepath, "r") as file:
@@ -80,3 +86,39 @@ def build_llm(model="gpt-4.1") -> ChatOpenAI:
 
     callbacks = _build_tracer()
     return ChatOpenAI(model=model, temperature=1, callbacks=callbacks)
+
+
+def load_research_documents_metadata(yaml_path: str | Path | None = None) -> list[dict]:
+    """
+    Load the research document metadata YAML file.
+
+    Args:
+        yaml_path: Optional override path. Defaults to RESEARCH_DOCUMENTS_METADATA_FILE.
+
+    Returns:
+        A list of metadata dictionaries (one per research document).
+    """
+
+    target = Path(yaml_path or RESEARCH_DOCUMENTS_METADATA_FILE)
+    if not target.is_absolute():
+        target = (Path.cwd() / target).resolve()
+
+    if not target.exists():
+        raise FileNotFoundError(f"Research documents metadata file not found: {target}")
+
+    with target.open("r", encoding="utf-8") as handle:
+        data = yaml.safe_load(handle) or []
+
+    if isinstance(data, dict):
+        data = [data]
+    if not isinstance(data, Iterable):
+        raise ValueError(f"Expected sequence in {target}, received {type(data).__name__}")
+
+    records: list[dict] = []
+    for entry in data:
+        if isinstance(entry, dict):
+            records.append(entry)
+        else:
+            raise ValueError(f"Metadata entry must be a mapping, received {type(entry).__name__}")
+
+    return records

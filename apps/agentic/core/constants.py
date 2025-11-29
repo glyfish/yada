@@ -1,4 +1,5 @@
 # GITHUB constants
+import os
 DB_PATH = ".db"
 
 GITHUB_ACCOUNTS = ["troystribling"]
@@ -16,6 +17,7 @@ CHROMA_DB_MAX_BATCH_SIZE = 1000
 RESEARCH_LIBRARY_DB_NAME = "research_library"
 RESEARCH_LIBRARY_COLLECTION_NAME = "research-library"
 RESEARCH_LIBRARY_LOCAL_PATH = "./research_library"
+RESEARCH_DOCUMENTS_METADATA_FILE = os.path.join(RESEARCH_LIBRARY_LOCAL_PATH, "research_documents.yml")
 
 # PDF document library constants
 PDF_DOCUMENT_LIBRARY_DB_NAME = "pdf_document_library"
@@ -58,5 +60,4 @@ PROGRAMMING_LANGUAGE_MAP = {
     ".css": "css",
     ".txt": "text",
 }
-
 
