@@ -328,7 +328,7 @@
   authors: E. T. Jaynes
   published_date: Jul 08, 1996
   topic: Review of historical development of the Second Law of Thermodynamics.
-  tags: jaynes, thermodynamics
+  tags: jaynes, thermodynamics, physics, probability
 
 - filename: gibbs-vs-boltzmann-a02e7d2f-a719-4856-a904-0d09b2c7e74c.md
   path: research_library/Jaynes/gibbs-vs-boltzmann-a02e7d2f-a719-4856-a904-0d09b2c7e74c.md
@@ -336,7 +336,7 @@
   authors: E. T. Jaynes
   published_date: Jan 01, 1963
   topic: The status of the Gibbs and Boltzmann expressions for entropy has been a matter of some confusion in the literature.
-  tags: jaynes, thermodynamics
+  tags: jaynes, thermodynamics, physics, probability
 
 - filename: irreversible-statistical-mechanics-28c93502-9a14-4e9b-8d9c-8a64cd9815a6.md
   path: research_library/Jaynes/irreversible-statistical-mechanics-28c93502-9a14-4e9b-8d9c-8a64cd9815a6.md
@@ -344,7 +344,7 @@
   authors: E. T. Jaynes
   published_date:  Nov 05, 1964
   topic: A general formalism for calculation of irreversible processes, analogous to the paxtition sum algorithe of equilibrium theory, is presented. Mathematically, it is a generalization of the procedure by which Gibbs constructed his amonical and grand canonical ensembles, in which the partition function is witended to a partition functional.
-  tags: jaynes, thermodynamics
+  tags: jaynes, thermodynamics, physics, probability
 
 - filename: macroscopic-prediction-040aedd5-7267-456c-9b1d-daddebed9029.md
   path: research_library/Jaynes/macroscopic-prediction-040aedd5-7267-456c-9b1d-daddebed9029.md
@@ -352,7 +352,7 @@
   authors: E. T. Jaynes
   published_date: Jan 01, 1985
   topic: Although physicists believe that we have understood the laws of microphysics quite well for fifty years, macrophenomena are observed to have a rich variety that is very hard to understand. We see not only lifeless thermal equilibrium and irreversible approaches to it, but lively behavior such as that of cyclic chemical reactions, lasers, self-organizing systems, biological systems.
-  tags: jaynes, thermodynamics
+  tags: jaynes, thermodynamics, physics, probability
 
 - filename: marginalization-and-prior-probabilities-24ed13f8-a8bc-4818-a5f6-a2bd6b4394fc.md
   path: research_library/Jaynes/marginalization-and-prior-probabilities-24ed13f8-a8bc-4818-a5f6-a2bd6b4394fc.md
@@ -360,7 +360,7 @@
   authors: E. T. Jaynes
   published_date: Jan 01, 1980
   topic: A recent article of Dawid, Stone, and Zidek (1973) notes two Bayesian calculation methods--the first using an improper prior, the second avoiding it--that one feels intuitively ought to lead to the same result, but in general do not. This "marginalization paradox" has been interpreted widely as revealing a fundamental inconsistency in the common Bayesian practice of using improper priors to express prior ignorance.
-  tags: jaynes, thermodynamics
+  tags: jaynes, thermodynamics, physics, probability
 
 - filename: minumum-entropy-production-de599502-c603-40b8-a7be-34a1de8352fc.md
   path: research_library/Jaynes/minumum-entropy-production-de599502-c603-40b8-a7be-34a1de8352fc.md
@@ -368,7 +368,7 @@
   authors: E. T. Jaynes
   published_date: Jan 01, 1980
   topic: It seems intuitively reasonable that Gibbs' variational principle determining the conditions of heterogeneous equilibrium can be generalized to nonequilibrium conditions. That is, a nonequilibrium steady state should be the one that makes some kind of generalized entropy production stationary; and even in the presence of irreversible fluxes, the condition for migrational equilibrium should still be the equality of some generalized chemical potentials.
-  tags: jaynes, thermodynamics
+  tags: jaynes, thermodynamics, physics, probability
 
 - filename: poincare-recursion-b2000704-887b-4027-b163-af20aee96a5a.md
   path: research_library/Jaynes/poincare-recursion-b2000704-887b-4027-b163-af20aee96a5a.md
@@ -376,7 +376,7 @@
   authors: E. T. Jaynes
   published_date: Jul 01, 1957
   topic: The theory of almost-periodic functions is applied to the problem of the relation, conjectured by the Earenfests, between Poincare reaurrence times and the time over which averages of phase functions mast be taken in order to approximate their limiting values for infinite time. It is concluded that the necessary averaging times might be very much longer than the Poincare periods. 
-  tags: jaynes, thermodynamics
+  tags: jaynes, thermodynamics, physics, probability
 
 - filename: predictive-statistical-mechanics-7bafb3ce-0662-4a1a-91ce-fb89188bb6bb.md
   path: research_library/Jaynes/predictive-statistical-mechanics-7bafb3ce-0662-4a1a-91ce-fb89188bb6bb.md
@@ -384,7 +384,7 @@
   authors: E. T. Jaynes
   published_date: Jan 01, 1983
   topic: This workshop is concerned with two topics, foundations of quantum theory and of irreversible statistical mechanics, which might appear quite different. Yet the current problems in both fields are basically the same, two different aspects of a deep conceptual hangup that permeates not only physics, but all fields that use probability theory.
-  tags: jaynes, thermodynamics
+  tags: jaynes, thermodynamics, physics, probability
 
 - filename: prior-information-in-inference-265d0158-9676-490c-8cc6-b8ef363c725e.md
   path: research_library/Jaynes/prior-information-in-inference-265d0158-9676-490c-8cc6-b8ef363c725e.md
@@ -392,7 +392,7 @@
   authors: E. T. Jaynes
   published_date: Jan 01, 1983
   topic: For many years the writer has carried an evangelical message to physicists, telling them: "Statisticians have learned many important things that physicists ought to know about but don't". Here we face in the opposite direction and note some things physicists have learned about inference, that statisticians might find useful.
-  tags: jaynes, thermodynamics
+  tags: jaynes, thermodynamics, physics, probability
 
 - filename: prior-probabilities-cc1bea82-f141-4185-9bcc-976f9bce0a44.md
   path: research_library/Jaynes/prior-probabilities-cc1bea82-f141-4185-9bcc-976f9bce0a44.md
@@ -400,7 +400,7 @@
   authors: E. T. Jaynes
   published_date: Jan 01, 1983
   topic: In decision theory, mathematical analysis shows that once the sampling distributions, loss function, and sample are specified, the only remaining basis for a choice among different admissible decisions lies in the prior probabilities. Therefore, the logical foundations of decision theory cannot be put in fully satisfactory form until the old problem of arbitrariness (sometimes called "subjectiveness") in assigning prior probabilities is resolved.
-  tags: jaynes, thermodynamics
+  tags: jaynes, thermodynamics, physics, probability
 
 - filename: probablility-as-logic-745d2827-334d-4614-b95f-042357f32150.md
   path: research_library/Jaynes/probablility-as-logic-745d2827-334d-4614-b95f-042357f32150.md
@@ -408,7 +408,7 @@
   authors: E. T. Jaynes
   published_date: Jan 01, 2003
   topic: At the 1988 workshop we called attention to the "Mind Projection Fallacy" which is present in all fields that use probability. Here we give a more complete discussion showing why probabilities need not correspond to physical causal influences, or "propensities" affecting mass phenomena. Probability theory is far more useful if we recognize that probabilities express fundamentally logical inferences pertaining to individual cases. We note several examples of the difference this makes in real applications.
-  tags: jaynes, thermodynamics
+  tags: jaynes, thermodynamics, physics, probability
 
 - filename: rational-of-maximum-entropy-methods-02f50d50-65fc-4409-b7be-e2aaa8b34738.md
   path: research_library/Jaynes/rational-of-maximum-entropy-methods-02f50d50-65fc-4409-b7be-e2aaa8b34738.md
@@ -416,93 +416,93 @@
   authors: E. T. Jaynes
   published_date: Jan 01, 1982
   topic: We discuss the relations between maximum-entropy (MAXENT) and other methods of spectral analysis such as the Schuster, Blackman-Tukey, maximum-likelihood, Bayesian, and Autoregressive (AR, ARMA, or ARIMA) models, emphasizing that they are not in conflict, but rather are appropriate in different problems.
-  tags: jaynes, thermodynamics
+  tags: jaynes, thermodynamics, physics, probability
 
 - filename: some-ramdom-observations-1e22e5c0-3968-4f23-94df-af346b9bba54.md
   path: research_library/Jaynes/some-ramdom-observations-1e22e5c0-3968-4f23-94df-af346b9bba54.md
   title: Some Random Observations
   authors: E. T. Jaynes
   published_date: Jan 01, 1982
-  topic: When told of the plan to devote an issue of Synthese to the principle of maximum entropy (PME), my first reaction was puzzlement as to why philosophers should be so interested in it. Then a plausible reason appeared to be that PME has been perceived (correctly, in my view) as a small but nonnegligible part of a fundamental revolution in thought now taking place.
-  tags: jaynes, thermodynamics
+  topic: When told of the plan to devote an issue of Syntheses to the principle of maximum entropy (PME), my first reaction was puzzlement as to why philosophers should be so interested in it. Then a plausible reason appeared to be that PME has been perceived (correctly, in my view) as a small but nonnegligible part of a fundamental revolution in thought now taking place.
+  tags: jaynes, thermodynamics, physics, probability
 
 # Reading List
 - filename: a-pre-asymtotic-metric-for-fat-tailedness-05c91822-821a-49fc-9c23-db03861cef5a.md
   path: research_library/Reading List/a-pre-asymtotic-metric-for-fat-tailedness-05c91822-821a-49fc-9c23-db03861cef5a.md
-  title:
-  authors:
-  published_date:
+  title: How Much Data Do You Need? A Pre-asymptotic Metric for Fat-tailedness
+  authors: Nassim Nicholas Taleb
+  published_date: Nov 01, 2018
   topic:
-  tags:
+  tags: reading_list, taleb, probability
 
 - filename: decoherent-histories-quantum-mechanics-with-one-_real_-fine-gra-0a916406-9313-4b39-8c4e-5c274d6f1aac.md
   path: research_library/Reading List/decoherent-histories-quantum-mechanics-with-one-_real_-fine-gra-0a916406-9313-4b39-8c4e-5c274d6f1aac.md
-  title:
-  authors:
-  published_date:
-  topic:
-  tags:
+  title: Decoherent Histories Quantum Mechanics with One "Real" Fine-Grained History
+  authors: Murray Gell-Mann, James B. Hartle
+  published_date: Nov 30, 2011
+  topic: Decoherent histories quantum theory is reformulated with the assumption that there is one "real" fine-grained history, specified in a preferred complete set of sum-over-histories variables. This real history is described by embedding it in an ensemble of comparable imagined fine-grained histories, not unlike the familiar ensemble of statistical mechanics.
+  tags: reading_list, probability, physics, quantum
 
 - filename: election-predictions-as-martingales-17bad42c-2245-41a9-b819-1a31ba2b5d75.md
   path: research_library/Reading List/election-predictions-as-martingales-17bad42c-2245-41a9-b819-1a31ba2b5d75.md
-  title:
-  authors:
-  published_date:
-  topic:
-  tags:
+  title: Election Predictions as Martingales, An Arbitrage Approach
+  authors: Nassim Nicholas Taleb
+  published_date: Oct 01, 2017
+  topic: A standard result in quantitative finance is that when the volatility of the underlying security increases, arbitrage pressures push the corresponding binary option to trade closer to 50%, and become less variable over the remaining time to expiration. Counterintuitively, the higher the uncertainty of the underlying security, the lower the volatility of the binary option. 
+  tags: reading_list, taleb, probability, finance
 
 - filename: evaluating-gambles-using-dynamics-c0fa4bff-1717-4678-b90c-1a790840d9b1.md
   path: research_library/Reading List/evaluating-gambles-using-dynamics-c0fa4bff-1717-4678-b90c-1a790840d9b1.md
-  title:
-  authors:
-  published_date:
-  topic:
-  tags:
+  title: Evaluating gambles using dynamics
+  authors: Ole Peters, Murray Gell-Mann
+  published_date: May 3, 2014
+  topic: Gambles are random variables that model possible changes in monetary wealth. Classic decision theory transforms money into utility through a utility function and defines the value of a gamble as the expectation value of utility changes. Utility functions aim to capture individual psychological characteristics, but their generality limits predictive power.
+  tags: reading_list, probability, physics
 
 - filename: larger-than-one-probabilities-in-finance-4e697507-2018-49c6-9fe7-a3af1a06dbc8.md
   path: research_library/Reading List/larger-than-one-probabilities-in-finance-4e697507-2018-49c6-9fe7-a3af1a06dbc8.md
-  title:
-  authors:
-  published_date:
-  topic:
-  tags:
+  title: Larger than One Probabilities in Mathematical and Practical Finance
+  authors: Mark Burgin, Gunter Meissner
+  published_date: Feb 29, 2016
+  topic: Traditionally probability is considered as a function that takes values in the interval [0, 1]. However, researchers found that negative, as well as larger than 1 probabilities could be a useful tool in making financial modeling more exact and flexible. Here we show how larger than 1 probabilities could be handy for financial modeling. 
+  tags: reading_list, probability, physics
 
 - filename: monte-carlo-methods-in-statistical-mechanics-409becac-f2e9-48f2-9d3e-0924d6e66036.md
   path: research_library/Reading List/monte-carlo-methods-in-statistical-mechanics-409becac-f2e9-48f2-9d3e-0924d6e66036.md
-  title:
-  authors:
-  published_date:
-  topic:
-  tags:
+  title: Monte Carlo Methods in Statistical Mechanic, Foundations and New Algorithms
+  authors: Alan D. Sokal
+  published_date: Sep 01, 1996
+  topic: The goal of these lectures is to give an introduction to current research on Monte Carlo methods in statistical mechanics and quantum field theory, with an emphasis on:
+  tags: reading_list, probability, physics
 
 - filename: quantum-probability-explanation-for-violations-of-rational-deci-d4d738ae-7a92-45ff-b7d3-cf57bb3e1c3a.md
   path: research_library/Reading List/quantum-probability-explanation-for-violations-of-rational-deci-d4d738ae-7a92-45ff-b7d3-cf57bb3e1c3a.md
-  title:
-  authors:
-  published_date:
-  topic:
-  tags:
+  title: A quantum probability explanation for violations of 'rational' decision theory
+  authors: Emmanuel M. Pothos, Jerome R. Busemeyer
+  published_date: Mar 25, 2009
+  topic: Two experimental tasks in psychology, the two-stage gambling game and the Prisoner's Dilemma game, show that people violate the sure thing principle of decision theory. These paradoxical findings have resisted explanation by classical decision theory for over a decade. A quantum probability model, based on a Hilbert space representation and Schrödinger's equation, provides a simple and elegant explanation for this behaviour.
+  tags: reading_list, probability, physics
 
 - filename: spatial-statistics-and-bayesian-computation-7a43eb00-390e-4b10-8efd-26a5534ab136.md
   path: research_library/Reading List/spatial-statistics-and-bayesian-computation-7a43eb00-390e-4b10-8efd-26a5534ab136.md
-  title:
-  authors:
-  published_date:
-  topic:
-  tags:
+  title: Spatial Statistics and Bayesian Computation
+  authors: Julian Besag, Peter J. Green
+  published_date: May 6, 1992
+  topic: SUMMARY Markov chain Monte Carlo (MCMC) algorithms, such as the Gibbs sampler, have provided a Bayesian inference machine in image analysis and in other areas of spatial statistics for several years, founded on the pioneering ideas of Ulf Grenander. More recently, the observation that hyperparameters can be included as part of the updating schedule and the fact that almost any multivariate distribution is equivalently a Markov random field has opened the way to the use of MCMC in general Bayesian computation.
+  tags: reading_list, probability, physics
 
 - filename: the-ergodicity-problem-in-economics-1d62d50a-15b5-42fb-9df0-6b615656ce7f.md
   path: research_library/Reading List/the-ergodicity-problem-in-economics-1d62d50a-15b5-42fb-9df0-6b615656ce7f.md
-  title:
-  authors:
-  published_date:
-  topic:
-  tags:
+  title: The ergodicity problem in economics
+  authors: Ole Peters
+  published_date: Dec 02, 2019
+  topic: The ergodic hypothesis is a key analytical device of equilibrium statistical mechanics. It underlies the assumption that the time average and the expectation value of an observable are the same. Where it is valid, dynamical descriptions can often be replaced with much simpler probabilistic ones - time is essentially eliminated from the models.
+  tags: reading_list, probability, finance
 
 - filename: the-evolution-of-markov-chain-monte-carlo-methods-8bc75170-c6d4-419b-8275-49726a639471.md
   path: research_library/Reading List/the-evolution-of-markov-chain-monte-carlo-methods-8bc75170-c6d4-419b-8275-49726a639471.md
-  title:
-  authors:
-  published_date:
-  topic:
-  tags:
+  title: The Evolution of Markov Chain Monte Carlo Methods
+  authors: Matthew Richey
+  published_date: May 01, 2010
+  topic: This algorithm is actually a collection of related algorithms-Metropolis-Hastings, simulated annealing, and Gibbs sampling-together known as Markov chain Monte Carlo (MCMC) methods. The original MCMC method, the Metropolis algorithm, arose in physics, and now its most current variants are central to computational statistics. Along the way from physics to statistics the algorithm appeared in-and was transformed by-applied mathematics and computer science.
+  tags: reading_list, main, probability
