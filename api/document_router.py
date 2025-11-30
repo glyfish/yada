@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 import os
 import requests
+import yaml
 from urllib.parse import urlparse
 from pathlib import Path
 from fastapi.responses import FileResponse
@@ -14,6 +15,7 @@ from apps.agentic.core.constants import (
     GITHUB_API,
     RESEARCH_LIBRARY_LOCAL_PATH,
     PDF_DOCUMENT_LIBRARY_LOCAL_PATH,
+    RESEARCH_DOCUMENTS_METADATA_FILE,
 )
 
 from git import Repo
@@ -61,6 +63,33 @@ def _resolve_research_note_path(filename: str) -> Path:
         status_code=404,
         detail=f"Research document '{filename}' not found under {base_dir}.",
     )
+
+
+def _append_research_document_metadata(meta_data: dict) -> None:
+    """
+    Append the research document metadata to research_documents.yml.
+    """
+
+    metadata_path = (PROJECT_ROOT / RESEARCH_DOCUMENTS_METADATA_FILE).resolve()
+    metadata_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if not metadata_path.exists():
+        metadata_path.write_text("# Research Notes\n", encoding="utf-8")
+
+    record = {
+        "filename": meta_data.get("filename"),
+        "path": meta_data.get("path"),
+        "title": meta_data.get("title"),
+        "authors": meta_data.get("authors"),
+        "published_date": meta_data.get("published_date") or meta_data.get("date") or "",
+        "topic": meta_data.get("topic"),
+        "tags": meta_data.get("tags"),
+    }
+
+    entry_yaml = yaml.safe_dump([record], sort_keys=False)
+    with metadata_path.open("a", encoding="utf-8") as handle:
+        handle.write("\n" + entry_yaml)
+
 
 def clone_or_pull(repo_name, repo_url, local_path):
     logger.debug(f"CHECKING {repo_name} from {repo_url} to {local_path}")
@@ -236,6 +265,7 @@ async def load_research_document(payload: LoadResearchDocumentPayload):
                   f"start_date={meta_data['date']}, topic={meta_data['topic']}, tags={meta_data['tags']}."))
 
     await doc_loader.load_document(str(note_path), meta_data=meta_data)
+    _append_research_document_metadata(meta_data)
 
     return {"status": "Success", "message": f"Loaded research note: {payload.title}."}
 
