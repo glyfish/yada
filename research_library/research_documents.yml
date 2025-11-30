@@ -391,7 +391,7 @@
   title: Prior Information in Inference
   authors: E. T. Jaynes
   published_date: Jan 01, 1983
-  topic: For many years the writer has carried an evangelical message to physicists, telling them: "Statisticians have learned many important things that physicists ought to know about but don't". Here we face in the opposite direction and note some things physicists have learned about inference, that statisticians might find useful.
+  topic: For many years the writer has carried an evangelical message to physicists, telling them "Statisticians have learned many important things that physicists ought to know about but don't". Here we face in the opposite direction and note some things physicists have learned about inference, that statisticians might find useful.
   tags: jaynes, thermodynamics, physics, probability
 
 - filename: prior-probabilities-cc1bea82-f141-4185-9bcc-976f9bce0a44.md
@@ -469,10 +469,10 @@
 
 - filename: monte-carlo-methods-in-statistical-mechanics-409becac-f2e9-48f2-9d3e-0924d6e66036.md
   path: research_library/Reading List/monte-carlo-methods-in-statistical-mechanics-409becac-f2e9-48f2-9d3e-0924d6e66036.md
-  title: Monte Carlo Methods in Statistical Mechanic, Foundations and New Algorithms
+  title: Monte Carlo Methods in Statistical Mechanics, Foundations and New Algorithms
   authors: Alan D. Sokal
   published_date: Sep 01, 1996
-  topic: The goal of these lectures is to give an introduction to current research on Monte Carlo methods in statistical mechanics and quantum field theory, with an emphasis on:
+  topic: The goal of these lectures is to give an introduction to current research on Monte Carlo methods in statistical mechanics and quantum field theory.
   tags: reading_list, probability, physics
 
 - filename: quantum-probability-explanation-for-violations-of-rational-deci-d4d738ae-7a92-45ff-b7d3-cf57bb3e1c3a.md
@@ -495,14 +495,23 @@
   path: research_library/Reading List/the-ergodicity-problem-in-economics-1d62d50a-15b5-42fb-9df0-6b615656ce7f.md
   title: The ergodicity problem in economics
   authors: Ole Peters
-  published_date: Dec 02, 2019
-  topic: The ergodic hypothesis is a key analytical device of equilibrium statistical mechanics. It underlies the assumption that the time average and the expectation value of an observable are the same. Where it is valid, dynamical descriptions can often be replaced with much simpler probabilistic ones - time is essentially eliminated from the models.
-  tags: reading_list, probability, finance
+  published_date: '2019-12-02'
+  topic: The ergodic hypothesis is a key analytical device of equilibrium statistical
+    mechanics. It underlies the assumption that the time average and the expectation
+    value of an observable are the same. Where it is valid, dynamical descriptions
+    can often be replaced with much simpler probabilistic ones - time is essentially
+    eliminated from the models.
+  tags: reading_list,probability,finance
 
 - filename: the-evolution-of-markov-chain-monte-carlo-methods-8bc75170-c6d4-419b-8275-49726a639471.md
   path: research_library/Reading List/the-evolution-of-markov-chain-monte-carlo-methods-8bc75170-c6d4-419b-8275-49726a639471.md
   title: The Evolution of Markov Chain Monte Carlo Methods
   authors: Matthew Richey
-  published_date: May 01, 2010
-  topic: This algorithm is actually a collection of related algorithms-Metropolis-Hastings, simulated annealing, and Gibbs sampling-together known as Markov chain Monte Carlo (MCMC) methods. The original MCMC method, the Metropolis algorithm, arose in physics, and now its most current variants are central to computational statistics. Along the way from physics to statistics the algorithm appeared in-and was transformed by-applied mathematics and computer science.
-  tags: reading_list, main, probability
+  published_date: '2010-05-01'
+  topic: This algorithm is actually a collection of related algorithms-Metropolis-Hastings,
+    simulated annealing, and Gibbs sampling-together known as Markov chain Monte Carlo
+    (MCMC) methods. The original MCMC method, the Metropolis algorithm, arose in physics,
+    and now its most current variants are central to computational statistics. Along
+    the way from physics to statistics the algorithm appeared in-and was transformed
+    by-applied mathematics and computer science.
+  tags: reading_list,main,probability

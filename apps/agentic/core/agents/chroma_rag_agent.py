@@ -196,8 +196,7 @@ class ChromaRAGAgent(ABC):
         parts = []
         for d in hits:
             md = d.metadata or {}
-            header = f"{md.get('account','')}/{md.get('repo','')}@{md.get('commit','')} — {md.get('path','')} — {md.get('commit_ts','')}".strip(" —")
-            parts.append(f"{header}\n\n{d.page_content}")
+            parts.append(f"{d.page_content}")
         context = sep.join(parts) if parts else "(no results)"
         return {"messages": [HumanMessage(content=context)]}
 
