@@ -31,7 +31,7 @@ class ResearchLibraryChromaDocumentLoader(ChromaDocumentLoader):
     - authors: Authors of the research document
     - date: Published date of the research document
     - topic: Topic of the research document
-    - tags: Comma-separated list of tags associated with the research document
+    - shelf: Tag used to identify document groups
     - ext: File extension
     - images: Comma-separated list of image URLs in the document (if any)
     - h2: Section titles (from H2 headers)
@@ -68,6 +68,7 @@ class ResearchLibraryChromaDocumentLoader(ChromaDocumentLoader):
             "section": None,
             "section_char_offset": None,
             "_global_start": None,
+            "shelf": meta_data.get("shelf") or meta_data.get("tags") or "",
         }
 
         try:

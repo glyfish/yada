@@ -33,7 +33,7 @@ class DocumentLibraryLoader(ChromaDocumentLoader):
     - author: Author of the research note
     - start_date: Start date of the research note
     - topic: Topic of the research note
-    - tags: Comma-separated list of tags associated with the research note
+    - shelf: Tag used to identify document groups
     """
 
     def __init__(self, db_path=DB_PATH):
@@ -45,8 +45,8 @@ class DocumentLibraryLoader(ChromaDocumentLoader):
         Load a PDF document into the ChromaDB collection.
 
         Expected kwargs:
-          - meta_data: dict with keys {filename, path, title, authors, published_date, topic, tags}
-            authors may be a list[str] or comma-separated string. tags may be list[str] or comma-separated string.
+          - meta_data: dict with keys {filename, path, title, authors, published_date, topic, shelf}
+            authors may be a list[str] or comma-separated string.
         """
         # Resolve and validate path
         file_path = Path(path)
@@ -74,7 +74,7 @@ class DocumentLibraryLoader(ChromaDocumentLoader):
         authors = _to_scalar(meta.get("authors"))
         published_date = _to_scalar(meta.get("published_date"))
         topic = _to_scalar(meta.get("topic"))
-        tags = _to_scalar(meta.get("tags"))
+        shelf = _to_scalar(meta.get("shelf"))
 
         # Optional numeric timestamp for filtering
         published_date_unix = None
@@ -125,7 +125,7 @@ class DocumentLibraryLoader(ChromaDocumentLoader):
                     "published_date": published_date,
                     "published_date_unix": published_date_unix if published_date_unix is not None else None,
                     "topic": topic,
-                    "tags": tags,
+                    "shelf": shelf,
                     "source": "pdf-library",
                     "page": page_num,
                     "section": f"Page {page_num}",

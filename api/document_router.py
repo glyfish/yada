@@ -83,7 +83,7 @@ def _append_research_document_metadata(meta_data: dict) -> None:
         "authors": meta_data.get("authors"),
         "published_date": meta_data.get("published_date") or meta_data.get("date") or "",
         "topic": meta_data.get("topic"),
-        "tags": meta_data.get("tags"),
+        "shelf": meta_data.get("shelf") or "",
     }
 
     entry_yaml = yaml.safe_dump([record], sort_keys=False)
@@ -237,7 +237,7 @@ class LoadResearchDocumentPayload(BaseModel):
     authors: str
     date: str
     topic: str
-    tags: list[str]
+    shelf: str
 
 @router.post("/document/load_research_document")
 async def load_research_document(payload: LoadResearchDocumentPayload):
@@ -255,14 +255,14 @@ async def load_research_document(payload: LoadResearchDocumentPayload):
         "authors": payload.authors,
         "date": payload.date,
         "topic": payload.topic,
-        "tags": ",".join(payload.tags)
+        "shelf": payload.shelf
     }
 
     doc_loader = ResearchLibraryChromaDocumentLoader()
 
     logger.debug((f"Received request to load research note: "
                   f"file_name={meta_data['filename']}, title={meta_data['title']}, authors={meta_data['authors']}, "
-                  f"start_date={meta_data['date']}, topic={meta_data['topic']}, tags={meta_data['tags']}."))
+                  f"start_date={meta_data['date']}, topic={meta_data['topic']}, shelf={meta_data['shelf']}."))
 
     await doc_loader.load_document(str(note_path), meta_data=meta_data)
     _append_research_document_metadata(meta_data)
@@ -279,7 +279,7 @@ class LoadPDFDocumentPayload(BaseModel):
     authors: list[str]
     published_date: str
     topic: str
-    tags: list[str]
+    shelf: str
 
 @router.post("/document/load_pdf_document")
 async def load_pdf_document(payload: LoadPDFDocumentPayload):
@@ -292,14 +292,14 @@ async def load_pdf_document(payload: LoadPDFDocumentPayload):
         "authors": payload.authors,
         "published_date": payload.published_date,
         "topic": payload.topic,
-        "tags": ",".join(payload.tags)
+        "shelf": payload.shelf
     }
 
     doc_loader = DocumentLibraryLoader()
 
     logger.debug((f"Received request to load research note: "
                   f"file_name={meta_data['filename']}, title={meta_data['title']}, authors={meta_data['authors']}, "
-                  f"published_date={meta_data['published_date']}, topic={meta_data['topic']}, tags={meta_data['tags']}."))
+                  f"published_date={meta_data['published_date']}, topic={meta_data['topic']}, shelf={meta_data['shelf']}."))
 
     await doc_loader.load_document(pdf_path, meta_data=meta_data)
 

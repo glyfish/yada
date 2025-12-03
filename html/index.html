@@ -427,8 +427,8 @@
                     <label for="rn-topic">Topic:</label>
                     <textarea id="rn-topic" name="topic" rows="3" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="e.g., Signal Processing"></textarea>
 
-                    <label for="rn-tags">Tags:</label>
-                    <input id="rn-tags" name="tags" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" placeholder="comma,separated,tags">
+                    <label for="rn-shelf">Shelf:</label>
+                    <input id="rn-shelf" name="shelf" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" placeholder="e.g., reading_list">
 
                     <menu>
                         <button type="button" class="btn" id="cancelRNBtn">Cancel</button>
@@ -447,7 +447,7 @@
             const authorsInput      = dialog.querySelector("input[name='authors']");
             const dateInput         = dialog.querySelector("input[name='document_date']");
             const topicInput        = dialog.querySelector("textarea[name='topic']");
-            const tagsInput         = dialog.querySelector("input[name='tags']");
+            const shelfInput        = dialog.querySelector("input[name='shelf']");
             const fileInput         = dialog.querySelector("#rn-file");
             const fileButton        = dialog.querySelector("#rn-file-btn");
 
@@ -475,7 +475,7 @@
                     authors:        authorsInput.value.trim(),
                     date:           dateInput.value,
                     topic:          topicInput.value.trim(),
-                    tags:          (tagsInput.value || "").split(",").map(s => s.trim()).filter(Boolean)
+                    shelf:         shelfInput.value.trim()
                 };
                 const prev = loadBtn.textContent;
                 loadBtn.disabled = true;
@@ -498,7 +498,7 @@
                 }
             };
             loadBtn.addEventListener("click", submit);
-            [filenameInput, titleInput, authorsInput, dateInput, tagsInput].forEach(el => el.addEventListener("keydown", e => {if (e.key === "Enter") { e.preventDefault(); submit(); }}));
+            [filenameInput, titleInput, authorsInput, dateInput, shelfInput].forEach(el => el.addEventListener("keydown", e => {if (e.key === "Enter") { e.preventDefault(); submit(); }}));
         };
 
         // Load PDF Document Dialog
@@ -526,8 +526,8 @@
                 <label for="pdf-topic">Topic:</label>
                 <textarea id="pdf-topic" name="topic" rows="3" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="e.g., Thermodynamics, RNNs, ..."autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required></textarea>
 
-                <label for="pdf-tags">Tags:</label>
-                <input id="pdf-tags" name="tags" type="text" placeholder="comma,separated,tags"autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
+                <label for="pdf-shelf">Shelf:</label>
+                <input id="pdf-shelf" name="shelf" type="text" placeholder="e.g., reading_list" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
 
                 <menu>
                     <button type="button" class="btn" id="cancelPDFBtn">Cancel</button>
@@ -546,7 +546,7 @@
             const authorsInput  = dialog.querySelector("input[name='authors']");
             const dateInput     = dialog.querySelector("input[name='published_date']");
             const topicInput    = dialog.querySelector("textarea[name='topic']");
-            const tagsInput     = dialog.querySelector("input[name='tags']");
+            const shelfInput    = dialog.querySelector("input[name='shelf']");
             const fileInput     = dialog.querySelector("#pdf-file");
             const fileButton    = dialog.querySelector("#pdf-file-btn");
 
@@ -569,14 +569,13 @@
                 // Built-in HTML5 required checks
                 if (!form.reportValidity()) return;
 
-                // Custom checks: authors/tags must parse to non-empty arrays
+                // Custom checks: authors must parse to non-empty array
                 authorsInput.setCustomValidity("");
-                tagsInput.setCustomValidity("");
+                shelfInput.setCustomValidity("");
 
                 const authors = (authorsInput.value || "")
                     .split(/[;,]/).map(s => s.trim()).filter(Boolean);
-                const tags = (tagsInput.value || "")
-                    .split(",").map(s => s.trim()).filter(Boolean);
+                const shelf = shelfInput.value.trim();
 
                 if (authors.length === 0) {
                     authorsInput.setCustomValidity("Provide at least one author (comma or semicolon separated).");
@@ -584,10 +583,10 @@
                     authorsInput.setCustomValidity("");
                     return;
                 }
-                if (tags.length === 0) {
-                    tagsInput.setCustomValidity("Provide at least one tag (comma separated).");
+                if (!shelf) {
+                    shelfInput.setCustomValidity("Provide a shelf name.");
                     form.reportValidity();
-                    tagsInput.setCustomValidity("");
+                    shelfInput.setCustomValidity("");
                     return;
                 }
 
@@ -597,7 +596,7 @@
                     authors,                                   // array of strings
                     published_date: dateInput.value,           // YYYY-MM-DD
                     topic:    topicInput.value.trim(),
-                    tags                                      // array of strings
+                    shelf
                 };
 
                 const prev = loadBtn.textContent;
@@ -622,7 +621,7 @@
             };
 
             loadBtn.addEventListener("click", submit);
-            [filenameInput, titleInput, authorsInput, dateInput, topicInput, tagsInput].forEach(el =>
+            [filenameInput, titleInput, authorsInput, dateInput, topicInput, shelfInput].forEach(el =>
                 el.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); submit(); } })
             );
         };
