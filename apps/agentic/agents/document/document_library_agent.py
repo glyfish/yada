@@ -25,7 +25,7 @@ class DocumentLibraryAgent(ChromaRAGAgent):
     """
     PDF Document Agent that uses a vector store index of PDF documents to answer questions about document
     content. It is designed to handle queries related to PDF documents like: title, topic, authors, 
-    published_date, and tags.
+    published_date, and shelf.
 
     Query filters
     -------------
@@ -33,7 +33,7 @@ class DocumentLibraryAgent(ChromaRAGAgent):
     - authors: Author names (e.g., author:Troy Stribling)
     - topic: Research topic (e.g., topic:AI)
     - published_date: Start date of work on the research note (e.g., date:2023-01-01)
-    - tag: Tag associated with the research note (e.g., tag:physics)
+    - shelf: Shelf associated with the document (e.g., shelf:reading_list)
 
     Example Queries:
     - Look in the document library for the definition of a stochastic matrix.
@@ -60,7 +60,7 @@ class DocumentLibraryAgent(ChromaRAGAgent):
             "- Document published date: {metadata[published_date]}"
             "- Document authors: {metadata[authors]}"
             "- Document topic description: {metadata[topic]}"
-            "- Document tags: {metadata[tags]}"
+            "- Document shelf: {metadata[shelf]}"
             "---"
             "{page_content}"
         )
@@ -158,7 +158,7 @@ class DocumentLibraryAgent(ChromaRAGAgent):
             authors = md0.get("authors") or ""
             published = md0.get("published_date") or ""
             topic = md0.get("topic") or ""
-            tags = md0.get("tags") or ""
+            shelf = md0.get("shelf") or ""
 
             header_bits.append(f"**File:** {filename or path or '(unknown)'}")
             if path:
@@ -171,8 +171,8 @@ class DocumentLibraryAgent(ChromaRAGAgent):
                 header_bits.append(f"**Published:** {published}")
             if topic:
                 header_bits.append(f"**Topic:** {topic}")
-            if tags:
-                header_bits.append(f"**Tags:** {tags}")
+            if shelf:
+                header_bits.append(f"**Shelf:** {shelf}")
 
             header = "\n".join(header_bits)
 

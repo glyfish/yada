@@ -19,7 +19,7 @@ Supported qualifiers (case-insensitive):
   title:"..."       | title:<word>
   authors:"..."     | authors:<word>, csv list of authors, matches substring
   topic:"..."       | topic:<word>
-  tags:<word>       # matches substring in CSV 'tags' field you store
+  shelf:<word>      # matches the shelf/group name stored with the document
   section:<n>
   section:<lo>-<hi>
 
@@ -51,7 +51,7 @@ QUAL_NOTES   = re.compile(r"\bnotes:\s*(?:true|yes|1)?\b", re.I)
 QUAL_TITLE   = re.compile(r'\btitle:\s*(?:"([^"]+)"|([^\s]+))', re.I)
 QUAL_AUTHORS = re.compile(r'\bauthors:\s*(?:"([^"]+)"|([^\s]+))', re.I)
 QUAL_TOPIC   = re.compile(r'\btopic:\s*(?:"([^"]+)"|([^\s]+))', re.I)
-QUAL_TAGS    = re.compile(r"\btags:\s*([^\s,]+)\b", re.I)
+QUAL_SHELF   = re.compile(r'\bshelf:\s*(?:"([^"]+)"|([^\s]+))', re.I)
 
 QUAL_PAGE    = re.compile(r"\bpage:\s*(\d+)\b", re.I)
 QUAL_PAGES   = re.compile(r"\bpages?:\s*(\d+)\s*-\s*(\d+)\b", re.I)
@@ -148,11 +148,10 @@ def build_filter_and_query(q: str) -> Tuple[str, Optional[Dict[str, Any]]]:
         conditions.append({"topic": _pick(m)})
         q = QUAL_TOPIC.sub("", q).strip()
 
-    m = QUAL_TAGS.search(q)
+    m = QUAL_SHELF.search(q)
     if m:
-        # 'tags' is expected to be a CSV string (scalar) in metadata
-        conditions.append({"tags": m.group(1)})
-        q = QUAL_TAGS.sub("", q).strip()
+        conditions.append({"shelf": _pick(m)})
+        q = QUAL_SHELF.sub("", q).strip()
 
     m = QUAL_PAGE.search(q)
     if m:

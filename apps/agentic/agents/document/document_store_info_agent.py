@@ -44,8 +44,8 @@ class RepositoryFilesInput(BaseModel):
     )
 
 
-class ResearchNoteMetadataListInput(BaseModel):
-    """Schema for slicing research note metadata rows."""
+class ResearchLibraryMetadataListInput(BaseModel):
+    """Schema for slicing research library metadata rows."""
 
     max_results: int = Field(
         default=100,
@@ -59,8 +59,8 @@ class ResearchNoteMetadataListInput(BaseModel):
     )
 
 
-class ResearchNoteTitleQueryInput(BaseModel):
-    """Schema for filtering research note titles by metadata."""
+class ResearchLibraryTitleQueryInput(BaseModel):
+    """Schema for filtering research library titles by metadata."""
 
     author: str | None = Field(
         default=None,
@@ -70,15 +70,15 @@ class ResearchNoteTitleQueryInput(BaseModel):
         default=None,
         description="Topic text to filter by (case-insensitive substring match).",
     )
-    tag: str | None = Field(
+    shelf: str | None = Field(
         default=None,
-        description="Require that the note contains this tag (case-insensitive).",
+        description="Require that the document belongs to this shelf (case-insensitive).",
     )
     limit: int = Field(
-        default=25,
+        default=100,
         ge=1,
         le=200,
-        description="Maximum number of titles to return (default 25).",
+        description="Maximum number of titles to return (default 100).",
     )
 
 
@@ -108,15 +108,15 @@ class DocumentLibraryTitleQueryInput(BaseModel):
         default=None,
         description="Topic text to filter by (case-insensitive substring match).",
     )
-    tag: str | None = Field(
+    shelf: str | None = Field(
         default=None,
-        description="Require that the document contains this tag (case-insensitive).",
+        description="Require that the document belongs to this shelf (case-insensitive).",
     )
     limit: int = Field(
-        default=25,
+        default=100,
         ge=1,
         le=200,
-        description="Maximum number of titles to return (default 25).",
+        description="Maximum number of titles to return (default 100).",
     )
 
 
@@ -130,8 +130,8 @@ class DocumentStoreInfoAgent(ToolAgent):
         tools = [
             DocumentStoreInfoAgent.repository_names,
             DocumentStoreInfoAgent.filenames_for_repository,
-            DocumentStoreInfoAgent.research_note_metadata_summary,
-            DocumentStoreInfoAgent.research_note_titles_by_metadata,
+            DocumentStoreInfoAgent.research_library_metadata_summary,
+            DocumentStoreInfoAgent.research_library_titles_by_metadata,
             DocumentStoreInfoAgent.document_library_metadata_summary,
             DocumentStoreInfoAgent.document_library_titles_by_metadata,
         ]
@@ -150,10 +150,10 @@ class DocumentStoreInfoAgent(ToolAgent):
         You are an expert in retrieving information about the contents of documents available in all
         the document stores. The tools allow you to:
         - List repository names and filenames for code repositories.
-        - Summarize metadata for research notes, including filename, title, author, topic, and tags.
-        - Filter research note titles using author/topic/tag metadata.
-        - Summarize metadata for PDF documents, including filename, title, authors, published date, topic, and tags.
-        - Filter PDF document titles using author/topic/tag metadata.
+        - Summarize metadata for research notes, including filename, title, author, topic, and shelf.
+        - Filter research note titles using author/topic/shelf metadata.
+        - Summarize metadata for PDF documents, including filename, title, authors, published date, topic, and shelf.
+        - Filter PDF document titles using author/topic/shelf metadata.
         Call the appropriate tool when the user asks about any of these data sources.
         """
 
@@ -218,23 +218,22 @@ class DocumentStoreInfoAgent(ToolAgent):
 
     @staticmethod
     @lru_cache(maxsize=1)
-    def _research_note_metadata(db_path=DB_PATH) -> list[dict]:
+    def _research_library_metadata(db_path=DB_PATH) -> list[dict]:
         """
-        Aggregate research note metadata from the Chroma collection, one row per file.
+        Aggregate research library metadata from the Chroma collection, one row per file.
         """
 
         loader = ResearchLibraryChromaDocumentLoader(db_path)
 
         def _row_factory(meta, path):
-            tags = meta.get("tags") or ""
-            normalized_tags = [t.strip() for t in str(tags).split(",") if t.strip()]
+            shelf = (meta.get("shelf") or "").strip()
             return {
                 "filename": meta.get("filename") or Path(path).name,
                 "path": path,
                 "title": meta.get("title") or Path(path).stem,
                 "author": meta.get("author") or "",
                 "topic": meta.get("topic") or "",
-                "tags": normalized_tags,
+                "shelf": shelf,
             }
 
         return DocumentStoreInfoAgent._collect_metadata_rows(loader, _row_factory)
@@ -250,8 +249,7 @@ class DocumentStoreInfoAgent(ToolAgent):
         loader = DocumentLibraryLoader(db_path)
 
         def _row_factory(meta, path):
-            tags = meta.get("tags") or ""
-            normalized_tags = [t.strip() for t in str(tags).split(",") if t.strip()]
+            shelf = (meta.get("shelf") or meta.get("tags") or "").strip()
             authors = meta.get("authors") or ""
             normalized_authors = [a.strip() for a in str(authors).split(",") if a.strip()]
             return {
@@ -261,7 +259,7 @@ class DocumentStoreInfoAgent(ToolAgent):
                 "authors": normalized_authors,
                 "published_date": meta.get("published_date") or "",
                 "topic": meta.get("topic") or "",
-                "tags": normalized_tags,
+                "shelf": shelf,
             }
 
         return DocumentStoreInfoAgent._collect_metadata_rows(loader, _row_factory)
@@ -332,12 +330,12 @@ class DocumentStoreInfoAgent(ToolAgent):
 
 
     @staticmethod
-    @tool(args_schema=ResearchNoteMetadataListInput)
-    def research_note_metadata_summary(
+    @tool(args_schema=ResearchLibraryMetadataListInput)
+    def research_library_metadata_summary(
         max_results: int = 100, start_after: str | None = None
     ) -> list[dict]:
         """
-        Return metadata (filename, title, author, topic, tags) for research notes.
+        Return metadata (filename, title, author, topic, shelf) for research notes.
 
         Parameters
         ----------
@@ -347,7 +345,7 @@ class DocumentStoreInfoAgent(ToolAgent):
             Filename or path to start after (pagination aid).
         """
 
-        rows = DocumentStoreInfoAgent._research_note_metadata()
+        rows = DocumentStoreInfoAgent._research_library_metadata()
         return DocumentStoreInfoAgent._paginate_metadata_rows(rows, max_results, start_after)
 
 
@@ -357,7 +355,7 @@ class DocumentStoreInfoAgent(ToolAgent):
         max_results: int = 100, start_after: str | None = None
     ) -> list[dict]:
         """
-        Return metadata (filename, title, authors, published date, topic, tags) for PDF documents.
+        Return metadata (filename, title, authors, published date, topic, shelf) for PDF documents.
 
         Parameters
         ----------
@@ -372,11 +370,11 @@ class DocumentStoreInfoAgent(ToolAgent):
 
 
     @staticmethod
-    @tool(args_schema=ResearchNoteTitleQueryInput)
-    def research_note_titles_by_metadata(
+    @tool(args_schema=ResearchLibraryTitleQueryInput)
+    def research_library_titles_by_metadata(
         author: str | None = None,
         topic: str | None = None,
-        tag: str | None = None,
+        shelf: str | None = None,
         limit: int = 25,
     ) -> list[dict]:
         """
@@ -388,31 +386,31 @@ class DocumentStoreInfoAgent(ToolAgent):
             Case-insensitive substring match on the author name.
         topic: str | None
             Case-insensitive substring match on the topic.
-        tag: str | None
-            Case-insensitive tag match (must be present in tags list).
+        shelf: str | None
+            Case-insensitive shelf match.
         limit: int
             Maximum number of results to return (default 25, capped at 200).
         """
 
-        rows = DocumentStoreInfoAgent._research_note_metadata()
+        rows = DocumentStoreInfoAgent._research_library_metadata()
         if not rows:
             return []
 
         filtered = []
         author_token = author.lower() if author else None
         topic_token = topic.lower() if topic else None
-        tag_token = tag.lower() if tag else None
+        shelf_token = shelf.lower() if shelf else None
 
         for row in rows:
             row_author = (row.get("author") or "").lower()
             row_topic = (row.get("topic") or "").lower()
-            row_tags = [t.lower() for t in (row.get("tags") or [])]
+            row_shelf = (row.get("shelf") or "").lower()
 
             if author_token and author_token not in row_author:
                 continue
             if topic_token and topic_token not in row_topic:
                 continue
-            if tag_token and tag_token not in row_tags:
+            if shelf_token and shelf_token != row_shelf:
                 continue
 
             filtered.append(row)
@@ -425,7 +423,7 @@ class DocumentStoreInfoAgent(ToolAgent):
                 "filename": item.get("filename"),
                 "author": item.get("author"),
                 "topic": item.get("topic"),
-                "tags": item.get("tags"),
+                "shelf": item.get("shelf"),
             }
             for item in filtered
         ]
@@ -436,7 +434,7 @@ class DocumentStoreInfoAgent(ToolAgent):
     def document_library_titles_by_metadata(
         author: str | None = None,
         topic: str | None = None,
-        tag: str | None = None,
+        shelf: str | None = None,
         limit: int = 25,
     ) -> list[dict]:
         """
@@ -448,8 +446,8 @@ class DocumentStoreInfoAgent(ToolAgent):
             Case-insensitive substring match on the author names.
         topic: str | None
             Case-insensitive substring match on the topic.
-        tag: str | None
-            Case-insensitive tag match (must be present in tags list).
+        shelf: str | None
+            Case-insensitive shelf match.
         limit: int
             Maximum number of results to return (default 25, capped at 200).
         """
@@ -461,18 +459,18 @@ class DocumentStoreInfoAgent(ToolAgent):
         filtered = []
         author_token = author.lower() if author else None
         topic_token = topic.lower() if topic else None
-        tag_token = tag.lower() if tag else None
+        shelf_token = shelf.lower() if shelf else None
 
         for row in rows:
             row_authors = [a.lower() for a in (row.get("authors") or [])]
             row_topic = (row.get("topic") or "").lower()
-            row_tags = [t.lower() for t in (row.get("tags") or [])]
+            row_shelf = (row.get("shelf") or "").lower()
 
             if author_token and not any(author_token in a for a in row_authors):
                 continue
             if topic_token and topic_token not in row_topic:
                 continue
-            if tag_token and tag_token not in row_tags:
+            if shelf_token and shelf_token != row_shelf:
                 continue
 
             filtered.append(row)
@@ -486,7 +484,7 @@ class DocumentStoreInfoAgent(ToolAgent):
                 "authors": item.get("authors"),
                 "published_date": item.get("published_date"),
                 "topic": item.get("topic"),
-                "tags": item.get("tags"),
+                "shelf": item.get("shelf"),
             }
             for item in filtered
         ]

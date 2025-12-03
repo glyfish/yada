@@ -5,7 +5,7 @@
   authors: Troy Stribling
   published_date: 11/12/2018
   topic: Review of fundamentals of analytic mechanics.
-  tags: notes, physics, mechanics
+  shelf: notes
 
 - filename: autoregessive-proccess-170b6a29-0984-4ad5-892a-08add48c9d89.md
   path: research_library/Troy Notes/autoregessive-proccess-170b6a29-0984-4ad5-892a-08add48c9d89.md
@@ -13,7 +13,7 @@
   authors: Troy Stribling
   published_date: Aug 26, 2019
   topic: Review of autoregressive model properties, parameter estimation and simulation.
-  tags: notes, probability, modeling
+  shelf: notes
 
 - filename: bayesian-data-analysis-3528c615-be76-42cf-8ab8-2db1e49fd5a0.md
   path: research_library/Troy Notes/bayesian-data-analysis-3528c615-be76-42cf-8ab8-2db1e49fd5a0.md
@@ -21,7 +21,7 @@
   authors: Troy Stribling
   published_date: May 28, 2017
   topic: Review of topics in probability involving Bayesian data analysis including sampling and Markov chains.
-  tags: notes, probability, modeling
+  shelf: notes
 
 - filename: brownian-motion-16d6b3a0-9781-4a76-807e-15642a39eaeb.md
   path: research_library/Troy Notes/brownian-motion-16d6b3a0-9781-4a76-807e-15642a39eaeb.md
@@ -29,7 +29,7 @@
   authors: Troy Stribling
   published_date: Feb. 5, 2017
   topic: Discussion of properties of brownian motion.
-  tags: notes, probability, modeling
+  shelf: notes
 
 - filename: discrete-models-of-financial-markets-32910fed-c54c-4930-97d7-5b2113e6f173.md
   path: research_library/Troy Notes/discrete-models-of-financial-markets-32910fed-c54c-4930-97d7-5b2113e6f173.md
@@ -37,7 +37,7 @@
   authors: Troy Stribling
   published_date: May 2, 2021
   topic: Discussion of discrete statistical model of finical processes that includes, price modeling, option pricing and portfolio management.
-  tags: notes, probability, finance
+  shelf: notes
 
 - filename: fractional-brownian-motion-12cf13ae-5178-43bf-9757-f725893ab74e.md
   path: research_library/Troy Notes/fractional-brownian-motion-12cf13ae-5178-43bf-9757-f725893ab74e.md
@@ -45,7 +45,7 @@
   authors: Troy Stribling
   published_date: May 2, 2019
   topic: Fundamentals of fractional Brownian motion.
-  tags: notes, probability, modeling
+  shelf: notes
 
 - filename: functions-volume-1-0fbb7d2a-11cc-4804-aa92-ed83f08bdf62.md
   path: research_library/Troy Notes/functions-volume-1-0fbb7d2a-11cc-4804-aa92-ed83f08bdf62.md
@@ -53,7 +53,7 @@
   authors: Troy Stribling
   published_date: Feb. 19, 2017
   topic: Discussion of special functions used in mathematical analysis and probability distributions.
-  tags: notes, math, probability, modeling
+  shelf: notes
 
 - filename: geometry-a327e4e5-5506-4d05-879d-bb13e58fade1.md
   path: research_library/Troy Notes/geometry-a327e4e5-5506-4d05-879d-bb13e58fade1.md
@@ -61,7 +61,7 @@
   authors: Troy Stribling
   published_date: Jan 30, 2019
   topic: Fundamentals of analytic geometry.
-  tags: notes, math
+  shelf: notes
 
 - filename: hamiltonian-monte-carlo-daa2ebd1-72df-4f3b-8573-488e0a24ab2a.md
   path: research_library/Troy Notes/hamiltonian-monte-carlo-daa2ebd1-72df-4f3b-8573-488e0a24ab2a.md
@@ -69,7 +69,7 @@
   authors: Troy Stribling
   published_date: March 23 2019
   topic: Detailed analysis of Hamiltonian Monte sampling including derivations and simulations.
-  tags: notes, math, probability, modeling
+  shelf: notes
 
 - filename: linear-algebra-bed930cc-fe0d-496a-aa30-634ee36b064d.md
   path: research_library/Troy Notes/linear-algebra-bed930cc-fe0d-496a-aa30-634ee36b064d.md
@@ -77,7 +77,7 @@
   authors: Troy Stribling
   published_date: Jan 30, 2019
   topic: Discussion of discrete Fourier transforms.
-  tags: notes, math
+  shelf: notes
 
 - filename: microcanonical-ensembles-f086b7d7-2966-4699-8c62-75f24f1b7496.md
   path: research_library/Troy Notes/microcanonical-ensembles-f086b7d7-2966-4699-8c62-75f24f1b7496.md
@@ -85,7 +85,7 @@
   authors: Troy Stribling
   published_date: Jan. 01, 2019
   topic: Fundamentals of the classical statistical mechanics of microcanonical ensembles.
-  tags: notes, physics, probability
+  shelf: notes
 
 - filename: miscellaneous-math-181556f7-ef09-46d5-8bee-51d794504a62.md
   path: research_library/Troy Notes/miscellaneous-math-181556f7-ef09-46d5-8bee-51d794504a62.md
@@ -93,7 +93,7 @@
   authors: Troy Stribling
   published_date: Feb 25, 2017
   topic: Review of set theory and other math topics relevant to probability.
-  tags: notes, math, probability
+  shelf: notes
 
 - filename: options-and-measure-theory-volume-1-24333384-1df7-4255-9864-75fa2675f74f.md
   path: research_library/Troy Notes/options-and-measure-theory-volume-1-24333384-1df7-4255-9864-75fa2675f74f.md
@@ -101,7 +101,7 @@
   authors: Troy Stribling
   published_date: Dec 19, 2020
   topic: Solutions on option pricing and a deep dive into measure theory and stochastic calculus.
-  tags: notes, finance, math, probability
+  shelf: notes
 
 - filename: options-and-measure-theory-volume-2-a833222a-7659-4c76-9d7f-d0f077c4dd6f.md
   path: research_library/Troy Notes/options-and-measure-theory-volume-2-a833222a-7659-4c76-9d7f-d0f077c4dd6f.md
@@ -109,7 +109,7 @@
   authors: Troy Stribling
   published_date: Dec 19, 2020
   topic: Solution of problems from book "Problems and Solutions in Mathematical Finance" on option pricing and a deep dive into measure theory and stochastic calculus.
-  tags: notes, finance, math, probability
+  shelf: notes
 
 - filename: options-and-measure-theory-volume-3-a8a32792-7157-4364-8f49-1e7c00be1c7f.md
   path: research_library/Troy Notes/options-and-measure-theory-volume-3-a8a32792-7157-4364-8f49-1e7c00be1c7f.md
@@ -117,7 +117,7 @@
   authors: Troy Stribling
   published_date: Dec 19, 2020
   topic: Solution of problems from book "Problems and Solutions in Mathematical Finance" on option pricing and a deep dive into measure theory and stochastic calculus.
-  tags: notes, finance, math, probability
+  shelf: notes
 
 - filename: options-and-measure-theory-volume-4-e37ab5cd-01dd-4c27-a4f0-9648db8cfd26.md
   path: research_library/Troy Notes/options-and-measure-theory-volume-4-e37ab5cd-01dd-4c27-a4f0-9648db8cfd26.md
@@ -125,7 +125,7 @@
   authors: Troy Stribling
   published_date: Dec 19, 2020
   topic: Solution of problems from book "Problems and Solutions in Mathematical Finance" on option pricing and a deep dive into measure theory and stochastic calculus.
-  tags: notes, finance, math, probability
+  shelf: notes
 
 - filename: other-ensembles-26cc55e4-cddb-49d7-a420-eecdaa61bcce.md
   path: research_library/Troy Notes/other-ensembles-26cc55e4-cddb-49d7-a420-eecdaa61bcce.md
@@ -133,7 +133,7 @@
   authors: Troy Stribling
   published_date: Feb 24, 2019
   topic: Fundamentals of the classical statistical mechanics of canonical ensembles.
-  tags: notes, physics, probability
+  shelf: notes
 
 - filename: probability-distributions-volume-1-ebcecf7d-0bf5-4fe3-9918-51b0e7e9b1ff.md
   path: research_library/Troy Notes/probability-distributions-volume-1-ebcecf7d-0bf5-4fe3-9918-51b0e7e9b1ff.md
@@ -141,7 +141,7 @@
   authors: Troy Stribling
   published_date: Feb 05, 2017
   topic: Review of properties of popular probability distributions with discussion of concepts such as stopping times.
-  tags: notes, probability, math
+  shelf: notes
 
 - filename: problems-and-solutions-in-finance-volume-1-a65c0812-5f21-477d-9eaf-473356aa48a1.md
   path: research_library/Troy Notes/problems-and-solutions-in-finance-volume-1-a65c0812-5f21-477d-9eaf-473356aa48a1.md
@@ -149,7 +149,7 @@
   authors: Troy Stribling
   published_date: Feb 27, 2017
   topic: Solutions on option pricing, stochastic calculus and mathematical concepts relevant to finance from the book "Problems and Solutions in Mathematical Finance".
-  tags: notes, finance, probability
+  shelf: notes
 
 - filename: stochastic-calculus-for-finance-9541b490-f661-40f1-8514-cc4059678baa.md
   path: research_library/Troy Notes/stochastic-calculus-for-finance-9541b490-f661-40f1-8514-cc4059678baa.md
@@ -157,7 +157,7 @@
   authors: Troy Stribling
   published_date: July 18, 2021
   topic: Solutions and discussions of problems from the book "Stochastic Calculus for Finance".
-  tags: notes, finance, probability
+  shelf: notes
 
 - filename: the-black-scholes-model-4c0c6c16-00ce-4ca0-a3dd-9dc239f6030f.md
   path: research_library/Troy Notes/the-black-scholes-model-4c0c6c16-00ce-4ca0-a3dd-9dc239f6030f.md
@@ -165,7 +165,7 @@
   authors: Troy Stribling
   published_date: Sept 18, 2021
   topic: Problem solutions and discussions of problems from the book "The Black-Scholes Model" used in option pricing.
-  tags: notes, finance, probability
+  shelf: notes
 
 - filename: the-volatility-surface-4312edf0-ee23-4884-8c4a-17d403ef4bb0.md
   path: research_library/Troy Notes/the-volatility-surface-4312edf0-ee23-4884-8c4a-17d403ef4bb0.md
@@ -173,7 +173,7 @@
   authors: Troy Stribling
   published_date: Nov 7, 2021
   topic: Problem solutions and discussions of problems from the book "The Volatility Surface" used in pricing volatility.
-  tags: notes, finance, probability
+  shelf: notes
 
 - filename: thermodynamics-bded6d08-a0fa-4051-84a3-3a2ece187286.md
   path: research_library/Troy Notes/thermodynamics-bded6d08-a0fa-4051-84a3-3a2ece187286.md
@@ -181,7 +181,7 @@
   authors: Troy Stribling
   published_date: Dec 15, 2018
   topic: Review of the fundamentals of thermodynamics.
-  tags: notes, physics
+  shelf: notes
 
 # Posts
 - filename: bivariate-normal-distribution-7333fb09-8df5-4d2f-b7bf-22452309d5ea.md
@@ -190,7 +190,7 @@
   authors: Troy Stribling
   published_date: Nov 18, 2018
   topic: Discussion of properties of the bivariate normal distribution.
-  tags: posts, math, probability
+  shelf: posts
 
 - filename: continuous-state-markov-chain-equilibrium-7999fda6-47c9-4cd1-9923-32a7ecf9fa33.md
   path: research_library/Troy Posts/continuous-state-markov-chain-equilibrium-7999fda6-47c9-4cd1-9923-32a7ecf9fa33.md
@@ -198,7 +198,7 @@
   authors: Troy Stribling
   published_date: Aug 16, 2018
   topic: Discussion of the properties of continuous state Markov Chains.
-  tags: posts, math, probability
+  shelf: posts
 
 - filename: discrete-cross-correlation-theorem-a8e72dac-b1d7-4955-b654-086834cebe74.md
   path: research_library/Troy Posts/discrete-cross-correlation-theorem-a8e72dac-b1d7-4955-b654-086834cebe74.md
@@ -206,7 +206,7 @@
   authors: Troy Stribling
   published_date: Aug 25, 2018
   topic: Discussion of the discrete cross-correlation theorem..
-  tags: posts, math, probability
+  shelf: posts
 
 - filename: discrete-state-markov-chain-equilibrium-a36eb141-e471-4e14-97f2-322614ad988f.md
   path: research_library/Troy Posts/discrete-state-markov-chain-equilibrium-a36eb141-e471-4e14-97f2-322614ad988f.md
@@ -214,7 +214,7 @@
   authors: Troy Stribling
   published_date: Aug 8, 2018
   topic: Discussion of the properties of discrete state Markov Chains.
-  tags: posts, math, probability
+  shelf: posts
 
 - filename: inverse-cdf-sampling-c282d912-11e8-4636-89e5-540d2c13564e.md
   path: research_library/Troy Posts/inverse-cdf-sampling-c282d912-11e8-4636-89e5-540d2c13564e.md
@@ -222,7 +222,7 @@
   authors: Troy Stribling
   published_date: July 21, 2018
   topic: Discussion of sampling algorithm developed from inverting the cumulative distribution function (CDF)
-  tags: posts, math, probability
+  shelf: posts
 
 - filename: metropolis-hastings-sampling-264fd378-da89-4617-8a4c-eee95e2e9817.md
   path: research_library/Troy Posts/metropolis-hastings-sampling-264fd378-da89-4617-8a4c-eee95e2e9817.md
@@ -230,7 +230,7 @@
   authors: Troy Stribling
   published_date: Sept 8, 2018
   topic: Discussion of the Metropolis Hasting Sampling algorithm.
-  tags: posts, math, probability
+  shelf: posts
 
 - filename: rejection-sampling-be905917-6df5-4662-901e-f4bbec584a9d.md
   path: research_library/Troy Posts/rejection-sampling-be905917-6df5-4662-901e-f4bbec584a9d.md
@@ -238,7 +238,7 @@
   authors: Troy Stribling
   published_date: July 29, 2018
   topic: Discussion of rejection sampling algorithm.
-  tags: posts, math, probability
+  shelf: posts
 
 # Publications
 - filename: alfvenic-pertrurbations-in-3d-mhd-b0a7e44f-f1ed-4e02-a39e-c952444e12c7.md
@@ -247,7 +247,7 @@
   authors: Troy Stribling, D. A. Roberts, M. L. Goldstein
   published_date: Dec 01, 1996
   topic: We investigate an idealized model of the evolution of magnetohydrodynamic (MHD) scale velocity and magnetic field fluctuations in the equatorial region of the inner heliosphere at solar minimum.
-  tags: publications, physics, fluids
+  shelf: publications
 
 - filename: decay_of_magnetic_helicity_in_ideal_magnetohydrody-0d96203e-56c1-43f8-a854-9b2b1cce56ea.md
   path: research_library/Troy Publications/decay_of_magnetic_helicity_in_ideal_magnetohydrody-0d96203e-56c1-43f8-a854-9b2b1cce56ea.md
@@ -255,7 +255,7 @@
   authors: Troy Stribling, W. H. Matthaeus
   published_date: Jan 01, 1995
   topic: We show that the magnetic helicity associated with fluctuations in homogeneous three-dimensional incompressible ideal magnetohydrodynamics (MHD) with a mean magnetic field decays in time due to nonlinear processes.
-  tags: publications, physics, fluids
+  shelf: publications
 
 - filename: magnetic_helicity_in_magnetohydrodynamic_turbulence-98f8acfe-6c8f-4332-a2cc-778a8a71738c.md
   path: research_library/Troy Publications/magnetic_helicity_in_magnetohydrodynamic_turbulence-98f8acfe-6c8f-4332-a2cc-778a8a71738c.md
@@ -263,7 +263,7 @@
   authors: Troy Stribling, S. Oughton, W. H. Matthaeus
   published_date: May 01, 1995
   topic: A computational investigation of magnetic helicity of the fluctuating magnetic field in ideal and freely decaying three-dimensional (3-D) magnetohydrodynamics (MHD) in the presence of a uniform mean magnetic field is performed.
-  tags: publications, physics, fluids
+  shelf: publications
 
 - filename: nonlinear-decay-of-magnetic-helicity-in-magnetohydrodynamic-tur-ff53a3a0-9d8a-4c20-b7e6-b16d6849be5c.md
   path: research_library/Troy Publications/nonlinear-decay-of-magnetic-helicity-in-magnetohydrodynamic-tur-ff53a3a0-9d8a-4c20-b7e6-b16d6849be5c.md
@@ -271,7 +271,7 @@
   authors: Troy Stribling, William H. Matthaeus
   published_date: Mar 01 1994
   topic: We show that the magnetic helicity associated with fluctuations in homogeneous incompressible magnetohydrodynamic (MHD) turbulence with a mean magnetic field decays in time because of nonlinear processes.
-  tags: publications, physics, fluids
+  shelf: publications
 
 - filename: relaxation-in-two-dimensions-navier-stokes-2e5dbbdb-cc85-4eac-aec4-3ca6d6047729.md
   path: research_library/Troy Publications/relaxation-in-two-dimensions-navier-stokes-2e5dbbdb-cc85-4eac-aec4-3ca6d6047729.md
@@ -279,7 +279,7 @@
   authors: Troy Stribling
   published_date: Nov 01, 1990
   topic: Long-time states of a turbulent, decaying, two-dimensional, Navier-Stokes flow are shown numerically to relax toward maximum-entropy configurations, as defined by the "sinhPoisson" equation. 
-  tags: publications, physics, fluids
+  shelf: publications
 
 - filename: relaxation-processes-in-a-low-order-model-1a6d9fb5-6ac7-4655-be93-915ed8a9f4bb.md
   path: research_library/Troy Publications/relaxation-processes-in-a-low-order-model-1a6d9fb5-6ac7-4655-be93-915ed8a9f4bb.md
@@ -287,7 +287,7 @@
   authors: Troy Stribling, William H. Matthaeus
   published_date: Nov 01, 1990
   topic: The selective decay and dynamic alignment relaxation theories are used to interpret the time asymptotic behavior of a Galerkin model of three-dimensional (3-D) magnetohydrodynamics (MHD). 
-  tags: publications, physics, fluids
+  shelf: publications
 
 - filename: selective-decay-and-coherent-vortices-81352ab2-0081-49dd-9708-037faca72a46.md
   path: research_library/Troy Publications/selective-decay-and-coherent-vortices-81352ab2-0081-49dd-9708-037faca72a46.md
@@ -295,7 +295,7 @@
   authors: William H. Matthaeus, W. Troy Stribling, Daniel Martinez, and Sean Oughton
   published_date: May 14 1990
   topic: Numerical solution of two-dimensional incompressible hydrodynamics shows that states of near minimal ratio of enstrophy to energy can be attained in times short compared with the flow decay time, confirming the simplest turbulent selective decay conjecture, and suggesting that coherent vortex structures do not terminate nonlinear processes.
-  tags: publications, physics, fluids
+  shelf: publications
 
 - filename: statistics-of-ideal-3d-mhd-cb493e37-ff14-403f-b8ef-00237ecb6635.md
   path: research_library/Troy Publications/statistics-of-ideal-3d-mhd-cb493e37-ff14-403f-b8ef-00237ecb6635.md
@@ -303,7 +303,7 @@
   authors: Troy Stribling, W. H. Matthaeus
   published_date: Feb 8, 1990
   topic: Classical Gibbs ensemble methods are used to study the spectral structure of three-dimensional ideal magnetohydrodynamics (MHD) in periodic geometry.
-  tags: publications, physics, fluids
+  shelf: publications
 
 - filename: surface-topography-and-imedence-d897598a-fcb8-4701-a7b3-1c0ac15785c4.md
   path: research_library/Troy Publications/surface-topography-and-imedence-d897598a-fcb8-4701-a7b3-1c0ac15785c4.md
@@ -311,7 +311,7 @@
   authors: J. B. Bates, Y. T. Chu, Troy Stribling
   published_date: Jun 22, 1987
   topic: The small-signal impedance of chemical cells with "blocking" electrodes is dominated at low frequencies ( $f \leqq 100 \mathrm{~Hz}$ ) by the impedance of the metal-electrolyte interfaces which is accurately represented by $Z_{i}=A(j \omega)^{-n}$. The frequency exponent $n, n<1$, is sensitive to the texture of the interface, and several recent theories have been proposed that relate $n$ with the fractal dimension $\bar{d}$ of the rough interface. We find no correlation between $n$ and $\bar{d}$ from experiments using aqueous electrolytes and metal and semiconductor electrodes.
-  tags: publications, physics, chemistry
+  shelf: publications
 
 - filename: the_evolution_of_magnetic_helicity_in_compressible-c08d2af4-f961-4dfa-b589-02469adc5d15.md
   path: research_library/Troy Publications/the_evolution_of_magnetic_helicity_in_compressible-c08d2af4-f961-4dfa-b589-02469adc5d15.md
@@ -319,7 +319,7 @@
   authors: Sanjoy Ghosh, Troy Stribling, W. H. Matthaeus, Melvyn Goldstein
   published_date: Jan 01, 1995
   topic: The solar wind is often modeled as an incompressible magnetofluid. Such a description has been substantiated for two-dimensional (2-D) geometries through compressible magnetohydrodynamic (MHD) simulations which show that many features of incompressible 2-D MHD turbulent relaxation are preserved at subsonic, but non-negligible Mach numbers
-  tags: publications, physics, fluids
+  shelf: publications
 
 # E.T. Jaynes Selected Works
 - filename: carnot-8d44967b-c078-4902-980c-f834d26088a5.md
@@ -328,7 +328,7 @@
   authors: E. T. Jaynes
   published_date: Jul 08, 1996
   topic: Review of historical development of the Second Law of Thermodynamics.
-  tags: jaynes, thermodynamics, physics, probability
+  shelf: jaynes
 
 - filename: gibbs-vs-boltzmann-a02e7d2f-a719-4856-a904-0d09b2c7e74c.md
   path: research_library/Jaynes/gibbs-vs-boltzmann-a02e7d2f-a719-4856-a904-0d09b2c7e74c.md
@@ -336,7 +336,7 @@
   authors: E. T. Jaynes
   published_date: Jan 01, 1963
   topic: The status of the Gibbs and Boltzmann expressions for entropy has been a matter of some confusion in the literature.
-  tags: jaynes, thermodynamics, physics, probability
+  shelf: jaynes
 
 - filename: irreversible-statistical-mechanics-28c93502-9a14-4e9b-8d9c-8a64cd9815a6.md
   path: research_library/Jaynes/irreversible-statistical-mechanics-28c93502-9a14-4e9b-8d9c-8a64cd9815a6.md
@@ -344,7 +344,7 @@
   authors: E. T. Jaynes
   published_date:  Nov 05, 1964
   topic: A general formalism for calculation of irreversible processes, analogous to the paxtition sum algorithe of equilibrium theory, is presented. Mathematically, it is a generalization of the procedure by which Gibbs constructed his amonical and grand canonical ensembles, in which the partition function is witended to a partition functional.
-  tags: jaynes, thermodynamics, physics, probability
+  shelf: jaynes
 
 - filename: macroscopic-prediction-040aedd5-7267-456c-9b1d-daddebed9029.md
   path: research_library/Jaynes/macroscopic-prediction-040aedd5-7267-456c-9b1d-daddebed9029.md
@@ -352,7 +352,7 @@
   authors: E. T. Jaynes
   published_date: Jan 01, 1985
   topic: Although physicists believe that we have understood the laws of microphysics quite well for fifty years, macrophenomena are observed to have a rich variety that is very hard to understand. We see not only lifeless thermal equilibrium and irreversible approaches to it, but lively behavior such as that of cyclic chemical reactions, lasers, self-organizing systems, biological systems.
-  tags: jaynes, thermodynamics, physics, probability
+  shelf: jaynes
 
 - filename: marginalization-and-prior-probabilities-24ed13f8-a8bc-4818-a5f6-a2bd6b4394fc.md
   path: research_library/Jaynes/marginalization-and-prior-probabilities-24ed13f8-a8bc-4818-a5f6-a2bd6b4394fc.md
@@ -360,7 +360,7 @@
   authors: E. T. Jaynes
   published_date: Jan 01, 1980
   topic: A recent article of Dawid, Stone, and Zidek (1973) notes two Bayesian calculation methods--the first using an improper prior, the second avoiding it--that one feels intuitively ought to lead to the same result, but in general do not. This "marginalization paradox" has been interpreted widely as revealing a fundamental inconsistency in the common Bayesian practice of using improper priors to express prior ignorance.
-  tags: jaynes, thermodynamics, physics, probability
+  shelf: jaynes
 
 - filename: minumum-entropy-production-de599502-c603-40b8-a7be-34a1de8352fc.md
   path: research_library/Jaynes/minumum-entropy-production-de599502-c603-40b8-a7be-34a1de8352fc.md
@@ -368,7 +368,7 @@
   authors: E. T. Jaynes
   published_date: Jan 01, 1980
   topic: It seems intuitively reasonable that Gibbs' variational principle determining the conditions of heterogeneous equilibrium can be generalized to nonequilibrium conditions. That is, a nonequilibrium steady state should be the one that makes some kind of generalized entropy production stationary; and even in the presence of irreversible fluxes, the condition for migrational equilibrium should still be the equality of some generalized chemical potentials.
-  tags: jaynes, thermodynamics, physics, probability
+  shelf: jaynes
 
 - filename: poincare-recursion-b2000704-887b-4027-b163-af20aee96a5a.md
   path: research_library/Jaynes/poincare-recursion-b2000704-887b-4027-b163-af20aee96a5a.md
@@ -376,7 +376,7 @@
   authors: E. T. Jaynes
   published_date: Jul 01, 1957
   topic: The theory of almost-periodic functions is applied to the problem of the relation, conjectured by the Earenfests, between Poincare reaurrence times and the time over which averages of phase functions mast be taken in order to approximate their limiting values for infinite time. It is concluded that the necessary averaging times might be very much longer than the Poincare periods. 
-  tags: jaynes, thermodynamics, physics, probability
+  shelf: jaynes
 
 - filename: predictive-statistical-mechanics-7bafb3ce-0662-4a1a-91ce-fb89188bb6bb.md
   path: research_library/Jaynes/predictive-statistical-mechanics-7bafb3ce-0662-4a1a-91ce-fb89188bb6bb.md
@@ -384,7 +384,7 @@
   authors: E. T. Jaynes
   published_date: Jan 01, 1983
   topic: This workshop is concerned with two topics, foundations of quantum theory and of irreversible statistical mechanics, which might appear quite different. Yet the current problems in both fields are basically the same, two different aspects of a deep conceptual hangup that permeates not only physics, but all fields that use probability theory.
-  tags: jaynes, thermodynamics, physics, probability
+  shelf: jaynes
 
 - filename: prior-information-in-inference-265d0158-9676-490c-8cc6-b8ef363c725e.md
   path: research_library/Jaynes/prior-information-in-inference-265d0158-9676-490c-8cc6-b8ef363c725e.md
@@ -392,7 +392,7 @@
   authors: E. T. Jaynes
   published_date: Jan 01, 1983
   topic: For many years the writer has carried an evangelical message to physicists, telling them "Statisticians have learned many important things that physicists ought to know about but don't". Here we face in the opposite direction and note some things physicists have learned about inference, that statisticians might find useful.
-  tags: jaynes, thermodynamics, physics, probability
+  shelf: jaynes
 
 - filename: prior-probabilities-cc1bea82-f141-4185-9bcc-976f9bce0a44.md
   path: research_library/Jaynes/prior-probabilities-cc1bea82-f141-4185-9bcc-976f9bce0a44.md
@@ -400,7 +400,7 @@
   authors: E. T. Jaynes
   published_date: Jan 01, 1983
   topic: In decision theory, mathematical analysis shows that once the sampling distributions, loss function, and sample are specified, the only remaining basis for a choice among different admissible decisions lies in the prior probabilities. Therefore, the logical foundations of decision theory cannot be put in fully satisfactory form until the old problem of arbitrariness (sometimes called "subjectiveness") in assigning prior probabilities is resolved.
-  tags: jaynes, thermodynamics, physics, probability
+  shelf: jaynes
 
 - filename: probablility-as-logic-745d2827-334d-4614-b95f-042357f32150.md
   path: research_library/Jaynes/probablility-as-logic-745d2827-334d-4614-b95f-042357f32150.md
@@ -408,7 +408,7 @@
   authors: E. T. Jaynes
   published_date: Jan 01, 2003
   topic: At the 1988 workshop we called attention to the "Mind Projection Fallacy" which is present in all fields that use probability. Here we give a more complete discussion showing why probabilities need not correspond to physical causal influences, or "propensities" affecting mass phenomena. Probability theory is far more useful if we recognize that probabilities express fundamentally logical inferences pertaining to individual cases. We note several examples of the difference this makes in real applications.
-  tags: jaynes, thermodynamics, physics, probability
+  shelf: jaynes
 
 - filename: rational-of-maximum-entropy-methods-02f50d50-65fc-4409-b7be-e2aaa8b34738.md
   path: research_library/Jaynes/rational-of-maximum-entropy-methods-02f50d50-65fc-4409-b7be-e2aaa8b34738.md
@@ -416,7 +416,7 @@
   authors: E. T. Jaynes
   published_date: Jan 01, 1982
   topic: We discuss the relations between maximum-entropy (MAXENT) and other methods of spectral analysis such as the Schuster, Blackman-Tukey, maximum-likelihood, Bayesian, and Autoregressive (AR, ARMA, or ARIMA) models, emphasizing that they are not in conflict, but rather are appropriate in different problems.
-  tags: jaynes, thermodynamics, physics, probability
+  shelf: jaynes
 
 - filename: some-ramdom-observations-1e22e5c0-3968-4f23-94df-af346b9bba54.md
   path: research_library/Jaynes/some-ramdom-observations-1e22e5c0-3968-4f23-94df-af346b9bba54.md
@@ -424,7 +424,7 @@
   authors: E. T. Jaynes
   published_date: Jan 01, 1982
   topic: When told of the plan to devote an issue of Syntheses to the principle of maximum entropy (PME), my first reaction was puzzlement as to why philosophers should be so interested in it. Then a plausible reason appeared to be that PME has been perceived (correctly, in my view) as a small but nonnegligible part of a fundamental revolution in thought now taking place.
-  tags: jaynes, thermodynamics, physics, probability
+  shelf: jaynes
 
 # Reading List
 - filename: a-pre-asymtotic-metric-for-fat-tailedness-05c91822-821a-49fc-9c23-db03861cef5a.md
@@ -433,7 +433,7 @@
   authors: Nassim Nicholas Taleb
   published_date: Nov 01, 2018
   topic:
-  tags: reading_list, taleb, probability
+  shelf: reading_list
 
 - filename: decoherent-histories-quantum-mechanics-with-one-_real_-fine-gra-0a916406-9313-4b39-8c4e-5c274d6f1aac.md
   path: research_library/Reading List/decoherent-histories-quantum-mechanics-with-one-_real_-fine-gra-0a916406-9313-4b39-8c4e-5c274d6f1aac.md
@@ -441,7 +441,7 @@
   authors: Murray Gell-Mann, James B. Hartle
   published_date: Nov 30, 2011
   topic: Decoherent histories quantum theory is reformulated with the assumption that there is one "real" fine-grained history, specified in a preferred complete set of sum-over-histories variables. This real history is described by embedding it in an ensemble of comparable imagined fine-grained histories, not unlike the familiar ensemble of statistical mechanics.
-  tags: reading_list, probability, physics, quantum
+  shelf: reading_list
 
 - filename: election-predictions-as-martingales-17bad42c-2245-41a9-b819-1a31ba2b5d75.md
   path: research_library/Reading List/election-predictions-as-martingales-17bad42c-2245-41a9-b819-1a31ba2b5d75.md
@@ -449,7 +449,7 @@
   authors: Nassim Nicholas Taleb
   published_date: Oct 01, 2017
   topic: A standard result in quantitative finance is that when the volatility of the underlying security increases, arbitrage pressures push the corresponding binary option to trade closer to 50%, and become less variable over the remaining time to expiration. Counterintuitively, the higher the uncertainty of the underlying security, the lower the volatility of the binary option. 
-  tags: reading_list, taleb, probability, finance
+  shelf: reading_list
 
 - filename: evaluating-gambles-using-dynamics-c0fa4bff-1717-4678-b90c-1a790840d9b1.md
   path: research_library/Reading List/evaluating-gambles-using-dynamics-c0fa4bff-1717-4678-b90c-1a790840d9b1.md
@@ -457,7 +457,7 @@
   authors: Ole Peters, Murray Gell-Mann
   published_date: May 3, 2014
   topic: Gambles are random variables that model possible changes in monetary wealth. Classic decision theory transforms money into utility through a utility function and defines the value of a gamble as the expectation value of utility changes. Utility functions aim to capture individual psychological characteristics, but their generality limits predictive power.
-  tags: reading_list, probability, physics
+  shelf: reading_list
 
 - filename: larger-than-one-probabilities-in-finance-4e697507-2018-49c6-9fe7-a3af1a06dbc8.md
   path: research_library/Reading List/larger-than-one-probabilities-in-finance-4e697507-2018-49c6-9fe7-a3af1a06dbc8.md
@@ -465,7 +465,7 @@
   authors: Mark Burgin, Gunter Meissner
   published_date: Feb 29, 2016
   topic: Traditionally probability is considered as a function that takes values in the interval [0, 1]. However, researchers found that negative, as well as larger than 1 probabilities could be a useful tool in making financial modeling more exact and flexible. Here we show how larger than 1 probabilities could be handy for financial modeling. 
-  tags: reading_list, probability, physics
+  shelf: reading_list
 
 - filename: monte-carlo-methods-in-statistical-mechanics-409becac-f2e9-48f2-9d3e-0924d6e66036.md
   path: research_library/Reading List/monte-carlo-methods-in-statistical-mechanics-409becac-f2e9-48f2-9d3e-0924d6e66036.md
@@ -473,7 +473,7 @@
   authors: Alan D. Sokal
   published_date: Sep 01, 1996
   topic: The goal of these lectures is to give an introduction to current research on Monte Carlo methods in statistical mechanics and quantum field theory.
-  tags: reading_list, probability, physics
+  shelf: reading_list
 
 - filename: quantum-probability-explanation-for-violations-of-rational-deci-d4d738ae-7a92-45ff-b7d3-cf57bb3e1c3a.md
   path: research_library/Reading List/quantum-probability-explanation-for-violations-of-rational-deci-d4d738ae-7a92-45ff-b7d3-cf57bb3e1c3a.md
@@ -481,7 +481,7 @@
   authors: Emmanuel M. Pothos, Jerome R. Busemeyer
   published_date: Mar 25, 2009
   topic: Two experimental tasks in psychology, the two-stage gambling game and the Prisoner's Dilemma game, show that people violate the sure thing principle of decision theory. These paradoxical findings have resisted explanation by classical decision theory for over a decade. A quantum probability model, based on a Hilbert space representation and Schrödinger's equation, provides a simple and elegant explanation for this behaviour.
-  tags: reading_list, probability, physics
+  shelf: reading_list
 
 - filename: spatial-statistics-and-bayesian-computation-7a43eb00-390e-4b10-8efd-26a5534ab136.md
   path: research_library/Reading List/spatial-statistics-and-bayesian-computation-7a43eb00-390e-4b10-8efd-26a5534ab136.md
@@ -489,7 +489,7 @@
   authors: Julian Besag, Peter J. Green
   published_date: May 6, 1992
   topic: SUMMARY Markov chain Monte Carlo (MCMC) algorithms, such as the Gibbs sampler, have provided a Bayesian inference machine in image analysis and in other areas of spatial statistics for several years, founded on the pioneering ideas of Ulf Grenander. More recently, the observation that hyperparameters can be included as part of the updating schedule and the fact that almost any multivariate distribution is equivalently a Markov random field has opened the way to the use of MCMC in general Bayesian computation.
-  tags: reading_list, probability, physics
+  shelf: reading_list
 
 - filename: the-ergodicity-problem-in-economics-1d62d50a-15b5-42fb-9df0-6b615656ce7f.md
   path: research_library/Reading List/the-ergodicity-problem-in-economics-1d62d50a-15b5-42fb-9df0-6b615656ce7f.md
@@ -501,7 +501,7 @@
     value of an observable are the same. Where it is valid, dynamical descriptions
     can often be replaced with much simpler probabilistic ones - time is essentially
     eliminated from the models.
-  tags: reading_list,probability,finance
+  shelf: reading_list
 
 - filename: the-evolution-of-markov-chain-monte-carlo-methods-8bc75170-c6d4-419b-8275-49726a639471.md
   path: research_library/Reading List/the-evolution-of-markov-chain-monte-carlo-methods-8bc75170-c6d4-419b-8275-49726a639471.md
@@ -514,4 +514,4 @@
     and now its most current variants are central to computational statistics. Along
     the way from physics to statistics the algorithm appeared in-and was transformed
     by-applied mathematics and computer science.
-  tags: reading_list,main,probability
+  shelf: reading_list
