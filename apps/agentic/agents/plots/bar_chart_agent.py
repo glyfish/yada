@@ -85,7 +85,7 @@ class BarChartAgent(ToolAgent):
                        title: str,  
                        x_axis_label: str, 
                        y_axis_label: str,
-                       xlabel_rotation: float) -> str:
+                       xlabel_rotation: int) -> str:
         """Generate a bar chart from data points and display it.
         
         Parameters
