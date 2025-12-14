@@ -1,7 +1,6 @@
 {
     "python.envFile": "${workspaceFolder}/.env",
     "editor.snippetSuggestions": "top",
-    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
     "cSpell.words": [
         "navier"
     ]
