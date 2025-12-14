@@ -131,7 +131,7 @@ class ResearchLibraryChromaDocumentLoader(ChromaDocumentLoader):
         logger.info(f"Loaded research document: {meta_data['title']}.")
 
 
-    async def load_all_documents(self, path: str, **kwargs):
+    async def load_all_documents(self, base_path: str, **kwargs):
         pass
 
 

@@ -2,10 +2,6 @@
     "python.envFile": "${workspaceFolder}/.env",
     "editor.snippetSuggestions": "top",
     "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
-    "python.analysis.extraPaths": [
-        "/Users/troy/Develop/gly.fish/yada",
-        "${workspaceFolder}/../navi/lib"
-    ],
     "cSpell.words": [
         "navier"
     ]
