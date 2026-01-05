@@ -3,7 +3,7 @@ import os
 import json
 import re
 import uuid
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -37,6 +37,28 @@ class RequestPayload(BaseModel):
     session_id: Optional[str] = None
 
 
+def _message_content_to_text(message: Any) -> str:
+    """
+    LangChain messages sometimes return a structured content list. Convert whatever
+    comes back into a plain string so downstream regex helpers always receive str.
+    """
+
+    content = getattr(message, "content", message)
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for chunk in content:
+            if isinstance(chunk, dict):
+                text_value = chunk.get("text")
+                if isinstance(text_value, str):
+                    parts.append(text_value)
+                    continue
+            parts.append(str(chunk))
+        return "\n".join(parts)
+    return str(content)
+
+
 # Regex to pull out the embedded PDF hint block (if any)
 PDF_HINT_RE = re.compile(
     r"```json\s*__PDF_HINT_START__\s*(\{.*?\})\s*__PDF_HINT_END__\s*```",
@@ -61,13 +83,9 @@ async def generate_markdown(req: RequestPayload):
         return {"result": "", "session_id": session_id}
 
     # Get the raw text content from the final message
-    try:
-        raw_text = last_msg.content
-    except AttributeError:
-        # fallback if it's just a plain string or something unexpected
-        raw_text = str(last_msg)
+    raw_text = _message_content_to_text(last_msg)
 
-    pdfs_list = []
+    pdfs_list: List[Dict[str, Any]] = []
 
     # Look for an embedded PDF hint block at the end of the answer
     m = PDF_HINT_RE.search(raw_text)
@@ -84,7 +102,7 @@ async def generate_markdown(req: RequestPayload):
         # Strip the hint block from the visible markdown we send to UI
         raw_text = PDF_HINT_RE.sub("", raw_text).strip()
 
-    resp = {"result": raw_text, "session_id": session_id}
+    resp: Dict[str, Any] = {"result": raw_text, "session_id": session_id}
     if pdfs_list:
         resp["pdfs"] = pdfs_list
 
