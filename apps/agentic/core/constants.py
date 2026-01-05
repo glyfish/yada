@@ -19,6 +19,11 @@ RESEARCH_LIBRARY_COLLECTION_NAME = "research-library"
 RESEARCH_LIBRARY_LOCAL_PATH = "./research_library"
 RESEARCH_DOCUMENTS_METADATA_FILE = os.path.join(RESEARCH_LIBRARY_LOCAL_PATH, "research_documents.yml")
 
+# FRED API metadata
+FRED_DB_NAME = "fred"
+FRED_COLLECTION_NAME = "fred"
+FRED_LOCAL_PATH = "./clients/fred"
+
 # PDF document library constants
 PDF_DOCUMENT_LIBRARY_DB_NAME = "pdf_document_library"
 PDF_DOCUMENT_LIBRARY_COLLECTION_NAME = "pdf-documents"
