@@ -25,6 +25,30 @@
       },
       "console": "integratedTerminal",
       "justMyCode": true
+    },
+    {
+      "name": "Python: Current File",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${file}",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "justMyCode": true
+    },
+    {
+      "name": "FRED Loader",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/clients/bin/fred.py",
+      "args": [
+        "--filename",
+        "fred_prices_32455.yaml",
+        "--db-path",
+        "${workspaceFolder}/.db"
+      ],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "justMyCode": true
     }
   ]
 }
