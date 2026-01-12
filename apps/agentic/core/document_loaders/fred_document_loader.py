@@ -198,3 +198,4 @@ class FREDChromaDocumentLoader(ChromaDocumentLoader):
                 logger.exception(f"Failed to load FRED metadata for {filename}. Continuing with next file.")
 
         logger.info("Finished loading FRED metadata files.")
+        
