@@ -12,23 +12,16 @@ from pydantic import BaseModel
 from lib.logger import get_logger
 
 from apps.agentic.agents.supervisor import SupervisorAgent
-from apps.agentic.core.utils import (
-    set_chatgpt_env,
-    set_langsmith_env,
-    set_tavily_env,
-    set_github_env,
-)
+from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 from api.document_router import router as document_router
 
 logger = get_logger("YADA")
 
 app = FastAPI()
-
-set_langsmith_env()
-set_chatgpt_env()
-set_tavily_env()
-set_github_env()
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 

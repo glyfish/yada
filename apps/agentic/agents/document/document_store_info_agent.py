@@ -137,8 +137,7 @@ class DocumentStoreInfoAgent(ToolAgent):
     
     def create_prompt(self):
         """
-        Create the prompt template for the BarChartAgent agent.
-        This defines how the model should interpret the messages and what it should do.
+        Create the prompt template for the document library agent.
         """
     
         system_prompt = """
