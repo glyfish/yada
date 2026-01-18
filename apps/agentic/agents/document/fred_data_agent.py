@@ -10,7 +10,7 @@ from lib.logger import get_logger
 logger = get_logger("YADA")
 
 
-class FredAgent(ChromaRAGAgent):
+class FredDataAgent(ChromaRAGAgent):
     """
     Agent for searching descriptions of time series data of FRED (Federal Reserve Economic Data) 
     website.
