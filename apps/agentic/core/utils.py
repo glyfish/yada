@@ -22,6 +22,11 @@ def set_chatgpt_env(filedir=".keys"):
     os.environ["OPENAI_API_KEY"] = load_api_key(filepath)
 
 
+def set_anthropic_env(filedir=".keys"):
+    filepath = os.path.join(filedir, ".anthropic_key")
+    os.environ["ANTHROPIC_API_KEY"] = load_api_key(filepath)
+
+
 def set_langsmith_env(project_name="yada", tracing=True, filedir=".keys"):
     filepath = os.path.join(filedir, ".langsmith_key")
     os.environ["LANGSMITH_API_KEY"] = load_api_key(filepath)
@@ -51,7 +56,7 @@ def set_bls_env(filedir=".keys"):
 
 
 def set_user_agent():
-    os.environ["USER_AGENT"] = "yada/0.1 (troy.stribling@gly.fish)"
+    os.environ["USER_AGENT"] = "yada/0.1 (troy@gly.fish)"
 
 
 def log_input(x):

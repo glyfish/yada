@@ -1,18 +1,13 @@
 from abc import ABC, abstractmethod
-from typing import Annotated, Literal, Sequence, Any
-import re
-
-from pydantic import BaseModel, Field
+from typing import Any
 from typing import Dict
 
 from langchain import hub
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import HumanMessage
 from langgraph.graph import StateGraph, START, END
-from langchain.prompts import PromptTemplate, ChatPromptTemplate
-from langgraph.prebuilt import tools_condition
+from langchain.prompts import PromptTemplate
 from langchain.tools.retriever import create_retriever_tool
-from langgraph.prebuilt import ToolNode
 
 from apps.agentic.core.document_loaders.chroma_document_loader import ChromaDocumentLoader
 from apps.agentic.core.agents.messages import WorkerState
@@ -27,8 +22,8 @@ logger = get_logger("YADA")
 
 class ChromaRAGAgent(ABC):
 
-    def __init__(self, retriever_tool_name: str, retriever_tool_description: str, document_prompt: str, doc_loader: ChromaDocumentLoader,
-                 query: Dict[str, Any]={}):
+    def __init__(self, retriever_tool_name: str, retriever_tool_description: str, document_prompt: PromptTemplate,
+                 doc_loader: ChromaDocumentLoader, query: Dict[str, Any]={}):
         self.retriever_tool_name = retriever_tool_name
         self.retriever_tool_description = retriever_tool_description
         self._query = query
@@ -122,7 +117,7 @@ class ChromaRAGAgent(ABC):
 
     
     @traceable(run_type="chain", name="ChromaRAGAgent._invoke_model")
-    async def _invoke_model(self, state: WorkerState, config=None) -> WorkerState:
+    async def _invoke_model(self, state: WorkerState, config=None) -> dict[str, Any]:
         """
         Invoke the agent with the current state.
         """
