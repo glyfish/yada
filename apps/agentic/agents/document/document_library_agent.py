@@ -31,28 +31,29 @@ class DocumentLibraryAgent(ChromaRAGAgent):
 
     def __init__(self, query):
         tool_name = "research_note_agent_tool"
-        tool_description = (
-            "PDF Document Retriever"
-            "Description: Search and retrieve content from the PDF document library which contains "
-            "indexed PDF documents that cover a wide range of technical and research topics "
-            "Use this for any query about 'document library', 'library' or 'PDF documents'."
-        )
+        tool_description = """
+            PDF Document Retriever
+            Description: Search and retrieve content from the PDF document library which contains
+            indexed PDF documents that cover a wide range of technical and research topics
+            Use this for any query about 'document library', 'library' or 'PDF documents'.
+        """
 
-        prompt_template = (
-            "You are searching the PDF document library in his indexed library vector store to answer "
-            "requests about the contents of the documents. Information about the document can be found " 
-            "in the metadata attached to each file."
-            "Following is a description of the metadata."
-            "- Document filename: {metadata[filename]}"
-            "- Document file path: {metadata[path]}"
-            "- Document title: {metadata[title]}"
-            "- Document published date: {metadata[published_date]}"
-            "- Document authors: {metadata[authors]}"
-            "- Document topic description: {metadata[topic]}"
-            "- Document shelf: {metadata[shelf]}"
-            "---"
-            "{page_content}"
-        )
+        prompt_template = """
+            You are searching the PDF document library in his indexed library vector store to answer
+            requests about the contents of the documents. Information about the document can be found 
+            in the metadata attached to each file.
+            Following is a description of the metadata.
+            - Document filename: {metadata[filename]}
+            - Document file path: {metadata[path]}
+            - Document title: {metadata[title]}
+            - Document published date: {metadata[published_date]}
+            - Document authors: {metadata[authors]}
+            - Document topic description: {metadata[topic]}
+            - Document shelf: {metadata[shelf]}
+            ---
+            {page_content}
+        """
+        
         document_prompt = PromptTemplate.from_template(template=prompt_template)
 
         super().__init__(tool_name, tool_description, document_prompt, DocumentLibraryLoader(), query)
