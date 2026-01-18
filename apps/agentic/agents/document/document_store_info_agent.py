@@ -20,7 +20,6 @@ from lib.logger import get_logger
 
 logger = get_logger("YADA")
 
-
 class RepositoryFilesInput(BaseModel):
     """Schema for requesting filenames within a repository."""
     account: str = Field(
@@ -114,7 +113,52 @@ class DocumentLibraryTitleQueryInput(BaseModel):
         description="Maximum number of titles to return (default 100).",
     )
 
+def collect_metadata_rows(loader, row_factory) -> list[dict]:
+    collection = getattr(loader.vectorstore, "_collection", None)
+    if collection is None:
+        logger.warning("Vector store collection unavailable for loader %s", loader)
+        return []
 
+    try:
+        result = collection.get(include=["metadatas"], limit=100_000)
+    except Exception as exc:
+        logger.error("Failed to read metadata: %s", exc)
+        return []
+
+    metadatas = result.get("metadatas") or []
+    aggregated: dict[str, dict] = {}
+
+    for meta in metadatas:
+        if not meta:
+            continue
+        path = meta.get("path") or meta.get("filename")
+        if not path:
+            continue
+        if path in aggregated:
+            continue
+
+        aggregated[path] = row_factory(meta, path)
+
+    return list(aggregated.values())
+
+
+def paginate_metadata_rows(rows: list[dict], max_results: int, start_after: str | None) -> list[dict]:
+    if not rows:
+        return []
+
+    sorted_rows = sorted(rows, key=lambda r: (r.get("filename") or r.get("path") or "").lower())
+    start_index = 0
+    if start_after:
+        token = start_after.lower()
+        for idx, row in enumerate(sorted_rows):
+            filename = (row.get("filename") or "").lower()
+            path = (row.get("path") or "").lower()
+            if token in {filename, path}:
+                start_index = idx + 1
+                break
+
+    end_index = min(start_index + max_results, len(sorted_rows))
+    return sorted_rows[start_index:end_index]
 
 class DocumentStoreInfoAgent(ToolAgent):
     """
@@ -161,56 +205,6 @@ class DocumentStoreInfoAgent(ToolAgent):
 
 
     @staticmethod
-    def _collect_metadata_rows(loader, row_factory) -> list[dict]:
-        collection = getattr(loader.vectorstore, "_collection", None)
-        if collection is None:
-            logger.warning("Vector store collection unavailable for loader %s", loader)
-            return []
-
-        try:
-            result = collection.get(include=["metadatas"], limit=100_000)
-        except Exception as exc:
-            logger.error("Failed to read metadata: %s", exc)
-            return []
-
-        metadatas = result.get("metadatas") or []
-        aggregated: dict[str, dict] = {}
-
-        for meta in metadatas:
-            if not meta:
-                continue
-            path = meta.get("path") or meta.get("filename")
-            if not path:
-                continue
-            if path in aggregated:
-                continue
-
-            aggregated[path] = row_factory(meta, path)
-
-        return list(aggregated.values())
-
-
-    @staticmethod
-    def _paginate_metadata_rows(rows: list[dict], max_results: int, start_after: str | None) -> list[dict]:
-        if not rows:
-            return []
-
-        sorted_rows = sorted(rows, key=lambda r: (r.get("filename") or r.get("path") or "").lower())
-        start_index = 0
-        if start_after:
-            token = start_after.lower()
-            for idx, row in enumerate(sorted_rows):
-                filename = (row.get("filename") or "").lower()
-                path = (row.get("path") or "").lower()
-                if token in {filename, path}:
-                    start_index = idx + 1
-                    break
-
-        end_index = min(start_index + max_results, len(sorted_rows))
-        return sorted_rows[start_index:end_index]
-
-
-    @staticmethod
     @lru_cache(maxsize=1)
     def _research_library_metadata(db_path=DB_PATH) -> list[dict]:
         """
@@ -230,7 +224,7 @@ class DocumentStoreInfoAgent(ToolAgent):
                 "shelf": shelf,
             }
 
-        return DocumentStoreInfoAgent._collect_metadata_rows(loader, _row_factory)
+        return collect_metadata_rows(loader, _row_factory)
 
 
     @staticmethod
@@ -256,7 +250,7 @@ class DocumentStoreInfoAgent(ToolAgent):
                 "shelf": shelf,
             }
 
-        return DocumentStoreInfoAgent._collect_metadata_rows(loader, _row_factory)
+        return collect_metadata_rows(loader, _row_factory)
     
     
     @staticmethod
@@ -340,7 +334,7 @@ class DocumentStoreInfoAgent(ToolAgent):
         """
 
         rows = DocumentStoreInfoAgent._research_library_metadata()
-        return DocumentStoreInfoAgent._paginate_metadata_rows(rows, max_results, start_after)
+        return paginate_metadata_rows(rows, max_results, start_after)
 
 
     @staticmethod
@@ -360,7 +354,7 @@ class DocumentStoreInfoAgent(ToolAgent):
         """
 
         rows = DocumentStoreInfoAgent._document_library_metadata()
-        return DocumentStoreInfoAgent._paginate_metadata_rows(rows, max_results, start_after)
+        return paginate_metadata_rows(rows, max_results, start_after)
 
 
     @staticmethod

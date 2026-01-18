@@ -1,8 +1,9 @@
-from typing import Optional
+from typing import Optional, Any, cast
 
 from lib.logger import get_logger
 
 from langchain_core.messages import HumanMessage
+from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 import langchain
@@ -18,6 +19,7 @@ from apps.agentic.agents.plots.time_series_plot_agent import TimeSeriesPlotAgent
 from apps.agentic.agents.document.code_repo_agent import CodeRepoAgent
 from apps.agentic.agents.document.research_library_agent import ResearchLibraryAgent
 from apps.agentic.agents.document.document_store_info_agent import DocumentStoreInfoAgent
+from apps.agentic.agents.document.fred_data_info_agent import FredDataInfoAgent
 
 from apps.agentic.core.agents.query_filters import build_filter_and_query
 
@@ -70,12 +72,15 @@ class SupervisorAgent:
         state: WorkerState = {"messages": [HumanMessage(content=clean_request)]}
 
         # ask supervisor LLM which nodes to run
-        config = {}
+        config: RunnableConfig | None = None
         if session_id is not None:
             config = {"configurable": {"thread_id": session_id}}
 
-        supervisor_output = await self.agent.ainvoke(state, config)
-        routes = [item.strip() for item in supervisor_output.content.split(",")]
+        supervisor_output = await self.agent.ainvoke(cast(dict[str, Any], state), config)
+        output_content = supervisor_output.content
+        if not isinstance(output_content, str):
+            output_content = str(output_content)
+        routes = [item.strip() for item in output_content.split(",")]
         logger.debug(f"Supervisor decided to call: {routes}")
 
         # If supervisor says FINISH, just return the initial state (no tool chosen)
@@ -138,6 +143,15 @@ class SupervisorAgent:
                 1. DO NOT LIST these Files in the output: .gitignore, *.xcodeproj
                 2. Ignore the files in the directory .git and do not list it in the output.
 
+            * {fred_data_info} 
+                Handles requests for information about FRED (Federal Reserve Economic Data) time series 
+                data. The FRED data is organized in a hierarchy of categories that describe the 
+                type of data contained in each time series. The categories and time series are 
+                described in the markdown documents contained in the document store.
+                
+                Example {fred_data_info} Questions
+                1. What are the available FRED time series categories and how many time series 
+                   are in each?
 
         Map pronouns:
             * 'my code', 'code database' → Troy Stribling’s indexed repos in the vector store.
@@ -172,7 +186,8 @@ class SupervisorAgent:
                                                 code_repository_search=team[3],
                                                 research_library_search=team[4],
                                                 document_library_search=team[5],
-                                                document_store_info=team[6])
+                                                document_store_info=team[6],
+                                                fred_info=team[7])
         logger.debug(f"Supervisor prompt: {formatted_system_prompt}")
 
         return  prompt.partial(options=", ".join(options),
@@ -183,7 +198,8 @@ class SupervisorAgent:
                                code_repository_search=team[3],
                                research_library_search=team[4],
                                document_library_search=team[5],
-                               document_store_info=team[6])
+                               document_store_info=team[6],
+                               fred_info=team[7])
 
 
 
@@ -216,4 +232,4 @@ class SupervisorAgent:
             "research_library_search": self._create_agent_node(ResearchLibraryAgent(query).agent, "research_library_search"),
             "document_library_search": self._create_agent_node(DocumentLibraryAgent(query).agent, "document_library_search"),
             "document_store_info": self._create_agent_node(DocumentStoreInfoAgent().agent, "document_store_info"),
-        }
+            "fred_data_info": self._create_agent_node(FredDataInfoAgent().agent, "fred_data_info"),}
