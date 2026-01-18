@@ -43,33 +43,34 @@ class ResearchLibraryAgent(ChromaRAGAgent):
 
     def __init__(self, query):
         tool_name = "research_note_agent_tool"
-        tool_description = (
-            "Troy Stribling Research Note Retriever"
-            "Description: Search and retrieve content from Troy Stribling’s research notes "
-            "indexed in the vector store. The vector store contains research notes "
-            "stored as Markdown files that cover a variety of topics. "
-            "Use this for any query about 'my research', 'my notes', or requests for specific ."
-        )
+        tool_description = """
+            Research Note Retriever
+            Description: Search and retrieve content from research notes
+            indexed in the vector store. The vector store contains research notes
+            stored as Markdown files that cover a variety of topics.
+            Use this for any query about 'research', 'notes', or requests for specific 
+            research documents.
+            """
 
-        prompt_template = (
-            "You are searching Troy Stribling’s research notes in his indexed library vector store to answer "
-            "requests about his research. Information about the note can be found in the metadata attached to each file. "
-            "Following is a description of the metadata."
-            "- Research Note filename: {metadata[filename]}"
-            "- Research Note file path: {metadata[path]}"
-            "- Research Note title: {metadata[title]}"
-            "- Research Note start date: {metadata[start_date]}"
-            "- Research Note author: {metadata[author]}"
-            "- Research Note topic description: {metadata[topic]}"
-            "- Research Note tags: {metadata[tags]}"
-            "- File extension: {metadata[ext]}"
-            "- Image URLs in the note: {metadata[images]}"
-            "- h2 section titles: {metadata[h2]}"
-            "- Section number: {metadata[section]}"
-            "- Section character offset: {metadata[section_char_offset]}"
-            "---"
-            "{page_content}"
-        )
+        prompt_template = """
+            You are searching Troy Stribling’s research notes in his indexed library vector store to answer
+            requests about his research. Information about the note can be found in the metadata attached to each file.
+            Following is a description of the metadata.
+            - Research Note filename: {metadata[filename]}
+            - Research Note file path: {metadata[path]}
+            - Research Note title: {metadata[title]}
+            - Research Note start date: {metadata[start_date]}
+            - Research Note author: {metadata[author]}
+            - Research Note topic description: {metadata[topic]}
+            - Research Note tags: {metadata[tags]}
+            - File extension: {metadata[ext]}
+            - Image URLs in the note: {metadata[images]}
+            - h2 section titles: {metadata[h2]}
+            - Section number: {metadata[section]}
+            - Section character offset: {metadata[section_char_offset]}
+            ---
+            {page_content}
+        """
         document_prompt = PromptTemplate.from_template(template=prompt_template)
 
         super().__init__(tool_name, tool_description, document_prompt, ResearchLibraryChromaDocumentLoader(), query)
