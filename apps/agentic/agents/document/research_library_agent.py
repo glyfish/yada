@@ -14,14 +14,14 @@ from langgraph.prebuilt import tools_condition
 from langchain.tools.retriever import create_retriever_tool
 from langgraph.prebuilt import ToolNode
 
-from apps.agentic.core.agents.chroma_rag_agent import ChromaRAGAgent
+from apps.agentic.core.agents.file_chroma_rag_agent import FileChromaRAGAgent
 from apps.agentic.core.document_loaders.research_library_document_loader import ResearchLibraryChromaDocumentLoader
 from lib.logger import get_logger
 
 logger = get_logger("YADA")
 
 
-class ResearchLibraryAgent(ChromaRAGAgent):
+class ResearchLibraryAgent(FileChromaRAGAgent):
     """
     Research Note Agent that uses a vector store index of research notes to answer questions about research topics.
     It is designed to handle queries related to research notes, topics, authors, dates, and tags.

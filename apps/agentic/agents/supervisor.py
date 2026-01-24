@@ -187,7 +187,7 @@ class SupervisorAgent:
                                                 research_library_search=team[4],
                                                 document_library_search=team[5],
                                                 document_store_info=team[6],
-                                                fred_info=team[7])
+                                                fred_data_info=team[7])
         logger.debug(f"Supervisor prompt: {formatted_system_prompt}")
 
         return  prompt.partial(options=", ".join(options),
@@ -199,7 +199,7 @@ class SupervisorAgent:
                                research_library_search=team[4],
                                document_library_search=team[5],
                                document_store_info=team[6],
-                               fred_info=team[7])
+                               fred_data_info=team[7])
 
 
 
@@ -232,4 +232,4 @@ class SupervisorAgent:
             "research_library_search": self._create_agent_node(ResearchLibraryAgent(query).agent, "research_library_search"),
             "document_library_search": self._create_agent_node(DocumentLibraryAgent(query).agent, "document_library_search"),
             "document_store_info": self._create_agent_node(DocumentStoreInfoAgent().agent, "document_store_info"),
-            "fred_data_info": self._create_agent_node(FredDataInfoAgent().agent, "fred_data_info"),}
+            "fred_data_info": self._create_agent_node(FredDataInfoAgent(query).agent, "fred_data_info"),}
