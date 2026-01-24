@@ -20,7 +20,7 @@ from lib.logger import get_logger
 logger = get_logger("YADA")
 
 
-class ChromaRAGAgent(ABC):
+class FileChromaRAGAgent(ABC):
 
     def __init__(self, retriever_tool_name: str, retriever_tool_description: str, document_prompt: PromptTemplate,
                  doc_loader: ChromaDocumentLoader, query: Dict[str, Any]={}, retriever_k=8, retriever_fetch_k=40):
@@ -117,6 +117,22 @@ class ChromaRAGAgent(ABC):
 
         return self._query
 
+    
+    @traceable(run_type="chain", name="FileChromaRAGAgent._invoke_model")
+    async def _invoke_model(self, state: WorkerState, config=None) -> dict[str, Any]:
+        """
+        Invoke the agent with the current state.
+        """
+
+        messages = state["messages"]
+
+        try:
+            result = await self.tooled_llm.ainvoke(messages)
+            return {"messages": [result]}
+        except Exception as e:
+            logger.error(f"Error invoking model: {e}")
+            return {"messages": [f"Error: {e}"]}
+    
 
     def _generate(self, state):
         """
@@ -135,8 +151,23 @@ class ChromaRAGAgent(ABC):
 
         docs = last_message.content
 
+        # Build full-file section from the top retrieved file(s)
+        files_section = ""
         try:
             hits = self.retriever.invoke(question)
+
+            # Deduplicate by file path and pick the top one
+            seen, top_files = set(), []
+            for d in hits:
+                path = d.metadata.get("path")
+                if not path or path in seen:
+                    continue
+                seen.add(path)
+                top_files.append(d)
+                if len(top_files) >= 1:
+                    break
+
+            files_section = self.read_file(top_files) or ""
         except Exception as e:
             logger.error(f"Full-file append skipped because of error: {e}")
 
@@ -145,9 +176,10 @@ class ChromaRAGAgent(ABC):
         logger.debug(f"RAG Agent generate prompt: {prompt}")
 
         rag_chain = prompt | self.llm | StrOutputParser()
-        response = rag_chain.invoke({"context": docs, "question": question})
-        return {"messages": [response]}    
-    
+        answer_text = rag_chain.invoke({"context": docs, "question": question})
+        final_text = answer_text + (files_section if files_section else "")
+        return {"messages": [final_text]}    
+
 
     def _retrieve(self, state):
         messages = state["messages"]
@@ -188,17 +220,10 @@ class ChromaRAGAgent(ABC):
         return graph.compile(checkpointer=checkpointer)
 
 
-    @traceable(run_type="chain", name="ChromaRAGAgent._invoke_model")
-    async def _invoke_model(self, state: WorkerState, config=None) -> dict[str, Any]:
+    @abstractmethod
+    def read_file(self, top_files):
         """
-        Invoke the agent with the current state.
+        Read the contents of the specified files.
         """
 
-        messages = state["messages"]
-
-        try:
-            result = await self.tooled_llm.ainvoke(messages)
-            return {"messages": [result]}
-        except Exception as e:
-            logger.error(f"Error invoking model: {e}")
-            return {"messages": [f"Error: {e}"]}
+        raise NotImplementedError("Subclasses must implement the read_file method to read files.")

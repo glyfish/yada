@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 from langchain.prompts import PromptTemplate
 
 from apps.agentic.core.constants import (PROGRAMMING_LANGUAGE_MAP)
-from apps.agentic.core.agents.chroma_rag_agent import ChromaRAGAgent
+from apps.agentic.core.agents.file_chroma_rag_agent import FileChromaRAGAgent
 from apps.agentic.core.document_loaders.github_document_loader import GitHubChromaDocumentLoader
 from lib.logger import get_logger
 
@@ -15,7 +15,7 @@ class DocumentGrade(BaseModel):
     binary_score: str = Field(description="Relevance score 'yes' or 'no'")
 
 
-class CodeRepoAgent(ChromaRAGAgent):
+class CodeRepoAgent(FileChromaRAGAgent):
     """
     Code Repository Agent that uses a vector store index of GitHub repositories to answer questions about code.
     It is designed to handle queries related to code, repositories, files, functions, and classes

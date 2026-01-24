@@ -3,14 +3,14 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import AIMessage
 from langchain.prompts import PromptTemplate
 
-from apps.agentic.core.agents.chroma_rag_agent import ChromaRAGAgent
+from apps.agentic.core.agents.file_chroma_rag_agent import FileChromaRAGAgent
 from apps.agentic.core.document_loaders.document_library_loader import DocumentLibraryLoader
 from lib.logger import get_logger
 
 logger = get_logger("YADA")
 
 
-class DocumentLibraryAgent(ChromaRAGAgent):
+class DocumentLibraryAgent(FileChromaRAGAgent):
     """
     PDF Document Agent that uses a vector store index of PDF documents to answer questions about document
     content. It is designed to handle queries related to PDF documents like: title, topic, authors, 
