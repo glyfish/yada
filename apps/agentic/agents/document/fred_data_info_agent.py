@@ -4,7 +4,7 @@ from langchain_core.messages import AIMessage
 from langchain.prompts import PromptTemplate
 
 from apps.agentic.core.agents.chroma_rag_agent import ChromaRAGAgent
-from apps.agentic.core.document_loaders.document_library_loader import DocumentLibraryLoader
+from apps.agentic.core.document_loaders.fred_document_loader import FREDChromaDocumentLoader
 from lib.logger import get_logger
 
 logger = get_logger("YADA")
@@ -20,12 +20,12 @@ class FredDataInfoAgent(ChromaRAGAgent):
     The agent supports the following query filters to refine searches:
 
     Example Queries:
-    - Look in the document library for the definition of a stochastic matrix.
+    - What time series are available Commodities in the FRED data?"
 
     """
 
     def __init__(self, query):
-        tool_name = "research_note_agent_tool"
+        tool_name = "fred_data_info_agent_tool"
         tool_description = """
             FRED Document Retriever
             Description: Search and retrieve data from the FRED document store which contains
@@ -56,12 +56,6 @@ class FredDataInfoAgent(ChromaRAGAgent):
 
         document_prompt = PromptTemplate.from_template(template=prompt_template)
 
-        super().__init__(tool_name, tool_description, document_prompt, DocumentLibraryLoader(), query)
-
-
-    def read_file(self, top_files):
-        """
-        """
-
-        pass
+        super().__init__(tool_name, tool_description, document_prompt, FREDChromaDocumentLoader(), query,
+                         retriever_k=50, retriever_fetch_k=200)
 

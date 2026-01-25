@@ -41,8 +41,6 @@
       "request": "launch",
       "program": "${workspaceFolder}/clients/bin/fred.py",
       "args": [
-        "--filename",
-        "fred_prices_32455.yaml",
         "--db-path",
         "${workspaceFolder}/.db"
       ],
