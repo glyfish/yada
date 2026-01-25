@@ -150,8 +150,7 @@ class SupervisorAgent:
                 described in the markdown documents contained in the document store.
                 
                 Example {fred_data_info} Questions
-                1. What are the available FRED time series categories and how many time series 
-                   are in each?
+                1. What time series are available for GDP in the FRED data?
 
         Map pronouns:
             * 'my code', 'code database' → Troy Stribling’s indexed repos in the vector store.

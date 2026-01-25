@@ -4,7 +4,7 @@ from typing import Dict
 
 from langchain import hub
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.graph import StateGraph, START, END
 from langchain.prompts import PromptTemplate
 from langchain.tools.retriever import create_retriever_tool
@@ -132,21 +132,15 @@ class ChromaRAGAgent(ABC):
         messages = state["messages"]
         question = messages[0].content
         last_message = messages[-1]
-
         docs = last_message.content
-
-        try:
-            hits = self.retriever.invoke(question)
-        except Exception as e:
-            logger.error(f"Full-file append skipped because of error: {e}")
-
 
         prompt = hub.pull("rlm/rag-prompt")
         logger.debug(f"RAG Agent generate prompt: {prompt}")
 
         rag_chain = prompt | self.llm | StrOutputParser()
         response = rag_chain.invoke({"context": docs, "question": question})
-        return {"messages": [response]}    
+        full_response = f"{response}\n\n---\n\n**Retrieved Documents:**\n\n{docs}"
+        return {"messages": messages + [AIMessage(content=full_response)]}    
     
 
     def _retrieve(self, state):
@@ -157,12 +151,17 @@ class ChromaRAGAgent(ABC):
         except Exception as e:
             logger.error(f"Retriever error: {e}")
             return {"messages": [HumanMessage(content=f"Retriever error: {e}")]}
+
+        logger.info(f"Retrieved {len(hits)} documents for query: {question}")
+
         sep = "\n\n-----\n\n"
         parts = []
-        for d in hits:
-            parts.append(f"{d.page_content}")
+        for i, d in enumerate(hits, 1):
+            # Include both content and metadata
+            parts.append(f"Document {i}:\n{d.page_content}")
+
         context = sep.join(parts) if parts else "(no results)"
-        return {"messages": [HumanMessage(content=context)]}
+        return {"messages": messages + [HumanMessage(content=context)]}
 
 
     def _create_agent(self):
