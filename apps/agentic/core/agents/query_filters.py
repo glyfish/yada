@@ -23,6 +23,15 @@ Supported qualifiers (case-insensitive):
   section:<n>
   section:<lo>-<hi>
 
+  # FRED (Federal Reserve Economic Data)
+  category_id:<n>           # exact category ID match
+  category_name:"..."       | category_name:<word>
+  series_id:"..."           | series_id:<word>
+  popularity:<n>            # exact match
+  popularity:>n | >=n | <n | <=n   # comparison operators
+  last_updated:YYYY-MM-DD   # exact date
+  last_updated:after YYYY-MM-DD | last_updated:before YYYY-MM-DD
+
 Returns:
     clean_q: str              # the natural-language remainder to search with
     where: dict | None        # a Chroma filter object, or None if no qualifiers
@@ -55,6 +64,13 @@ QUAL_SHELF   = re.compile(r'\bshelf:\s*(?:"([^"]+)"|([^\s]+))', re.I)
 
 QUAL_PAGE    = re.compile(r"\bpage:\s*(\d+)\b", re.I)
 QUAL_PAGES   = re.compile(r"\bpages?:\s*(\d+)\s*-\s*(\d+)\b", re.I)
+
+# FRED qualifiers
+QUAL_CATEGORY_ID   = re.compile(r"\bcategory_id:\s*(\d+)\b", re.I)
+QUAL_CATEGORY_NAME = re.compile(r'\bcategory_name:\s*(?:"([^"]+)"|([^\s]+))', re.I)
+QUAL_SERIES_ID     = re.compile(r'\bseries_id:\s*(?:"([^"]+)"|([^\s]+))', re.I)
+QUAL_POPULARITY    = re.compile(r"\bpopularity:\s*([<>]=?)?\s*(\d+)\b", re.I)
+QUAL_LAST_UPDATED  = re.compile(r"\blast_updated:\s*(after|before)?\s*(\d{4}-\d{2}-\d{2})\b", re.I)
 
 
 # ---------- Helpers ----------
@@ -172,6 +188,50 @@ def build_filter_and_query(q: str) -> Tuple[str, Optional[Dict[str, Any]]]:
         except Exception:
             pass
         q = QUAL_PAGES.sub("", q).strip()
+
+    # --- FRED qualifiers ---
+    m = QUAL_CATEGORY_ID.search(q)
+    if m:
+        conditions.append({"category_id": int(m.group(1))})
+        q = QUAL_CATEGORY_ID.sub("", q).strip()
+
+    m = QUAL_CATEGORY_NAME.search(q)
+    if m:
+        conditions.append({"category_name": _pick(m)})
+        q = QUAL_CATEGORY_NAME.sub("", q).strip()
+
+    m = QUAL_SERIES_ID.search(q)
+    if m:
+        conditions.append({"series_id": _pick(m)})
+        q = QUAL_SERIES_ID.sub("", q).strip()
+
+    m = QUAL_POPULARITY.search(q)
+    if m:
+        op = m.group(1) or ""
+        val = int(m.group(2))
+        if op == ">":
+            conditions.append({"popularity": {"$gt": val}})
+        elif op == ">=":
+            conditions.append({"popularity": {"$gte": val}})
+        elif op == "<":
+            conditions.append({"popularity": {"$lt": val}})
+        elif op == "<=":
+            conditions.append({"popularity": {"$lte": val}})
+        else:
+            conditions.append({"popularity": val})
+        q = QUAL_POPULARITY.sub("", q).strip()
+
+    m = QUAL_LAST_UPDATED.search(q)
+    if m:
+        direction = (m.group(1) or "").lower()
+        date_val = m.group(2)
+        if direction == "after":
+            conditions.append({"last_updated": {"$gte": date_val}})
+        elif direction == "before":
+            conditions.append({"last_updated": {"$lte": date_val}})
+        else:
+            conditions.append({"last_updated": date_val})
+        q = QUAL_LAST_UPDATED.sub("", q).strip()
 
     if not conditions:
         where = None

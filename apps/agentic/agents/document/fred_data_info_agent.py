@@ -19,8 +19,24 @@ class FredDataInfoAgent(ChromaRAGAgent):
     -------------
     The agent supports the following query filters to refine searches:
 
-    Example Queries:
-    - What time series are available Commodities in the FRED data?"
+    - category_id:<n>                  Exact category ID match
+    - category_name:"..."              Category name (use quotes for multi-word)
+    - series_id:<id>                   Exact series ID match
+    - popularity:<n>                   Exact popularity score
+    - popularity:>n | >=n | <n | <=n   Popularity comparison
+    - last_updated:YYYY-MM-DD          Exact date match
+    - last_updated:after YYYY-MM-DD    Updated after date
+    - last_updated:before YYYY-MM-DD   Updated before date
+
+    Example Queries
+    ---------------
+    - What time series are available for Commodities in the FRED data?
+    - popularity:>20 What GDP series are available in FRED?
+    - category_name:"Farm Products" What agricultural price indexes are in FRED?
+    - series_id:WPU01 What are the details for this FRED series?
+    - category_id:33528 What FRED series are in this category?
+    - popularity:>=50 last_updated:after 2025-01-01 What popular FRED series were recently updated?
+    - category_name:"Final Demand" popularity:>10 What FRED PPI series are most used?
 
     """
 
