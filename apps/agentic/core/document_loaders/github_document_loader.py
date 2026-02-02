@@ -104,9 +104,9 @@ class GitHubChromaDocumentLoader(ChromaDocumentLoader):
             return remote_head.reference.name.split("/")[-1]
 
 
-    def latest_commit_info(self, repo, rel_path: str) -> tuple[str | None, str | None]:
+    def latest_commit_info(self, repo, rel_path: str) -> tuple[str | None, str | None, int | None]:
         """
-        Returns (short_sha, ISO-8601 UTC timestamp) for the latest commit touching rel_path.
+        Returns (short_sha, ISO-8601 UTC timestamp, unix timestamp) for the latest commit touching rel_path.
         """
         try:
             c = next(repo.iter_commits(paths=rel_path, max_count=1))
@@ -129,7 +129,7 @@ class GitHubChromaDocumentLoader(ChromaDocumentLoader):
         documents = await loader.aload()
 
         repo = Repo(path)
-        repo_root = os.path.realpath(repo.working_tree_dir)
+        repo_root = os.path.realpath(repo.working_tree_dir or path)
 
         account = os.path.basename(os.path.dirname(path.rstrip("/")))
         repo_name = os.path.basename(path.rstrip("/"))
@@ -140,7 +140,9 @@ class GitHubChromaDocumentLoader(ChromaDocumentLoader):
             src_abs = None
             if src:
                 # Ensure we resolve relative paths against the repo root, not process CWD.
-                if not os.path.isabs(src):
+                if os.path.isabs(src):
+                    src_abs = os.path.realpath(src)
+                else:
                     src_abs = os.path.realpath(os.path.join(repo_root, src))
 
                 # Only compute a repo-relative path if the file is inside this repo.
