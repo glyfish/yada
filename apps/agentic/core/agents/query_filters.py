@@ -24,13 +24,13 @@ Supported qualifiers (case-insensitive):
   section:<lo>-<hi>
 
   # FRED (Federal Reserve Economic Data)
-  category_id:<n>           # exact category ID match
-  category_name:"..."       | category_name:<word>
-  series_id:"..."           | series_id:<word>
-  popularity:<n>            # exact match
-  popularity:>n | >=n | <n | <=n   # comparison operators
-  last_updated:YYYY-MM-DD   # exact date
-  last_updated:after YYYY-MM-DD | last_updated:before YYYY-MM-DD
+  category_id:<n>                   # exact category ID match
+  category_name:"..."               | category_name:<word>
+  series_id:"..."                   | series_id:<word>
+  popularity:<n>                    # exact match
+  popularity:>n | >=n | <n | <=n    # comparison operators
+  last_updated:YYYY-MM-DD           # exact date
+  last_updated:after YYYY-MM-DD     | last_updated:before YYYY-MM-DD
 
 Returns:
     clean_q: str              # the natural-language remainder to search with
