@@ -212,7 +212,7 @@ class SupervisorAgent:
             MessagesPlaceholder(variable_name="messages"),
             (
                 "system",
-                "Given the conversation above, who should act next? Or should we FINISH Select one of: {options}"
+                "Given the conversation above, who should act next? Or should we FINISH Select all needed agents: {options}"
             )
         ])
 
