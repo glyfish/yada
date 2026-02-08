@@ -26,10 +26,23 @@ def _build_tracer():
     tracer = LangChainTracer(project_name=project)
     return CallbackManager([tracer])
 
-
 @dataclass(frozen=True)
 class LLMSettings:
-    provider: str              # e.g. "openai", "anthropic", "bedrock"
+    """
+    Factory for building LLMs with LangSmith tracing support.
+    Supported values of `provider` and `model are:
+
+    provider    model
+    --------    ---------------------
+    openai      gpt-4.1, gpt-4.1-mini, 
+                gpt-3.5-turbo, gpt-4o,
+                gpt-4o-mini
+    anthropic   claude-opus-4-6, 
+                claude-sonnet-4-5,
+                claude-haiku-4-5
+    """
+
+    provider: str
     model: str
     temperature: float = 0.7
     extra: dict[str, Any] = field(default_factory=dict)
