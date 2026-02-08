@@ -7,7 +7,7 @@ from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.tools import tool
 
 from apps.agentic.core.agents.messages import WorkerState
-from apps.agentic.core.utils import build_llm
+from apps.agentic.core.llm_factory import build_llm
 
 import os
 import sys

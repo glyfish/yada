@@ -9,7 +9,7 @@ from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 import langchain
 
 from apps.agentic.core.agents.messages import get_last_message, WorkerState
-from apps.agentic.core.utils import build_llm
+from apps.agentic.core.llm_factory import build_llm
 from langsmith.run_helpers import traceable
 
 from apps.agentic.agents.search_agent import SearchAgent

@@ -2,7 +2,8 @@ from abc import ABC, abstractmethod
 
 from langgraph.graph import StateGraph, START, END
 from apps.agentic.core.agents.messages import WorkerState
-from apps.agentic.core.utils import build_llm
+from apps.agentic.core.llm_factory import build_llm
+
 from langgraph.prebuilt import tools_condition
 from langchain_core.tools import BaseTool
 from lib.logger import get_logger

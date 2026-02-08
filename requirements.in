@@ -10,6 +10,7 @@ uvicorn[standard]
 langchain
 langgraph
 langchain-openai
+langchain-anthropic
 langchain_community
 langchain_chroma
 chromadb
