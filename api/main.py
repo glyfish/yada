@@ -78,26 +78,8 @@ async def generate_markdown(req: RequestPayload):
     # Get the raw text content from the final message
     raw_text = _message_content_to_text(last_msg)
 
-    pdfs_list: List[Dict[str, Any]] = []
-
     # Look for an embedded PDF hint block at the end of the answer
-    m = PDF_HINT_RE.search(raw_text)
-    if m:
-        json_blob = m.group(1).strip()
-        try:
-            pdf_hint = json.loads(json_blob)
-            if isinstance(pdf_hint, dict):
-                # Shape it for the UI. UI expects: { path, pages }
-                pdfs_list.append(pdf_hint)
-        except Exception as e:
-            logger.error(f"Failed to decode pdf_hint JSON: {e}")
-
-        # Strip the hint block from the visible markdown we send to UI
-        raw_text = PDF_HINT_RE.sub("", raw_text).strip()
-
     resp: Dict[str, Any] = {"result": raw_text, "session_id": session_id}
-    if pdfs_list:
-        resp["pdfs"] = pdfs_list
 
     return resp
 

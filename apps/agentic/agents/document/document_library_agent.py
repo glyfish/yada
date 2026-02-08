@@ -15,22 +15,25 @@ class DocumentLibraryAgent(FileChromaRAGAgent):
     PDF Document Agent that uses a vector store index of PDF documents to answer questions about document
     content. It is designed to handle queries related to PDF documents like: title, topic, authors, 
     published_date, and shelf.
+    """
 
-    Query filters
-    -------------
-    The agent supports the following query filters to refine searches:
-    - authors: Author names (e.g., author:Troy Stribling)
-    - topic: Research topic (e.g., topic:AI)
-    - published_date: Start date of work on the research note (e.g., date:2023-01-01)
-    - shelf: Shelf associated with the document (e.g., shelf:reading_list)
+    QUERY_FILTERS =  """
+        **document_library_search Query Filters**
+        The agent supports the following query filters to refine searches:
+        - authors: Author names (e.g., author:Troy Stribling)
+        - topic: Research topic (e.g., topic:AI)
+        - published_date: Start date of work on the research note (e.g., date:2023-01-01)
+        - shelf: Shelf associated with the document (e.g., shelf:reading_list)
 
-    Example Queries:
-    - Look in the document library for the definition of a stochastic matrix.
-
+        **Example Filtered Queries**
+        - title: Thermodynamics Look in the document library for the definition of a Carnot Cycle.
+        - author:Troy Stribling What documents in the document library discuss Thermodynamics?
+        - published_date:2023-01-01 What documents in the document library discuss Thermodynamics?
+        - shelf:publications Look in the document library for the definition of a Carnot Cycle
     """
 
     def __init__(self, query):
-        tool_name = "research_note_agent_tool"
+        tool_name = "document_library_agent_tool"
         tool_description = """
             PDF Document Retriever
             Description: Search and retrieve content from the PDF document library which contains

@@ -2,6 +2,7 @@
     "python.envFile": "${workspaceFolder}/.env",
     "editor.snippetSuggestions": "top",
     "cSpell.words": [
+        "algrothinsm",
         "navier"
     ]
 }

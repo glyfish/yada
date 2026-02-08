@@ -16,6 +16,11 @@ from apps.agentic.core.document_loaders.document_library_loader import (
     DocumentLibraryLoader,
 )
 
+from apps.agentic.agents.document.code_repo_agent import CodeRepoAgent
+from apps.agentic.agents.document.fred_data_info_agent import FredDataInfoAgent
+from apps.agentic.agents.document.research_library_agent import ResearchLibraryAgent
+from apps.agentic.agents.document.document_library_agent import DocumentLibraryAgent
+
 from lib.logger import get_logger
 
 logger = get_logger("YADA")
@@ -184,7 +189,7 @@ class DocumentStoreInfoAgent(ToolAgent):
         Create the prompt template for the document library agent.
         """
     
-        system_prompt = """
+        system_prompt = f"""
         You are an expert in retrieving information about the contents of documents available in all
         the document stores. The tools allow you to:
         - List repository names and filenames for code repositories.
@@ -193,6 +198,20 @@ class DocumentStoreInfoAgent(ToolAgent):
         - Summarize metadata for PDF documents, including filename, title, authors, published date, topic, and shelf.
         - Filter PDF document titles using author/topic/shelf metadata.
         Call the appropriate tool when the user asks about any of these data sources.
+
+        You also have access to descriptions of the query filters that can be used to
+        refine searches in the document stores. If the user asks for information about
+        the query filters use the following descriptions to answer their question. Only respond
+        with information about the query filters, usage examples for the filters
+        and which agents they apply to. Do not make a request to the document agents for a response.
+
+        {CodeRepoAgent.QUERY_FILTERS}   
+
+        {FredDataInfoAgent.QUERY_FILTERS}
+
+        {ResearchLibraryAgent.QUERY_FILTERS}
+
+        {DocumentLibraryAgent.QUERY_FILTERS}
         """
 
         logger.debug(f"DocumentInfoAgent Agent prompt: {system_prompt}")

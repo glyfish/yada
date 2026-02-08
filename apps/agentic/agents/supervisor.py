@@ -102,62 +102,102 @@ class SupervisorAgent:
         return state
 
 
+    def _create_agent_node(self, agent, node_name: str):
+        async def node(state, config):
+            logger.debug(f"Invoking worker: {node_name}")
+            logger.debug(f"Request Message: {get_last_message(state).content}")
+
+            result = await agent.ainvoke(state, config)
+
+            # For debugging, we can still log what came back
+            try:
+                last_message = get_last_message(result)
+                logger.debug(f"{node_name} response Message: {last_message.content}")
+            except Exception:
+                logger.debug(f"{node_name} returned non-standard result: {result}")
+
+            # CRITICAL: return the agent result directly, don't rewrap
+            return result
+
+        return traceable(run_type="chain", name=node_name)(node)
+
+
+    def _create_workers(self, query):
+        self._workers = {            
+            "researcher": self._create_agent_node(SearchAgent().agent, "researcher"),
+            "bar_chart_generator": self._create_agent_node(BarChartAgent().agent, "bar_chart_generator"),
+            "time_series_generator": self._create_agent_node(TimeSeriesPlotAgent().agent, "time_series_generator"),
+            "code_repository_search": self._create_agent_node(CodeRepoAgent(query).agent, "code_repository_search"),
+            "research_library_search": self._create_agent_node(ResearchLibraryAgent(query).agent, "research_library_search"),
+            "document_library_search": self._create_agent_node(DocumentLibraryAgent(query).agent, "document_library_search"),
+            "document_store_info": self._create_agent_node(DocumentStoreInfoAgent().agent, "document_store_info"),
+            "fred_data_info": self._create_agent_node(FredDataInfoAgent(query).agent, "fred_data_info"),}
+        
+
     def _create_prompt(self):
         """
         Create the prompt template for the supervisor agent.
         This defines how the model should interpret the messages and what it should do.
         """
     
-        system_prompt = """
+        system_prompt = f"""
         You are a supervisor for Troy Stribling tasked with delegating tool requests to a team of agents. 
-        The agents you supervise are called {team_members}.
-            * {researcher}
+        The agents you supervise are called {{team_members}}.
+
+        *Agent Team Descriptions*
+            - {{researcher}}
                 Performs search requests when data is needed
-            * {bar_chart_generator} 
+            - {{bar_chart_generator}} 
                 Plots categorical data as a bar chart. 
-            * {time_series_generator} 
+            - {{time_series_generator}} 
                 Generates time series plots for time varying numerical data.
-            * {code_repository_search} 
+            - {{code_repository_search}} 
                 Searches Troy Stribling's code repositories for relevant code snippets and generates 
                 reports as requested. If there is a mention of 'my code', 'my repo(s)', 'my project', 'YADA', 'glyfish', 
                 'troystribling', a file path, a filename, or a function/class, you MUST call the 'Troy Stribling Code Repository Agent'.
-            * {research_library_search} 
+            - {{research_library_search}} 
                 Searches Troy Stribling's research library for relevant information and generates
                 reports as requested. If there is a mention of 'my research', 'my documents', 'my papers', 'my articles',
                 'Troy Stribling research documents', you MUST call the 'Troy Stribling Research Library Agent'.
-            * {document_library_search} 
+            - {{document_library_search}} 
                 Searches PDF document library for relevant information and generates 
                 reports as requested. If there is a mention of 'document library', 'pdf documents', 'articles', 'documents'
                 you MUST call the Document Library Agent"
-            * {document_store_info} 
+            - {{document_store_info}} 
                 Retrieves information requested from the specified document store. If there is a request
                 referencing one of the known document stores for the document filenames, titles, authors or other
                 data available in the document store meta data you MUST call the Document Information Agent.
                 The available document stores are: Code Repositories, Research Documents and Document Library.
-                
-                Example {document_store_info} Questions
+                This agent also provides information about the query filters that can be used to refine searches 
+                in the document stores.
+
+                Example {{document_store_info}} Questions
                 1. What repositories are available in my code repositories.
                 2. List the files in the troystribling/SimpleFutures repository.
+                3. What query filters are available for searching {{code_repository_search}}?
+                4. What query filters are available for searching {{research_library_search}}?
+                5. What query filters are available for searching {{document_library_search}}?
+                6. What query filters are available for searching {{fred_data_info}}?
 
-                {document_store_info} File listing Instructions
+                {{document_store_info}} File listing Instructions
                 1. DO NOT LIST these Files in the output: .gitignore, *.xcodeproj
                 2. Ignore the files in the directory .git and do not list it in the output.
 
-            * {fred_data_info} 
+            - {{fred_data_info}} 
                 Handles requests for information about FRED (Federal Reserve Economic Data) time series 
                 data. The FRED data is organized in a hierarchy of categories that describe the 
                 type of data contained in each time series. The categories and time series are 
                 described in the markdown documents contained in the document store.
                 
-                Example {fred_data_info} Questions
+                Example {{fred_data_info}} Questions
                 1. What time series are available for GDP in the FRED data?
 
-        Map pronouns:
+        *Map pronouns**
             * 'my code', 'code database' → Troy Stribling’s indexed repos in the vector store.
             * 'code database' → Troy Stribling’s indexed repos in the vector store.
             * 'my research', → Troy Stribling’s indexed research library in the vector store.
                 
-        Your Task
+       *Your Task*
             You task is to determine which of the agents should process the user request and respond with the name of the all agents
             required. If there is no agent that can respond to the request return FINISH. 
             It is possible that a request would require multiple agents and be executed in some order.
@@ -201,34 +241,3 @@ class SupervisorAgent:
                                fred_data_info=team[7])
 
 
-
-    def _create_agent_node(self, agent, node_name: str):
-        async def node(state, config):
-            logger.debug(f"Invoking worker: {node_name}")
-            logger.debug(f"Request Message: {get_last_message(state).content}")
-
-            result = await agent.ainvoke(state, config)
-
-            # For debugging, we can still log what came back
-            try:
-                last_message = get_last_message(result)
-                logger.debug(f"{node_name} response Message: {last_message.content}")
-            except Exception:
-                logger.debug(f"{node_name} returned non-standard result: {result}")
-
-            # CRITICAL: return the agent result directly, don't rewrap
-            return result
-
-        return traceable(run_type="chain", name=node_name)(node)
-
-
-    def _create_workers(self, query):
-        self._workers = {            
-            "researcher": self._create_agent_node(SearchAgent().agent, "researcher"),
-            "bar_chart_generator": self._create_agent_node(BarChartAgent().agent, "bar_chart_generator"),
-            "time_series_generator": self._create_agent_node(TimeSeriesPlotAgent().agent, "time_series_generator"),
-            "code_repository_search": self._create_agent_node(CodeRepoAgent(query).agent, "code_repository_search"),
-            "research_library_search": self._create_agent_node(ResearchLibraryAgent(query).agent, "research_library_search"),
-            "document_library_search": self._create_agent_node(DocumentLibraryAgent(query).agent, "document_library_search"),
-            "document_store_info": self._create_agent_node(DocumentStoreInfoAgent().agent, "document_store_info"),
-            "fred_data_info": self._create_agent_node(FredDataInfoAgent(query).agent, "fred_data_info"),}

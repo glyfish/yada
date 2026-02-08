@@ -20,21 +20,23 @@ class CodeRepoAgent(FileChromaRAGAgent):
     Code Repository Agent that uses a vector store index of GitHub repositories to answer questions about code.
     It is designed to handle queries related to code, repositories, files, functions, and classes
     stored in the indexed GitHub repositories.
-    
-    Query filters
-    -------------
-    The agent supports the following query filters to refine searches:
-    - account: GitHub account name (e.g., account:troystribling)
-    - repo: Repository name (e.g., repo:zgomot)
-    - ext: File extension (e.g., ext:rb, ext:js, ext:py)
-    - before: Date to filter commits before (e.g., before:2014-01-01)
-    - after: Date to filter commits after (e.g., after:2014-01-01)
-    
-    Example queries:
-    - account:troystribling repo:zgomot ext:rb Where is MIDI output handled?
-    - account:troystribling repo:zgomot ext:rb before:2014-01-01 Where is MIDI output handled?
-    
     """
+
+    QUERY_FILTERS =  """
+        **code_repository_search Query Filters**
+        The agent supports the following query filters to refine searches:
+        - account: GitHub account name (e.g., account:troystribling)
+        - repo: Repository name (e.g., repo:zgomot)
+        - ext: File extension (e.g., ext:rb, ext:js, ext:py)
+        - before: Date to filter commits before (e.g., before:2014-01-01)
+        - after: Date to filter commits after (e.g., after:2014-01-01)
+        
+        **Example Queries Using Filter**
+        - account:troystribling repo:zgomot ext:rb Where is MIDI output handled?
+        - account:troystribling repo:zgomot ext:rb before:2014-01-01 Where is MIDI output handled?
+        - account:troystribling repo:zgomot ext:rb after:2014-01-01 Where is MIDI output handled?
+    """
+
 
     def __init__(self, query):
         tool_name = "github_agent_tool"
@@ -60,6 +62,7 @@ class CodeRepoAgent(FileChromaRAGAgent):
             "---"
             "{page_content}"
         )
+
         document_prompt = PromptTemplate.from_template(template=prompt_template)
 
         super().__init__(tool_name, tool_description, document_prompt, GitHubChromaDocumentLoader(), query)
