@@ -231,10 +231,6 @@
             padding: .5rem .75rem; font-weight: 600; background: #f7f7f7; border-bottom: 1px solid #eee;
         }
         .result-body { padding: .75rem .9rem; }
-        .pdf-wrap { border-top: 1px solid #eee; background: #fafafa; }
-        .pdf-bar { display: flex; align-items: center; gap: .5rem; padding: .5rem .75rem; border-bottom: 1px solid #eee; background: #f7f7f7; }
-        .pdf-bar .spacer { flex: 1; }
-        .pdf-frame { width: 100%; height: 65vh; border: 0; background: #2b2b2b; }
         .dropdown { display: inline-block; position: relative; }
         .dropdown-menu {
             position: absolute;
@@ -391,8 +387,6 @@
         const GITHUB_LOAD_ALL_REPOS = "/api/document/load_all_github_repos";
         const GITHUB_LOAD_REPO = "/api/document/load_github_repo";
         const RESEARCH_NOTE_LOAD = "/api/document/load_research_document";
-        const PDF_LOAD_DOCUMENT = "/api/document/load_pdf_document";
-        const PDF_STREAM_DOCUMENT = "/api/document/stream_pdf_document";
         const YADA_REQUEST = "/api/request";
 
         // Close dropdown on outside click / ESC
@@ -501,173 +495,7 @@
             [filenameInput, titleInput, authorsInput, dateInput, shelfInput].forEach(el => el.addEventListener("keydown", e => {if (e.key === "Enter") { e.preventDefault(); submit(); }}));
         };
 
-        // Load PDF Document Dialog
-        const handleLoadPDFDocumentDialog = () => {
-            const dialog = document.createElement("dialog");
-            dialog.className = "modal";
-            dialog.innerHTML = `
-                <form method="dialog" novalidate autocomplete="off">
-                <label for="pdf-filename">Filename:</label>
-                <div class="dialog-input-with-button">
-                    <input id="pdf-filename" name="filename" type="text" placeholder="paper.pdf" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
-                    <input id="pdf-file" type="file" accept=".pdf" style="display:none">
-                    <button type="button" class="btn secondary" id="pdf-file-btn">Browse…</button>
-                </div>
-
-                <label for="pdf-title">Title:</label>
-                <input id="pdf-title" name="title" type="text" placeholder="Paper Title"autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
-
-                <label for="pdf-authors">Authors:</label>
-                <input id="pdf-authors" name="authors" type="text" placeholder="Last, First; Last, First"autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
-
-                <label for="pdf-date">Published Date:</label>
-                <input id="pdf-date" name="published_date" type="date"autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
-
-                <label for="pdf-topic">Topic:</label>
-                <textarea id="pdf-topic" name="topic" rows="3" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="e.g., Thermodynamics, RNNs, ..."autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required></textarea>
-
-                <label for="pdf-shelf">Shelf:</label>
-                <input id="pdf-shelf" name="shelf" type="text" placeholder="e.g., reading_list" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
-
-                <menu>
-                    <button type="button" class="btn" id="cancelPDFBtn">Cancel</button>
-                    <button type="button" class="btn primary" id="loadPDFBtn">Load PDF Document</button>
-                </menu>
-                </form>
-            `;
-            document.body.appendChild(dialog);
-            dialog.showModal();
-
-            const form          = dialog.querySelector("form");
-            const cancelBtn     = dialog.querySelector("#cancelPDFBtn");
-            const loadBtn       = dialog.querySelector("#loadPDFBtn");
-            const filenameInput = dialog.querySelector("input[name='filename']");
-            const titleInput    = dialog.querySelector("input[name='title']");
-            const authorsInput  = dialog.querySelector("input[name='authors']");
-            const dateInput     = dialog.querySelector("input[name='published_date']");
-            const topicInput    = dialog.querySelector("textarea[name='topic']");
-            const shelfInput    = dialog.querySelector("input[name='shelf']");
-            const fileInput     = dialog.querySelector("#pdf-file");
-            const fileButton    = dialog.querySelector("#pdf-file-btn");
-
-            if (fileButton && fileInput) {
-                fileButton.addEventListener("click", () => fileInput.click());
-                fileInput.addEventListener("change", () => {
-                    if (fileInput.files && fileInput.files[0]) {
-                        filenameInput.value = fileInput.files[0].name;
-                    }
-                });
-            }
-
-            requestAnimationFrame(() => filenameInput.focus());
-
-            const close = () => { dialog.close(); dialog.remove(); };
-            cancelBtn.addEventListener("click", close);
-            dialog.addEventListener("cancel", e => { e.preventDefault(); close(); }); // Esc
-
-            const submit = async () => {
-                // Built-in HTML5 required checks
-                if (!form.reportValidity()) return;
-
-                // Custom checks: authors must parse to non-empty array
-                authorsInput.setCustomValidity("");
-                shelfInput.setCustomValidity("");
-
-                const authors = (authorsInput.value || "")
-                    .split(/[;,]/).map(s => s.trim()).filter(Boolean);
-                const shelf = shelfInput.value.trim();
-
-                if (authors.length === 0) {
-                    authorsInput.setCustomValidity("Provide at least one author (comma or semicolon separated).");
-                    form.reportValidity();
-                    authorsInput.setCustomValidity("");
-                    return;
-                }
-                if (!shelf) {
-                    shelfInput.setCustomValidity("Provide a shelf name.");
-                    form.reportValidity();
-                    shelfInput.setCustomValidity("");
-                    return;
-                }
-
-                const payload = {
-                    filename: filenameInput.value.trim(),
-                    title:    titleInput.value.trim(),
-                    authors,                                   // array of strings
-                    published_date: dateInput.value,           // YYYY-MM-DD
-                    topic:    topicInput.value.trim(),
-                    shelf
-                };
-
-                const prev = loadBtn.textContent;
-                loadBtn.disabled = true;
-                loadBtn.textContent = "Loading…";
-                try {
-                    const res = await fetch(PDF_LOAD_DOCUMENT, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(payload)
-                    });
-                    const result = await res.json().catch(() => ({}));
-                    if (!res.ok) throw new Error(result?.detail || result?.message || `Request failed (${res.status})`);
-                    alert(result.status || "PDF load requested.");
-                    close();
-                } catch (err) {
-                    alert(`Error loading PDF: ${err.message || err}`);
-                } finally {
-                    loadBtn.disabled = false;
-                    loadBtn.textContent = prev;
-                }
-            };
-
-            loadBtn.addEventListener("click", submit);
-            [filenameInput, titleInput, authorsInput, dateInput, topicInput, shelfInput].forEach(el =>
-                el.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); submit(); } })
-            );
-        };
-
-        // ===== Feed helpers: detect PDF, scoped markdown render, prepend card =====
-        function extractPdfHint(md) {
-            const s = String(md || "");
-            // From 'Path: /…/file.pdf' (header produced by read_file)
-            const pathMatch = s.match(/^\s*Path:\s*(.+?\.pdf)\s*$/mi);
-            if (pathMatch) return { path: pathMatch[1], page: null };
-            
-            // From 'File: name.pdf' (basename only)
-            const fileMatch = s.match(/^\s*File:\s*(.+?\.pdf)\s*$/mi);
-            if (fileMatch) return { file: fileMatch[1], page: null };
-
-            // Optional 'Pages: 3,5-7' header → turn into [3,5,6,7]
-            let pages = null;
-            const pagesMatch = s.match(/^\s*Pages:\s*([0-9,\-\s]+)\s*$/mi);
-            if (pagesMatch) {
-                const raw = pagesMatch[1];
-                const expand = (tok) => {
-                    const t = tok.trim();
-                    if (!t) return [];
-                    if (t.includes("-")) {
-                        const [a,b] = t.split("-").map(n => parseInt(n,10));
-                        if (Number.isInteger(a) && Number.isInteger(b) && a <= b) {
-                            return Array.from({length: b - a + 1}, (_,i) => a + i);
-                        }
-                        return [];
-                    }
-                    const n = parseInt(t,10);
-                    return Number.isInteger(n) ? [n] : [];
-                };
-                pages = raw.split(",").flatMap(expand);
-            }
-
-            // From a link to your endpoint
-            const urlMatch = s.match(/\/api\/document\/pdf\?path=([^\)\s#]+)(?:#page=(\d+))?/i);
-            if (urlMatch) return { path: decodeURIComponent(urlMatch[1]), page: urlMatch[2] ? +urlMatch[2] : null };
-
-            // Any absolute-looking .pdf path
-            const loose = s.match(/(\/[^\s)]+\.pdf)/i);
-            if (loose) return { path: loose[1], page: null };
-
-            return null;
-        }
+        // ===== Feed helpers: scoped markdown render, prepend card =====
 
         // Clamp very large markdown bodies (keep head+tail)
         function clampMarkdown(md, max) {
@@ -698,53 +526,7 @@
             }
         }
 
-        function basename(p) {
-            if (!p) return "";
-            const parts = p.split("/");
-            return parts[parts.length - 1];
-        }
-
-        // For PDF answers: pull out the AI summary / explanation section,
-        // but drop the raw scraped page dump.
-        // Heuristic:
-        //   - Stop before a line that starts with "File:", "Path:", "Title:", "Authors:",
-        //     "Published:", "Topic:", "Tags:", "--- Page", or "```text".
-        //   - Also stop before a lone "-----" divider.
-        function extractPdfSummary(md) {
-            if (!md) return "";
-            const lines = String(md).split(/\r?\n/);
-            const kept = [];
-            for (const line of lines) {
-                const trimmed = line.trim();
-
-                // hard stop markers that mean "below here is raw source dump"
-                if (
-                    /^File:/i.test(trimmed) ||
-                    /^Path:/i.test(trimmed) ||
-                    /^Title:/i.test(trimmed) ||
-                    /^Authors?:/i.test(trimmed) ||
-                    /^Published/i.test(trimmed) ||
-                    /^Topic:/i.test(trimmed) ||
-                    /^Tags:/i.test(trimmed) ||
-                    /^---\s*Page\b/i.test(trimmed) ||
-                    /^```/.test(trimmed) ||
-                    /^[-]{2,}$/.test(trimmed)          // "-----"
-                ) {
-                    break;
-                }
-
-                kept.push(line);
-            }
-
-            // Trim trailing blank lines
-            while (kept.length && kept[kept.length - 1].trim() === "") {
-                kept.pop();
-            }
-
-            return kept.join("\n").trim();
-        }
-
-        async function prependResultCard(userPrompt, markdown, pdfMeta /* optional */) {
+        async function prependResultCard(userPrompt, markdown) {
             const feed = document.getElementById("results-feed");
             const sc = document.scrollingElement || document.documentElement;
             const before = sc.scrollTop, prevH = sc.scrollHeight;
@@ -776,40 +558,8 @@
             body.appendChild(qDiv);
             body.appendChild(aDiv);
 
-            // figure out if there's a PDF
-            const hintFromMd = extractPdfHint(markdown) || {};
-            const pdf = Object.assign({}, hintFromMd, pdfMeta || {});
-            const hasPdf = !!(pdf && (pdf.path || pdf.file));
-
             card.appendChild(head);
             card.appendChild(body);
-
-            if (hasPdf) {
-                const fileNameForBackend = basename(pdf.file || pdf.path || "");
-                if (fileNameForBackend) {
-                    const viewer = document.createElement("div");
-                    viewer.className = "pdf-wrap";
-
-                    const baseUrl = `${PDF_STREAM_DOCUMENT}?name=${encodeURIComponent(fileNameForBackend)}`;
-                    const startUrl = `${baseUrl}${pdf.page ? `#page=${pdf.page}` : ""}`;
-
-                    const bar = document.createElement("div");
-                    bar.className = "pdf-bar";
-                    bar.innerHTML = `
-                        <span>Source PDF</span>
-                        <span class="spacer"></span>
-                        <a class="btn" href="${startUrl}" target="_blank" rel="noopener">Open in new tab</a>
-                    `;
-                    viewer.appendChild(bar);
-
-                    const frame = document.createElement("iframe");
-                    frame.className = "pdf-frame";
-                    frame.src = startUrl;
-                    viewer.appendChild(frame);
-
-                    card.appendChild(viewer);
-                }
-            }
 
             // Insert card before rendering, so MathJax/etc. can run after it's in DOM
             feed.insertBefore(card, feed.firstChild);
@@ -817,35 +567,22 @@
             updateResponsesHeader();
 
             // Render the answer text into aDiv
-            if (!hasPdf) {
-                // normal RAG / code / math answer
-                const clamped = clampMarkdown(markdown, FEED_MAX_CHARS);
-                await renderMarkdownInto(aDiv, clamped.text);
+            const clamped = clampMarkdown(markdown, FEED_MAX_CHARS);
+            await renderMarkdownInto(aDiv, clamped.text);
 
-                if (clamped.truncated) {
-                    const moreRow = document.createElement("div");
-                    moreRow.style = "display:flex;justify-content:flex-end;padding:.5rem .9rem;";
-                    const btn = document.createElement("button");
-                    btn.className = "btn";
-                    btn.textContent = "Show full";
-                    btn.onclick = async () => {
-                        btn.disabled = true;
-                        await renderMarkdownInto(aDiv, clamped.full);
-                        moreRow.remove();
-                    };
-                    moreRow.appendChild(btn);
-                    card.appendChild(moreRow);
-                }
-            } else {
-                // PDF answer:
-                // show ONLY summary text above the PDF viewer, not the full raw page dump
-                const summaryOnly = extractPdfSummary(markdown);
-                if (summaryOnly) {
-                    await renderMarkdownInto(aDiv, summaryOnly);
-                } else {
-                    // If we got no usable summary, just hide the empty answer div
-                    aDiv.style.display = "none";
-                }
+            if (clamped.truncated) {
+                const moreRow = document.createElement("div");
+                moreRow.style = "display:flex;justify-content:flex-end;padding:.5rem .9rem;";
+                const btn = document.createElement("button");
+                btn.className = "btn";
+                btn.textContent = "Show full";
+                btn.onclick = async () => {
+                    btn.disabled = true;
+                    await renderMarkdownInto(aDiv, clamped.full);
+                    moreRow.remove();
+                };
+                moreRow.appendChild(btn);
+                card.appendChild(moreRow);
             }
 
             // keep scroll position stable after prepend
@@ -1000,11 +737,7 @@
                     sessionId.val = data.session_id;
                 }
 
-                await prependResultCard(
-                    promptBeforeSend,
-                    data.result,
-                    (data.pdfs && data.pdfs[0]) || null
-                );
+                await prependResultCard(promptBeforeSend, data.result);
 
                 // SUCCESS: clear textarea content + reset height
                 textValue.val = "";
@@ -1080,14 +813,6 @@
                                         onclick: (e) => { e.stopPropagation(); showLoadMenu.val = false; handleLoadResearchDocumentDialog(); }
                                     },
                                     "Load Research Document"
-                                ),
-                                // Load PDF Document
-                                button(
-                                    {
-                                        class: "menu-item",
-                                        onclick: (e) => { e.stopPropagation(); showLoadMenu.val = false; handleLoadPDFDocumentDialog(); }
-                                    },
-                                    "Load PDF Document"
                                 )
                             )
                         )
