@@ -11,7 +11,8 @@ from langchain.tools.retriever import create_retriever_tool
 
 from apps.agentic.core.document_loaders.chroma_document_loader import ChromaDocumentLoader
 from apps.agentic.core.agents.messages import WorkerState
-from apps.agentic.core.utils import build_llm
+from apps.agentic.core.llm_factory import build_llm
+
 from apps.agentic.core.checkpointer import checkpointer
 from langsmith.run_helpers import traceable
 
