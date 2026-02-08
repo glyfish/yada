@@ -24,21 +24,23 @@ logger = get_logger("YADA")
 class ResearchLibraryAgent(FileChromaRAGAgent):
     """
     Research Note Agent that uses a vector store index of research notes to answer questions about research topics.
-    It is designed to handle queries related to research notes, topics, authors, dates, and tags.
+    It is designed to handle queries related to research notes, topics, authors, dates, and tags
+    """
     
-    Query filters
-    -------------
-    The agent supports the following query filters to refine searches:
-    - author: Author name (e.g., author:Troy Stribling)
-    - topic: Research topic (e.g., topic:AI)
-    - start_date: Start date of work on the research note (e.g., date:2023-01-01)
-    - tag: Tag associated with the research note (e.g., tag:physics)
-    - section: Section number within the research note (e.g., section:2)
-    - section: Range of section within the research note (e.g., section:2-5)
+    QUERY_FILTERS =  """
+        **research_library_search Query Filters**
+        The agent supports the following query filters to refine searches:
+        - author: Author name (e.g., author:Troy Stribling)
+        - topic: Research topic (e.g., topic:AI)
+        - shelf: Tag used to identify document groups
+        - date: Start date of work on the research note (e.g., date:2023-01-01)
 
-    Example Queries:
-    - title: Thermodynamics Look in my research notes for the definition of a Carnot Cycle.
-
+        Example Queries:
+        - title: Thermodynamics Look in my research notes for the definition of a Carnot Cycle.
+        - author:Troy Stribling What research notes discuss Thermodynamics?
+        - date:2023-01-01 What research notes discuss Thermodynamics??
+        - shelf:publications What research notes discuss thermodynamics?
+        - notes: What algorithm are used for generating fractional brownian motion?
     """
 
     def __init__(self, query):
