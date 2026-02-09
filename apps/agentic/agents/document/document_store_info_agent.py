@@ -7,7 +7,7 @@ from functools import lru_cache
 
 from pathlib import Path
 
-from apps.agentic.core.agents.tool_agent import ToolAgent
+from apps.agentic.core.agents.react_agent import ReactAgent
 from apps.agentic.core.constants import GITHUB_LOCAL_PATH, DB_PATH
 from apps.agentic.core.document_loaders.research_library_document_loader import (
     ResearchLibraryChromaDocumentLoader,
@@ -165,7 +165,7 @@ def paginate_metadata_rows(rows: list[dict], max_results: int, start_after: str 
     end_index = min(start_index + max_results, len(sorted_rows))
     return sorted_rows[start_index:end_index]
 
-class DocumentStoreInfoAgent(ToolAgent):
+class DocumentStoreInfoAgent(ReactAgent):
     """
     Handle requests for information about document libraries.
     """

@@ -17,7 +17,7 @@ import matplotlib
 matplotlib.use("Agg")
 from matplotlib import pyplot
 
-from apps.agentic.core.agents.tool_agent import ToolAgent
+from apps.agentic.core.agents.react_agent import ReactAgent
 
 from lib import config
 from lib.plots import bar
@@ -34,7 +34,7 @@ class BarChartInput(BaseModel):
     y_axis_label: str = Field(default="Value", description="Label for the y-axis")
     xlabel_rotation: float = Field(default=0.0, description="Rotation angle for the x-axis labels")
 
-class BarChartAgent(ToolAgent):
+class BarChartAgent(ReactAgent):
     """
     BarChart Agent that uses a language model to generate bar chart data.
     It can call tools like TavilySearchResults to fetch search results.
