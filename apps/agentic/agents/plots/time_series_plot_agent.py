@@ -6,7 +6,7 @@ from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.prebuilt import ToolNode
 from langchain_core.tools import tool
 
-from apps.agentic.core.agents.tool_agent import ToolAgent
+from apps.agentic.core.agents.react_agent import ReactAgent
 
 import os
 import sys
@@ -34,7 +34,7 @@ class TimeSeriesPlotInput(BaseModel):
     plot_axis_type: PlotType = Field(default=PlotType.LINEAR, description="Type of plot axis")
 
 
-class TimeSeriesPlotAgent(ToolAgent):
+class TimeSeriesPlotAgent(ReactAgent):
     """
     Time Series Plot Agent that uses a language model to generate time series plot data.
     It can call tools like TavilySearchResults to fetch search results.

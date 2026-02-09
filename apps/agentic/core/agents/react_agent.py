@@ -14,7 +14,7 @@ from langsmith.run_helpers import traceable
 logger = get_logger("YADA")
 
 
-class ToolAgent(ABC):
+class ReactAgent(ABC):
 
     """
     Abstract Base class for agents that use a language model to generate data and can call tools.
