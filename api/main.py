@@ -11,7 +11,9 @@ from pydantic import BaseModel
 
 from lib.logger import get_logger
 
-from apps.agentic.agents.supervisor import SupervisorAgent
+from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.runnables import RunnableConfig
+from apps.agentic.agents.orchestrator import OrchestratorAgent
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -64,12 +66,20 @@ async def generate_markdown(req: RequestPayload):
     session_id = req.session_id or str(uuid.uuid4())
     logger.debug(f"YADA request [{session_id}]: {req.input}")
 
-    supervisor = SupervisorAgent()
-    state = await supervisor.process_request(req.input, session_id=session_id)
+    orchestrator = OrchestratorAgent()
+    config = RunnableConfig(configurable={"thread_id": session_id})
+    state = await orchestrator.agent.ainvoke(
+        {"messages": [HumanMessage(content=req.input)]},
+        config,
+    )
 
-    # state should be {"messages": [...]} from the final worker
+    # Get the last AIMessage (the orchestrator's final response),
+    # skipping any trailing ToolMessages
     messages = state.get("messages", [])
-    last_msg = messages[-1] if messages else None
+    last_msg = next(
+        (m for m in reversed(messages) if isinstance(m, AIMessage) and not m.tool_calls),
+        None,
+    )
 
     if last_msg is None:
         # Nothing came back at all
