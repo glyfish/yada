@@ -10,11 +10,6 @@ from lib.logger import get_logger
 logger = get_logger("YADA")
 
 
-class DocumentGrade(BaseModel):
-    """Binary score for relevance check."""
-    binary_score: str = Field(description="Relevance score 'yes' or 'no'")
-
-
 class CodeRepoAgent(FileChromaRAGAgent):
     """
     Code Repository Agent that uses a vector store index of GitHub repositories to answer questions about code.

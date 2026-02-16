@@ -27,7 +27,10 @@ from lib.logger import get_logger
 logger = get_logger("YADA")
 
 class BarChartInput(BaseModel):
-    """Input schema for the bar chart generator."""
+    """
+    Input schema for the bar chart generator.
+    """
+    
     data: Dict[str, float] = Field(..., description="Dictionary where keys are labels and values are numeric values to plot")
     title: str = Field(default="Bar Chart", description="Title of the chart")
     x_axis_label: str = Field(default="Category", description="Label for the x-axis")

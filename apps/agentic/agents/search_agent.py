@@ -28,5 +28,4 @@ class SearchAgent(ReactAgent):
         return ChatPromptTemplate.from_messages([
             ("system", "You are a researcher. Given the conversation below, dig up relevant facts or decide which tool to call."),
             MessagesPlaceholder(variable_name="messages"),
-            ("system", "If you choose to call a tool, do so; otherwise, provide your findings in markdown text."),
         ])
