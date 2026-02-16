@@ -36,7 +36,7 @@ class ResearchLibraryAgent(FileChromaRAGAgent):
         - date: Start date of work on the research note (e.g., date:2023-01-01)
 
         Example Queries:
-        - title: Thermodynamics Look in my research notes for the definition of a Carnot Cycle.
+        - title:Thermodynamics Look in my research notes for the definition of a Carnot Cycle.
         - author:Troy Stribling What research notes discuss Thermodynamics?
         - date:2023-01-01 What research notes discuss Thermodynamics??
         - shelf:publications What research notes discuss thermodynamics?
