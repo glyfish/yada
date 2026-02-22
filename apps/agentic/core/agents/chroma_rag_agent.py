@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any
-from typing import Dict
+from typing import Any, Dict, Optional
 
 from langchain import hub
 from langchain_core.output_parsers import StrOutputParser
@@ -13,6 +12,7 @@ from apps.agentic.core.document_loaders.chroma_document_loader import ChromaDocu
 from apps.agentic.core.agents.messages import WorkerState
 from apps.agentic.core.llm_factory import build_llm
 from apps.agentic.core.checkpointer import checkpointer
+from apps.agentic.core.constants import RAG_SCORE_THRESHOLD
 from langsmith.run_helpers import traceable
 
 from lib.logger import get_logger
@@ -23,7 +23,8 @@ logger = get_logger("YADA")
 class ChromaRAGAgent(ABC):
 
     def __init__(self, retriever_tool_name: str, retriever_tool_description: str, document_prompt: PromptTemplate,
-                 doc_loader: ChromaDocumentLoader, query: Dict[str, Any]={}, retriever_k=8, retriever_fetch_k=40):
+                 doc_loader: ChromaDocumentLoader, query: Dict[str, Any]={}, retriever_k=8, retriever_fetch_k=40,
+                 score_threshold: Optional[float]=RAG_SCORE_THRESHOLD):
         self.retriever_tool_name = retriever_tool_name
         self.retriever_tool_description = retriever_tool_description
         self._query = query
@@ -31,12 +32,14 @@ class ChromaRAGAgent(ABC):
         self._llm = build_llm()
         self._doc_loader = doc_loader
 
+        search_kwargs = {"k": retriever_k, "fetch_k": retriever_fetch_k, "filter": query}
+        if score_threshold is not None:
+            search_kwargs["score_threshold"] = score_threshold
+
         self._vectorstore = self._doc_loader.vectorstore
         self._retriever = self._vectorstore.as_retriever(
             search_type="mmr",
-            search_kwargs={"k": retriever_k, 
-                           "fetch_k": retriever_fetch_k, 
-                           "filter": query}
+            search_kwargs=search_kwargs
         )
 
         self._retriever_tool = create_retriever_tool(

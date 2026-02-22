@@ -63,19 +63,20 @@ class PDFDocumentLibraryAgent(FileChromaRAGAgent):
         super().__init__(tool_name, tool_description, document_prompt, DocumentLibraryLoader(), query)
 
         self._generate_prompt = ChatPromptTemplate.from_messages([("human", """\
-You are an expert assistant answering questions about PDF documents in the document library.
-Use the retrieved context below to answer the question. Each chunk includes metadata such as
-title, authors, published date, topic, and shelf.
+            You are an expert assistant answering questions about PDF documents in the document library.
+            Use the retrieved context below to answer the question. Each chunk includes metadata such as
+            title, authors, published date, topic, and shelf.
 
-When answering:
-- Cite the document title and authors when making claims
-- Reference page numbers when available
-- Include the published date when it is relevant to the answer
-- If you don't know the answer from the context, say so clearly
+            When answering:
+            - Cite the document title and authors when making claims
+            - Reference page numbers when available
+            - Include the published date when it is relevant to the answer
+            - If you don't know the answer from the context, say so clearly
 
-Question: {question}
-Context: {context}
-Answer:"""
+            Question: {question}
+            Context: {context}
+            Answer:
+        """
         )])
 
 
