@@ -1,5 +1,9 @@
 # GITHUB constants
 import os
+
+# RAG retrieval constants
+_raw_threshold = os.environ.get("RAG_SCORE_THRESHOLD")
+RAG_SCORE_THRESHOLD = float(_raw_threshold) if _raw_threshold is not None else None
 DB_PATH = ".db"
 
 GITHUB_ACCOUNTS = ["troystribling"]
