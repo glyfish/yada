@@ -48,6 +48,7 @@ class FileChromaRAGAgent(ABC):
             document_separator="\n\n-----\n\n",)
         self._tools = [self._retriever_tool]
         self._tooled_llm = self._llm.bind_tools(self._tools)
+        self._generate_prompt = hub.pull("rlm/rag-prompt")
         self._agent = self._create_agent()
 
 
@@ -173,7 +174,7 @@ class FileChromaRAGAgent(ABC):
             logger.error(f"Full-file append skipped because of error: {e}")
 
 
-        prompt = hub.pull("rlm/rag-prompt")
+        prompt = self._generate_prompt
         logger.debug(f"RAG Agent generate prompt: {prompt}")
 
         rag_chain = prompt | self.llm | StrOutputParser()
