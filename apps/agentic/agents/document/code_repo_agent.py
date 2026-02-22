@@ -1,6 +1,7 @@
 from pathlib import Path
 from pydantic import BaseModel, Field
 from langchain.prompts import PromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 
 from apps.agentic.core.constants import (PROGRAMMING_LANGUAGE_MAP)
 from apps.agentic.core.agents.file_chroma_rag_agent import FileChromaRAGAgent
@@ -61,6 +62,23 @@ class CodeRepoAgent(FileChromaRAGAgent):
         document_prompt = PromptTemplate.from_template(template=prompt_template)
 
         super().__init__(tool_name, tool_description, document_prompt, GitHubChromaDocumentLoader(), query)
+
+        self._generate_prompt = ChatPromptTemplate.from_messages([("human", """                                                                   
+        You are an expert assistant answering questions about Troy Stribling's code repositories.
+        Use the retrieved context below to answer the question. Each chunk includes metadata such as
+        repository name, file path, programming language, branch, and commit hash.
+
+        When answering:
+        - Reference the file path and repository name when discussing specific code
+        - Format code snippets in fenced code blocks with the appropriate language identifier
+        - Cite the commit hash or branch when version context is relevant
+        - If you don't know the answer from the context, say so clearly
+
+        Question: {question}
+        Context: {context}
+        Answer:
+        """
+        )])
 
 
     def read_file(self, top_files):

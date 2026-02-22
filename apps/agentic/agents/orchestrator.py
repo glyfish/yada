@@ -32,7 +32,7 @@ class DocumentSubagentSearchInput(BaseModel):
     """
 
     request: str = Field(..., description="Request to send to the document search agent")      
-    query: Dict[str, Any] = Field(..., description="The search query to find relevant documents in the document store")
+    query: Optional[Dict[str, Any]] = Field(default=None, description="The search query to find relevant documents in the document store")
 
 class SubagentRequest(BaseModel):
     """
@@ -126,14 +126,18 @@ async def delegate_to_document_store_info_agent(request: str) -> str:
 
 
 @tool(args_schema=DocumentSubagentSearchInput)
-async def delegate_to_code_repository_search(request: str, query: Optional[Dict[str, Any]] = None) -> str:
+async def delegate_to_code_repository_search_agent(request: str, query: Optional[Dict[str, Any]] = None) -> str:
     """
     Delegate a request to the Code Repository Search Agent which searches and retrieves code from 
     indexed GitHub repositories. Use this when the user wants to search for specific 
     code or files in Troy Stribling's GitHub repositories.
 
+    **Map pronouns**
+    - 'my code', 'code database' → requester's indexed repositories in the code repository vector store.
+    - 'code database' → requester's indexed repos in the code repository vector store.
+
     Examples of when to use this tool:
-        - "Find where MIDI output is handled in my code"
+        - "account:troystribling repo:zgomot ext:rb Where is MIDI output handled in my code?"
         - "Find the latest commit message for the file that handles MIDI output in my code"
         - "What programming languages do I use in my code?"
 
@@ -154,11 +158,13 @@ async def delegate_to_research_library_search_agent(request: str, query: Optiona
     Delegate a request to the Research Library Search Agent which searches and retrieves documents from 
     the research library. Use this when the user wants to search for specific documents in the research library.
 
-    Examples of when to use this tool:
-        - "account:troystribling repo:zgomot ext:rb Where is MIDI output handled?"
-        - "Find the latest commit message for the file that handles MIDI output in my code"
-        - "What programming languages do I use in my code?"
+    **Map pronouns**
+    - 'my research', → requester's indexed research library in the research_library vector store.
 
+    Examples of when to use this tool:
+        - "title:Thermodynamics Look in my research library for the definition of a Carnot Cycle."
+        - "shelf:publications Look in my research library for the definition of a Carnot Cycle"
+        - "Look in my research library for the definition of a Carnot Cycle"
     Returns: str
         The search results from the Research Library Search Agent.
     """
@@ -223,6 +229,7 @@ class OrchestratorAgent(ReactAgent):
                  delegate_to_bar_chart_agent,
                  delegate_to_time_series_plot_agent,
                  delegate_to_document_store_info_agent,
+                 delegate_to_code_repository_search_agent,
                  delegate_to_research_library_search_agent,
                  delegate_to_fred_data_info_search_agent,
                  extract_document_query_from_request]
@@ -261,12 +268,6 @@ or strip any HTML, markdown, or formatting from tool output. The tool responses 
 formatting (including HTML tags, image references, and CSS classes) that must be preserved verbatim.
 </instructions>
 
-<context>
-**Map pronouns**
-   - 'my code', 'code database' → requester's indexed repos in the vector store.
-   - 'code database' → requester's indexed repos in the vector store.
-   - 'my research', → requester's indexed research library in the vector store.
-</context>
 
 <examples>
 In the following request examples the expected routing to subagent tools by

@@ -11,7 +11,7 @@ from apps.agentic.core.llm_factory import build_llm
 from langsmith.run_helpers import traceable
 
 from apps.agentic.agents.search_agent import SearchAgent
-from apps.agentic.agents.document.document_library_agent import DocumentLibraryAgent
+from apps.agentic.agents.document.pdf_document_library_agent import PDFDocumentLibraryAgent
 from apps.agentic.agents.plots.bar_chart_agent import BarChartAgent
 from apps.agentic.agents.plots.time_series_plot_agent import TimeSeriesPlotAgent
 from apps.agentic.agents.document.code_repo_agent import CodeRepoAgent
@@ -126,7 +126,7 @@ class SupervisorAgent:
             "time_series_generator": self._create_agent_node(TimeSeriesPlotAgent().agent, "time_series_generator"),
             "code_repository_search": self._create_agent_node(CodeRepoAgent(query).agent, "code_repository_search"),
             "research_library_search": self._create_agent_node(ResearchLibraryAgent(query).agent, "research_library_search"),
-            "document_library_search": self._create_agent_node(DocumentLibraryAgent(query).agent, "document_library_search"),
+            "document_library_search": self._create_agent_node(PDFDocumentLibraryAgent(query).agent, "document_library_search"),
             "document_store_info": self._create_agent_node(DocumentStoreInfoAgent().agent, "document_store_info"),
             "fred_data_info": self._create_agent_node(FredDataInfoAgent(query).agent, "fred_data_info"),}
         

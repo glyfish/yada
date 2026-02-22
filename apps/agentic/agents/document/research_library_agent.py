@@ -10,6 +10,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import HumanMessage
 from langgraph.graph import StateGraph, START, END
 from langchain.prompts import PromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 from langgraph.prebuilt import tools_condition
 from langchain.tools.retriever import create_retriever_tool
 from langgraph.prebuilt import ToolNode
@@ -76,6 +77,23 @@ class ResearchLibraryAgent(FileChromaRAGAgent):
         document_prompt = PromptTemplate.from_template(template=prompt_template)
 
         super().__init__(tool_name, tool_description, document_prompt, ResearchLibraryChromaDocumentLoader(), query)
+
+        self._generate_prompt = ChatPromptTemplate.from_messages([("human", """
+            You are an expert assistant answering questions about Troy Stribling's research notes.
+            Use the retrieved context below to answer the question. Each chunk includes metadata such as
+            title, author, topic, tags, section headings, and date.
+
+            When answering:
+            - Cite the research note title and section when summarizing findings
+            - Reference the author and start date when relevant
+            - If multiple notes are relevant, address each one separately
+            - If you don't know the answer from the context, say so clearly
+
+            Question: {question}
+            Context: {context}
+            Answer:
+        """
+        )])
 
 
     def read_file(self, top_files):

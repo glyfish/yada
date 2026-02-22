@@ -19,7 +19,7 @@ from apps.agentic.core.document_loaders.document_library_loader import (
 from apps.agentic.agents.document.code_repo_agent import CodeRepoAgent
 from apps.agentic.agents.document.fred_data_info_agent import FredDataInfoAgent
 from apps.agentic.agents.document.research_library_agent import ResearchLibraryAgent
-from apps.agentic.agents.document.document_library_agent import DocumentLibraryAgent
+from apps.agentic.agents.document.pdf_document_library_agent import PDFDocumentLibraryAgent
 
 from lib.logger import get_logger
 
@@ -211,7 +211,7 @@ class DocumentStoreInfoAgent(ReactAgent):
 
         {ResearchLibraryAgent.QUERY_FILTERS}
 
-        {DocumentLibraryAgent.QUERY_FILTERS}
+        {PDFDocumentLibraryAgent.QUERY_FILTERS}
         """
 
         logger.debug(f"DocumentInfoAgent Agent prompt: {system_prompt}")

@@ -2,6 +2,7 @@ from langchain import hub
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import AIMessage
 from langchain.prompts import PromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 
 from apps.agentic.core.agents.file_chroma_rag_agent import FileChromaRAGAgent
 from apps.agentic.core.document_loaders.document_library_loader import DocumentLibraryLoader
@@ -10,7 +11,7 @@ from lib.logger import get_logger
 logger = get_logger("YADA")
 
 
-class DocumentLibraryAgent(FileChromaRAGAgent):
+class PDFDocumentLibraryAgent(FileChromaRAGAgent):
     """
     PDF Document Agent that uses a vector store index of PDF documents to answer questions about document
     content. It is designed to handle queries related to PDF documents like: title, topic, authors, 
@@ -60,6 +61,22 @@ class DocumentLibraryAgent(FileChromaRAGAgent):
         document_prompt = PromptTemplate.from_template(template=prompt_template)
 
         super().__init__(tool_name, tool_description, document_prompt, DocumentLibraryLoader(), query)
+
+        self._generate_prompt = ChatPromptTemplate.from_messages([("human", """\
+You are an expert assistant answering questions about PDF documents in the document library.
+Use the retrieved context below to answer the question. Each chunk includes metadata such as
+title, authors, published date, topic, and shelf.
+
+When answering:
+- Cite the document title and authors when making claims
+- Reference page numbers when available
+- Include the published date when it is relevant to the answer
+- If you don't know the answer from the context, say so clearly
+
+Question: {question}
+Context: {context}
+Answer:"""
+        )])
 
 
     def read_file(self, top_files):
@@ -273,8 +290,7 @@ class DocumentLibraryAgent(FileChromaRAGAgent):
             pdf_hint = None
 
         # 2. run RAG prompt to get answer_text
-        prompt = hub.pull("rlm/rag-prompt")
-        rag_chain = prompt | self.llm | StrOutputParser()
+        rag_chain = self._generate_prompt | self.llm | StrOutputParser()
         answer_text = rag_chain.invoke({"context": docs, "question": question})
 
         # 3. build base final_text (what you want the user to read)
