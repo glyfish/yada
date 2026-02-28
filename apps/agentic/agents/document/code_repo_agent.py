@@ -28,9 +28,9 @@ class CodeRepoAgent(FileChromaRAGAgent):
         - after: Date to filter commits after (e.g., after:2014-01-01)
         
         **Example Queries Using Filter**
-        - account:troystribling repo:zgomot ext:rb Where is MIDI output handled?
-        - account:troystribling repo:zgomot ext:rb before:2014-01-01 Where is MIDI output handled?
-        - account:troystribling repo:zgomot ext:rb after:2014-01-01 Where is MIDI output handled?
+        - account:troystribling repo:zgomot ext:rb In my code where is MIDI output handled?
+        - account:troystribling repo:zgomot ext:rb before:2014-01-01 In my code where is MIDI output handled?
+        - account:troystribling repo:zgomot ext:rb after:2014-01-01 In my code where is MIDI output handled?
     """
 
 
