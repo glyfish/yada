@@ -80,7 +80,7 @@ class FredDataInfoAgent(ChromaRAGAgent):
             series including series_id, series_title, frequency, units, observation dates, category, and popularity.
 
             When answering:
-            - List matching series with their series_id, title, frequency, and units
+            - List matching series with their series_id, title, frequency, popularity score, and units
             - Include observation date ranges when relevant
             - Group results by category_path if multiple series are returned
             - If you don't know the answer from the context, say so clearly

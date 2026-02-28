@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional
 
 from langchain import hub
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.graph import StateGraph, START, END
 from langchain.prompts import PromptTemplate
 from langchain.tools.retriever import create_retriever_tool
@@ -187,7 +187,7 @@ class FileChromaRAGAgent(ABC):
         rag_chain = prompt | self.llm | StrOutputParser()
         answer_text = rag_chain.invoke({"context": docs, "question": question})
         final_text = answer_text + (files_section if files_section else "")
-        return {"messages": [final_text]}    
+        return {"messages": [AIMessage(content=final_text)]}
 
 
     def _retrieve(self, state):

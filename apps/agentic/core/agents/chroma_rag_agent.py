@@ -144,7 +144,7 @@ class ChromaRAGAgent(ABC):
         rag_chain = prompt | self.llm | StrOutputParser()
         response = rag_chain.invoke({"context": docs, "question": question})
         full_response = f"{response}\n\n---\n\n**Retrieved Documents:**\n\n{docs}"
-        return {"messages": messages + [AIMessage(content=full_response)]}    
+        return {"messages": [AIMessage(content=full_response)]}
     
 
     def _retrieve(self, state):
@@ -165,7 +165,7 @@ class ChromaRAGAgent(ABC):
             parts.append(f"Document {i}:\n{d.page_content}")
 
         context = sep.join(parts) if parts else "(no results)"
-        return {"messages": messages + [HumanMessage(content=context)]}
+        return {"messages": [HumanMessage(content=context)]}
 
 
     def _create_agent(self):
