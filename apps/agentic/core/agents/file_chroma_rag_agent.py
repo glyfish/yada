@@ -1,151 +1,24 @@
-from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from abc import abstractmethod
 
-from langchain import hub
-from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import HumanMessage, AIMessage
-from langgraph.graph import StateGraph, START, END
-from langchain.prompts import PromptTemplate
-from langchain.tools.retriever import create_retriever_tool
+from langchain_core.output_parsers import StrOutputParser
 
-from apps.agentic.core.document_loaders.chroma_document_loader import ChromaDocumentLoader
-from apps.agentic.core.agents.messages import WorkerState
-from apps.agentic.core.llm_factory import build_llm
-from apps.agentic.core.checkpointer import checkpointer
-from apps.agentic.core.constants import RAG_SCORE_THRESHOLD
-from langsmith.run_helpers import traceable
+from apps.agentic.core.agents.chroma_rag_agent import ChromaRAGAgent
 
 from lib.logger import get_logger
 
 logger = get_logger("YADA")
 
 
-class FileChromaRAGAgent(ABC):
+class FileChromaRAGAgent(ChromaRAGAgent):
     """
-    Base class for file-based Chroma RAG agents that are distributed over multiple chunks. 
-    This class sets up the retriever and agent structure, but requires subclasses to implement the 
-    file reading logic.
+    Base class for file-based Chroma RAG agents that are distributed over multiple chunks.
+    This class extends ChromaRAGAgent and requires subclasses to implement file-reading logic.
     """
-
-    def __init__(self, retriever_tool_name: str, retriever_tool_description: str, document_prompt: PromptTemplate,
-                 doc_loader: ChromaDocumentLoader, query: Dict[str, Any]={}, retriever_k=8, retriever_fetch_k=40,
-                 score_threshold: Optional[float]=RAG_SCORE_THRESHOLD):
-        self.retriever_tool_name = retriever_tool_name
-        self.retriever_tool_description = retriever_tool_description
-        self._query = query
-
-        self._llm = build_llm()
-        self._doc_loader = doc_loader
-
-        search_kwargs = {"k": retriever_k, "fetch_k": retriever_fetch_k, "filter": query}
-        if score_threshold is not None:
-            search_kwargs["score_threshold"] = score_threshold
-
-        self._vectorstore = self._doc_loader.vectorstore
-        self._retriever = self._vectorstore.as_retriever(
-            search_type="mmr",
-            search_kwargs=search_kwargs
-        )
-
-        self._retriever_tool = create_retriever_tool(
-            self._retriever,
-            retriever_tool_name,
-            retriever_tool_description,
-            document_prompt=document_prompt,
-            document_separator="\n\n-----\n\n",)
-        self._tools = [self._retriever_tool]
-        self._tooled_llm = self._llm.bind_tools(self._tools)
-        self._generate_prompt = hub.pull("rlm/rag-prompt")
-        self._agent = self._create_agent()
-
-
-    @property
-    def doc_loader(self):
-        """
-        Get the document loader for the GitHub agent.
-        """
-        return self._doc_loader
-
-
-    @property
-    def retriever(self):
-        """
-        Get the retriever for the GitHub agent.
-        """
-        return self._retriever
-    
-
-    @property
-    def tools(self):
-        """
-        Get the tools available to the GitHub agent.
-        """
-        return self._tools
-
-
-    @property
-    def vectorstore(self):
-        """
-        Get the vector store for the GitHub agent.
-        """
-        return self._vectorstore
-
-
-    @property
-    def llm(self):
-        """
-        Get the language model used by the agent.
-        """
-
-        return self._llm
-    
-
-    @property
-    def agent(self):
-        """
-        Get the compiled agent state graph.
-        """
-
-        return self._agent
-
-
-    @property
-    def tooled_llm(self):
-        """
-        Get the language model bound with tools.
-        """
-
-        return self._tooled_llm
-
-
-    @property
-    def query(self):
-        """
-        Get the query filter used by the agent.
-        """
-
-        return self._query
-
-    
-    @traceable(run_type="chain", name="FileChromaRAGAgent._invoke_model")
-    async def _invoke_model(self, state: WorkerState, config=None) -> dict[str, Any]:
-        """
-        Invoke the agent with the current state.
-        """
-
-        messages = state["messages"]
-
-        try:
-            result = await self.tooled_llm.ainvoke(messages)
-            return {"messages": [result]}
-        except Exception as e:
-            logger.error(f"Error invoking model: {e}")
-            return {"messages": [f"Error: {e}"]}
-    
 
     def _generate(self, state):
         """
-        Generate answer
+        Generate answer and optionally append reconstructed full-file content.
 
         Args:
             state (messages): The current state
@@ -157,7 +30,6 @@ class FileChromaRAGAgent(ABC):
         messages = state["messages"]
         question = messages[0].content
         last_message = messages[-1]
-
         docs = last_message.content
 
         # Build full-file section from the top retrieved file(s)
@@ -180,7 +52,6 @@ class FileChromaRAGAgent(ABC):
         except Exception as e:
             logger.error(f"Full-file append skipped because of error: {e}")
 
-
         prompt = self._generate_prompt
         logger.debug(f"RAG Agent generate prompt: {prompt}")
 
@@ -188,7 +59,6 @@ class FileChromaRAGAgent(ABC):
         answer_text = rag_chain.invoke({"context": docs, "question": question})
         final_text = answer_text + (files_section if files_section else "")
         return {"messages": [AIMessage(content=final_text)]}
-
 
     def _retrieve(self, state):
         messages = state["messages"]
@@ -198,36 +68,14 @@ class FileChromaRAGAgent(ABC):
         except Exception as e:
             logger.error(f"Retriever error: {e}")
             return {"messages": [HumanMessage(content=f"Retriever error: {e}")]}
+
         sep = "\n\n-----\n\n"
         parts = []
         for d in hits:
             parts.append(f"{d.page_content}")
+
         context = sep.join(parts) if parts else "(no results)"
         return {"messages": [HumanMessage(content=context)]}
-
-
-    def _create_agent(self):
-        """
-        Create a tool node for the agent.
-
-        Args:
-            agent (StateGraph): The agent state graph.
-            name (str): The name of the tool node.
-
-        Returns:
-            ToolNode: The created tool node.
-        """
-
-        graph = (
-            StateGraph(WorkerState)
-            .add_node("retrieve", self._retrieve)
-            .add_node("generate", self._generate)
-            .add_edge(START, "retrieve")
-            .add_edge("retrieve", "generate") 
-            .add_edge("generate", END)
-        )
-        return graph.compile(checkpointer=checkpointer)
-
 
     @abstractmethod
     def read_file(self, top_files):
