@@ -120,6 +120,20 @@ async def delegate_to_document_store_info_agent(request: str) -> str:
         - "What document shelves do I have in my research library?"
         - "What are the titles of the documents in the 'publications' shelf in my research library?"
 
+    In requests for available metadata values assume the following equivalences:
+    - 'my code repositories', 'my code' → requester's indexed repositories in the code repository vector store.
+    - 'my research library' → requester's indexed research library in the research_library vector store.
+    - 'FRED data' → FRED data information document store.
+    
+    If asked to retrieve values for a specific metadata values extract the values
+    from the document store metadata and determine the number of distinct values for the metadata fields. If the number of distinct values is less than 10 return the list of distinct values. 
+    If the number of distinct values is greater than 10 return a summary of the most common values and their counts.
+    
+    Metadata Values
+    - For code repositories: repository names, file types, programming languages.
+    - For research library: document shelves, document authors, document tags.
+    - For FRED data information: category_name, series_id, series_title, popularity
+    
     Returns: str
         The results from the Document Store Info Agent.
     """
