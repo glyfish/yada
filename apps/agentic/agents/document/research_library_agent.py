@@ -40,7 +40,7 @@ class ResearchLibraryAgent(FileChromaRAGAgent):
         - title:Thermodynamics Look in my research notes for the definition of a Carnot Cycle.
         - author:Troy Stribling What research notes discuss Thermodynamics?
         - date:2023-01-01 What research notes discuss Thermodynamics??
-        - shelf:publications What research notes discuss thermodynamics?
+        - shelf:publications What research notes discuss statistical mechanics applied to MHD?
         - notes: What algorithm are used for generating fractional brownian motion?
     """
 

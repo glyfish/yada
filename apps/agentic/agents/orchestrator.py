@@ -108,12 +108,17 @@ async def delegate_to_time_series_plot_agent(request: str) -> str:
 async def delegate_to_document_store_info_agent(request: str) -> str:
     """
     Delegate a request to the Document Store Info Agent which provides 
-    information about the documents in the document store.
+    information about the documents in the document stores.
+    
+    The available document stores include:
+    1. Research Library: A collection of reference documents for research.
+    2. Code Repository: A collection of reference documents for source code.
+    3. FRED Data Information: A collection of documents describing time series data from the
 
     Examples of when to use this tool:
-        - "List repository names and filenames for my code repositories."
+        - "List repository names for my code repositories."
         - "What document shelves do I have in my research library?"
-        - "What document shelves do I have in my research library?"
+        - "What are the titles of the documents in the 'publications' shelf in my research library?"
 
     Returns: str
         The results from the Document Store Info Agent.

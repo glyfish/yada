@@ -1,12 +1,14 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, cast
 
 from langchain import hub
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import AIMessage, SystemMessage
+from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import StateGraph, START, END
 from langchain.prompts import PromptTemplate
 from langchain.tools.retriever import create_retriever_tool
+from pydantic import BaseModel, Field
 
 from apps.agentic.core.document_loaders.chroma_document_loader import ChromaDocumentLoader
 from apps.agentic.core.agents.messages import WorkerState
@@ -18,6 +20,11 @@ from langsmith.run_helpers import traceable
 from lib.logger import get_logger
 
 logger = get_logger("YADA")
+
+
+class DocumentGrade(BaseModel):
+    """Binary relevance score for a retrieved document chunk."""
+    relevant: bool = Field(description="True if the document is relevant to the question")
 
 
 class ChromaRAGAgent(ABC):
@@ -51,6 +58,15 @@ class ChromaRAGAgent(ABC):
         self._tools = [self._retriever_tool]
         self._tooled_llm = self._llm.bind_tools(self._tools)
         self._generate_prompt = hub.pull("rlm/rag-prompt")
+        self._grader_llm = build_llm(model="gpt-4.1-mini").with_structured_output(DocumentGrade)
+        self._grade_prompt = ChatPromptTemplate.from_messages([
+            ("system",
+             "You are a relevance grader. Assess whether the retrieved document contains "
+             "information that is useful for answering the question. "
+             "Keyword or semantic relevance is sufficient — the document does not need to fully answer the question. "
+             "Set relevant=true if the document is useful, relevant=false otherwise."),
+            ("human", "Question: {question}\n\nDocument:\n{document}"),
+        ])
         self._agent = self._create_agent()
 
 
@@ -166,6 +182,44 @@ class ChromaRAGAgent(ABC):
         return {"messages": [SystemMessage(content=context)]}
 
 
+    def _grade_documents(self, state):
+        """
+        Grade retrieved document chunks for relevance and filter out irrelevant ones.
+
+        Args:
+            state: The current graph state. Reads the question from messages[0]
+                   and the retrieved context from messages[-1] (set by _retrieve).
+
+        Returns:
+            dict: Updated messages with a SystemMessage containing only relevant chunks.
+        """
+
+        messages = state["messages"]
+        question = messages[0].content
+        docs_content = messages[-1].content
+
+        sep = "\n\n-----\n\n"
+        chunks = [c for c in docs_content.split(sep) if c.strip()]
+
+        if not chunks:
+            return {"messages": [SystemMessage(content="(no results)")]}
+
+        grader = self._grade_prompt | self._grader_llm
+        relevant = []
+        for chunk in chunks:
+            try:
+                result = cast(DocumentGrade, grader.invoke({"question": question, "document": chunk}))
+                if result.relevant:
+                    relevant.append(chunk)
+            except Exception as e:
+                logger.warning(f"Grading error, keeping chunk: {e}")
+                relevant.append(chunk)
+
+        logger.info(f"Document grading: {len(relevant)}/{len(chunks)} chunks passed")
+        context = sep.join(relevant) if relevant else "(no relevant results found)"
+        return {"messages": [SystemMessage(content=context)]}
+
+
     def _create_agent(self):
         """
         Create a tool node for the agent.
@@ -181,9 +235,11 @@ class ChromaRAGAgent(ABC):
         graph = (
             StateGraph(WorkerState)
             .add_node("retrieve", self._retrieve)
+            .add_node("grade", self._grade_documents)
             .add_node("generate", self._generate)
             .add_edge(START, "retrieve")
-            .add_edge("retrieve", "generate") 
+            .add_edge("retrieve", "grade")
+            .add_edge("grade", "generate")
             .add_edge("generate", END)
         )
         return graph.compile(checkpointer=checkpointer)
