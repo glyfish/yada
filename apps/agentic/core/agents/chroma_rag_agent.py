@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional
 
 from langchain import hub
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import AIMessage, SystemMessage
 from langgraph.graph import StateGraph, START, END
 from langchain.prompts import PromptTemplate
 from langchain.tools.retriever import create_retriever_tool
@@ -135,8 +135,7 @@ class ChromaRAGAgent(ABC):
 
         messages = state["messages"]
         question = messages[0].content
-        last_message = messages[-1]
-        docs = last_message.content
+        docs = messages[-1].content
 
         prompt = self._generate_prompt
         logger.debug(f"RAG Agent generate prompt: {prompt}")
@@ -154,18 +153,17 @@ class ChromaRAGAgent(ABC):
             hits = self.retriever.invoke(question)
         except Exception as e:
             logger.error(f"Retriever error: {e}")
-            return {"messages": [HumanMessage(content=f"Retriever error: {e}")]}
+            return {"messages": [SystemMessage(content=f"Retriever error: {e}")]}
 
         logger.info(f"Retrieved {len(hits)} documents for query: {question}")
 
         sep = "\n\n-----\n\n"
         parts = []
         for i, d in enumerate(hits, 1):
-            # Include both content and metadata
             parts.append(f"Document {i}:\n{d.page_content}")
 
         context = sep.join(parts) if parts else "(no results)"
-        return {"messages": [HumanMessage(content=context)]}
+        return {"messages": [SystemMessage(content=context)]}
 
 
     def _create_agent(self):

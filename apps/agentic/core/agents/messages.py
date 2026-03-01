@@ -61,7 +61,7 @@ AgentStateModel = Annotation.Root({
 class WorkerState(TypedDict):
     """
     WorkerState is a TypedDict that defines the structure of the worker's state.
-    It includes a list of messages, which are annotated with the add_messages function.
+    It includes a list of messages annotated with the add_messages reducer.
     """
 
     messages: Annotated[Sequence[BaseMessage], add_messages]
