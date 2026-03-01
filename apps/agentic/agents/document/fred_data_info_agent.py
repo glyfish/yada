@@ -47,7 +47,7 @@ class FredDataInfoAgent(ChromaRAGAgent):
                         data about time series from the FRED (Federal Reserve Economic Data) website.
         """
 
-        prompt_template = """
+        document_prompt_template = """
             You are an expert in retrieving information about time series from the FRED (Federal Reserve Economic Data)
             website based on the contents of documents describing the data. The time series data is organized in a 
             hierarchy of categories that describe the type of data contained in each time series. The categories are described"
@@ -69,7 +69,7 @@ class FredDataInfoAgent(ChromaRAGAgent):
             {page_content}"
         """
 
-        document_prompt = PromptTemplate.from_template(template=prompt_template)
+        document_prompt = PromptTemplate.from_template(template=document_prompt_template)
 
         super().__init__(tool_name, tool_description, document_prompt, FREDChromaDocumentLoader(), query,
                          retriever_k=50, retriever_fetch_k=200)

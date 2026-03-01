@@ -55,7 +55,7 @@ class ResearchLibraryAgent(FileChromaRAGAgent):
             research documents.
             """
 
-        prompt_template = """
+        document_prompt_template = """
             You are searching Troy Stribling’s research notes in his indexed library vector store to answer
             requests about his research. Information about the note can be found in the metadata attached to each file.
             Following is a description of the metadata.
@@ -74,7 +74,8 @@ class ResearchLibraryAgent(FileChromaRAGAgent):
             ---
             {page_content}
         """
-        document_prompt = PromptTemplate.from_template(template=prompt_template)
+        
+        document_prompt = PromptTemplate.from_template(template=document_prompt_template)
 
         super().__init__(tool_name, tool_description, document_prompt, ResearchLibraryChromaDocumentLoader(), query)
 

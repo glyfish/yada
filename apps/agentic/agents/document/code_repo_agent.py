@@ -36,6 +36,7 @@ class CodeRepoAgent(FileChromaRAGAgent):
 
     def __init__(self, query):
         tool_name = "github_agent_tool"
+        
         tool_description = (
             "Troy Stribling Code Retriever"
             "Description: Search and retrieve content from Troy Stribling’s GitHub repositories "
@@ -44,7 +45,7 @@ class CodeRepoAgent(FileChromaRAGAgent):
             "Use this for any query about 'my code', 'my repo(s)', or requests for specific files/functions."
         )
 
-        prompt_template = (
+        document_prompt_template = (
             "You are searching Troy Stribling’s code (i.e. my code) in his indexed GitHub repositories vector store to answer "
             "requests about his code. Information about the code can be found in the metadata attached to each file. "
             "Following is a description of the metadata. The programming language should be deduced from the file extension."
@@ -59,7 +60,7 @@ class CodeRepoAgent(FileChromaRAGAgent):
             "{page_content}"
         )
 
-        document_prompt = PromptTemplate.from_template(template=prompt_template)
+        document_prompt = PromptTemplate.from_template(template=document_prompt_template)
 
         super().__init__(tool_name, tool_description, document_prompt, GitHubChromaDocumentLoader(), query)
 
