@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from sse_starlette.sse import EventSourceResponse
 
 from lib.logger import get_logger
 
@@ -92,6 +93,70 @@ async def generate_markdown(req: RequestPayload):
     resp: Dict[str, Any] = {"result": raw_text, "session_id": session_id}
 
     return resp
+
+
+@app.post("/api/request/stream")
+async def stream_request(req: RequestPayload):
+    session_id = req.session_id or str(uuid.uuid4())
+    logger.debug(f"YADA stream request [{session_id}]: {req.input}")
+
+    orchestrator = OrchestratorAgent()
+    config = RunnableConfig(configurable={"thread_id": session_id})
+
+    async def event_generator():
+        final_result = ""
+        root_run_id = None
+
+        try:
+            async for event in orchestrator.agent.astream_events(
+                {"messages": [HumanMessage(content=req.input)]},
+                config,
+                version="v2",
+            ):
+                event_type = event.get("event", "")
+                name = event.get("name", "")
+                run_id = event.get("run_id", "")
+
+                # Track the root run so we can identify the top-level graph's final output
+                if root_run_id is None:
+                    root_run_id = run_id
+
+                # Skip per-token streaming events — too noisy for status feed
+                if event_type in ("on_chat_model_stream", "on_chain_stream"):
+                    continue
+
+                # Emit raw event info (step 2 will replace with human-readable labels)
+                yield {
+                    "event": "status",
+                    "data": json.dumps({"event": event_type, "name": name}),
+                }
+
+                # Capture final output from the root orchestrator graph
+                if event_type == "on_chain_end" and run_id == root_run_id:
+                    output = event.get("data", {}).get("output", {})
+                    if isinstance(output, dict):
+                        messages = output.get("messages", [])
+                        last_msg = next(
+                            (m for m in reversed(messages)
+                             if isinstance(m, AIMessage) and not getattr(m, "tool_calls", None)),
+                            None,
+                        )
+                        if last_msg:
+                            final_result = _message_content_to_text(last_msg)
+
+            yield {
+                "event": "result",
+                "data": json.dumps({"result": final_result, "session_id": session_id}),
+            }
+
+        except Exception as e:
+            logger.error(f"Stream error [{session_id}]: {e}")
+            yield {
+                "event": "error",
+                "data": json.dumps({"message": str(e)}),
+            }
+
+    return EventSourceResponse(event_generator())
 
 
 # Mount the document API router
