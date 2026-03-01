@@ -217,8 +217,6 @@ class DocumentStoreInfoAgent(ReactAgent):
         {PDFDocumentLibraryAgent.QUERY_FILTERS}
         """
 
-        logger.debug(f"DocumentInfoAgent Agent prompt: {system_prompt}")
-
         return ChatPromptTemplate.from_messages([
             ("system", system_prompt),
             MessagesPlaceholder(variable_name="messages"),
