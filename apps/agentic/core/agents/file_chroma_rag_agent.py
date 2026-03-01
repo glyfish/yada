@@ -1,6 +1,6 @@
 from abc import abstractmethod
 
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import AIMessage
 from langchain_core.output_parsers import StrOutputParser
 
 from apps.agentic.core.agents.chroma_rag_agent import ChromaRAGAgent
@@ -29,8 +29,7 @@ class FileChromaRAGAgent(ChromaRAGAgent):
 
         messages = state["messages"]
         question = messages[0].content
-        last_message = messages[-1]
-        docs = last_message.content
+        docs = messages[-1].content
 
         # Build full-file section from the top retrieved file(s)
         files_section = ""
@@ -60,22 +59,6 @@ class FileChromaRAGAgent(ChromaRAGAgent):
         final_text = answer_text + (files_section if files_section else "")
         return {"messages": [AIMessage(content=final_text)]}
 
-    def _retrieve(self, state):
-        messages = state["messages"]
-        question = messages[0].content if hasattr(messages[0], "content") else str(messages[0])
-        try:
-            hits = self.retriever.invoke(question)
-        except Exception as e:
-            logger.error(f"Retriever error: {e}")
-            return {"messages": [HumanMessage(content=f"Retriever error: {e}")]}
-
-        sep = "\n\n-----\n\n"
-        parts = []
-        for d in hits:
-            parts.append(f"{d.page_content}")
-
-        context = sep.join(parts) if parts else "(no results)"
-        return {"messages": [HumanMessage(content=context)]}
 
     @abstractmethod
     def read_file(self, top_files):

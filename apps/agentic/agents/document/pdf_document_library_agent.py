@@ -233,8 +233,7 @@ class PDFDocumentLibraryAgent(FileChromaRAGAgent):
 
         messages = state["messages"]
         question = messages[0].content
-        last_message = messages[-1]
-        docs = last_message.content
+        docs = messages[-1].content
 
         # 1. try to build files_section (full file dump or clamped)
         files_section = ""
