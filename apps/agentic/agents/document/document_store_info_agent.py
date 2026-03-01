@@ -190,6 +190,7 @@ class DocumentStoreInfoAgent(ReactAgent):
         """
     
         system_prompt = f"""
+        <instructions>
         You are an expert in retrieving information about the contents of documents available in all
         the document stores. The tools allow you to:
         - List repository names and filenames for code repositories.
@@ -204,6 +205,8 @@ class DocumentStoreInfoAgent(ReactAgent):
         the query filters use the following descriptions to answer their question. Only respond
         with information about the query filters, usage examples for the filters
         and which agents they apply to. Do not make a request to the document agents for a response.
+        </instructions>
+    
 
         {CodeRepoAgent.QUERY_FILTERS}   
 
@@ -219,7 +222,6 @@ class DocumentStoreInfoAgent(ReactAgent):
         return ChatPromptTemplate.from_messages([
             ("system", system_prompt),
             MessagesPlaceholder(variable_name="messages"),
-            ("system", "If you choose to call a tool, do so; otherwise, provide your findings in plain text."),
         ])
 
 
