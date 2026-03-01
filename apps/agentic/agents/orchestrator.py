@@ -116,8 +116,8 @@ async def delegate_to_document_store_info_agent(request: str) -> str:
     3. FRED Data Information: A collection of documents describing time series data from the
 
     Examples of when to use this tool:
-        - "List repository names for my code repositories."
-        - "What document shelves do I have in my research library?"
+        - "Summarize the repository names for my code repositories."
+        - "Summarize the document shelves values available in my research library."
         - "What are the titles of the documents in the 'publications' shelf in my research library?"
 
     In requests for available metadata values assume the following equivalences:
@@ -182,7 +182,7 @@ async def delegate_to_research_library_search_agent(request: str, query: Optiona
 
     Examples of when to use this tool:
         - "title:Thermodynamics Look in my research library for the definition of a Carnot Cycle."
-        - "shelf:publications Look in my research library for the definition of a Carnot Cycle"
+        - "shelf:publications Look in my research library for constraints on kinetic and magnetic energy in MHD relevant to magnetic dynamos?"
         - "Look in my research library for the definition of a Carnot Cycle"
     Returns: str
         The search results from the Research Library Search Agent.
@@ -281,11 +281,21 @@ and then plotting it. Pass the full context needed for each subagent to do its j
 
 When multiple tools are called in sequence, your final response should only contain the verbatim output
 from the last tool in the chain. Do not include raw data or intermediate results from earlier tools.
-
-When you receive a tool result, return it to the user exactly as-is. Do not summarize, rephrase,
-or strip any HTML, markdown, or formatting from tool output. The tool responses contain precise
-formatting (including HTML tags, image references, and CSS classes) that must be preserved verbatim.
 </instructions>
+
+<output_rule>
+CRITICAL: When you receive a tool result your ONLY job is to copy its content to the user EXACTLY
+as returned — character for character, with zero modifications.
+
+- Do NOT add introductory text, headers, summaries, or commentary of any kind.
+- Do NOT rephrase, condense, or reformat the tool output.
+- Do NOT strip markdown, HTML tags, code fences, or any other formatting.
+- Do NOT omit any section of the tool result, regardless of its length.
+- Output the complete tool result verbatim as your entire response.
+
+The tool responses contain precise formatting (HTML tags, image references, markdown, JSON blocks)
+that must be preserved exactly. Any modification breaks downstream rendering.
+</output_rule>
 
 
 <examples>

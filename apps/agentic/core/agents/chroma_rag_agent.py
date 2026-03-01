@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 
 from apps.agentic.core.document_loaders.chroma_document_loader import ChromaDocumentLoader
 from apps.agentic.core.agents.messages import WorkerState
-from apps.agentic.core.llm_factory import build_llm
+from apps.agentic.core.llm_factory import agent_llm_model, scoring_llm_model
 from apps.agentic.core.checkpointer import checkpointer
 from apps.agentic.core.constants import RAG_SCORE_THRESHOLD
 from langsmith.run_helpers import traceable
@@ -36,7 +36,7 @@ class ChromaRAGAgent(ABC):
         self.retriever_tool_description = retriever_tool_description
         self._query = query
 
-        self._llm = build_llm()
+        self._llm = agent_llm_model()
         self._doc_loader = doc_loader
 
         search_kwargs = {"k": retriever_k, "fetch_k": retriever_fetch_k, "filter": query}
@@ -58,7 +58,7 @@ class ChromaRAGAgent(ABC):
         self._tools = [self._retriever_tool]
         self._tooled_llm = self._llm.bind_tools(self._tools)
         self._generate_prompt = hub.pull("rlm/rag-prompt")
-        self._grader_llm = build_llm(model="gpt-4.1-mini").with_structured_output(DocumentGrade)
+        self._grader_llm = scoring_llm_model().with_structured_output(DocumentGrade)
         self._grade_prompt = ChatPromptTemplate.from_messages([
             ("system",
              "You are a relevance grader. Assess whether the retrieved document contains "

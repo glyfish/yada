@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 
 from langgraph.graph import StateGraph, START, END
 from apps.agentic.core.agents.messages import WorkerState
-from apps.agentic.core.llm_factory import build_llm
+from apps.agentic.core.llm_factory import agent_llm_model
 
 from langgraph.prebuilt import tools_condition
 from langchain_core.tools import BaseTool
@@ -24,7 +24,7 @@ class ReactAgent(ABC):
         self._tools = tools
         self._tool_node_name = tool_node_name
         self._tool_node = ToolNode(tools, name=self._tool_node_name)
-        self._llm = build_llm()
+        self._llm = agent_llm_model()
         self._prompt = self.create_prompt()
         self._tooled_llm = self._llm.bind_tools(self._tools)
         self._model_runner = traceable(
