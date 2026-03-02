@@ -80,14 +80,14 @@ class ResearchLibraryAgent(FileChromaRAGAgent):
         super().__init__(tool_name, tool_description, document_prompt, ResearchLibraryChromaDocumentLoader(), query)
 
         self._generate_prompt = ChatPromptTemplate.from_messages([("human", """
-            You are an expert assistant answering questions about Troy Stribling's research notes.
+            You are an expert assistant answering questions about Troy Stribling's research library.
             Use the retrieved context below to answer the question. Each chunk includes metadata such as
             title, author, topic, tags, section headings, and date.
 
             When answering:
-            - Cite the research note title and section when summarizing findings
+            - Cite the research document title and section when summarizing findings
             - Reference the author and start date when relevant
-            - If multiple notes are relevant, address each one separately
+            - If multiple documents are relevant, address each one separately
             - If you don't know the answer from the context, say so clearly
 
             Question: {question}

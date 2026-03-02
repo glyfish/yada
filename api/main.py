@@ -3,7 +3,7 @@ import os
 import json
 import re
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -15,6 +15,7 @@ from lib.logger import get_logger
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 from apps.agentic.agents.orchestrator import OrchestratorAgent
+from apps.agentic.core.constants import TOOL_START_LABELS, TOOL_END_LABELS
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -95,6 +96,7 @@ async def generate_markdown(req: RequestPayload):
     return resp
 
 
+
 @app.post("/api/request/stream")
 async def stream_request(req: RequestPayload):
     session_id = req.session_id or str(uuid.uuid4())
@@ -117,19 +119,30 @@ async def stream_request(req: RequestPayload):
                 name = event.get("name", "")
                 run_id = event.get("run_id", "")
 
-                # Track the root run so we can identify the top-level graph's final output
+                # Track the root run to identify the top-level graph's final output
                 if root_run_id is None:
                     root_run_id = run_id
 
-                # Skip per-token streaming events — too noisy for status feed
+                # Skip per-token streaming events
                 if event_type in ("on_chat_model_stream", "on_chain_stream"):
                     continue
 
-                # Emit raw event info (step 2 will replace with human-readable labels)
-                yield {
-                    "event": "status",
-                    "data": json.dumps({"event": event_type, "name": name}),
-                }
+                # Emit human-readable status for known tool/node events
+                label: str | None = None
+                if event_type == "on_tool_start":
+                    label = TOOL_START_LABELS.get(name)
+                elif event_type == "on_tool_end":
+                    label = TOOL_END_LABELS.get(name)
+                elif event_type == "on_chain_start":
+                    label = TOOL_START_LABELS.get(name)
+                elif event_type == "on_chain_end":
+                    label = TOOL_END_LABELS.get(name)
+
+                if label:
+                    yield {
+                        "event": "status",
+                        "data": json.dumps({"text": label}),
+                    }
 
                 # Capture final output from the root orchestrator graph
                 if event_type == "on_chain_end" and run_id == root_run_id:
