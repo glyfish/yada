@@ -283,6 +283,24 @@
             word-break: break-word;
             color: #000;
         }
+        .status-bar {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.35rem 0;
+            font-size: 0.85rem;
+            color: #555;
+            min-height: 1.75rem;
+        }
+        .status-bar .status-spinner {
+            flex-shrink: 0;
+            width: 0.85em;
+            height: 0.85em;
+            border: 2px solid #ccc;
+            border-top-color: #555;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
     </style>
     <!-- MathJax v3 config + loader -->
     <script>
@@ -378,6 +396,7 @@
 
         const textValue = state("");
         const isLoading = state(false);
+        const statusText = state("");
         const feedCount = state(0);
         const sessionId = state(null);
         const showLoadMenu = state(false);
@@ -387,7 +406,7 @@
         const GITHUB_LOAD_ALL_REPOS = "/api/document/load_all_github_repos";
         const GITHUB_LOAD_REPO = "/api/document/load_github_repo";
         const RESEARCH_NOTE_LOAD = "/api/document/load_research_document";
-        const YADA_REQUEST = "/api/request";
+        const YADA_REQUEST_STREAM = "/api/request/stream";
 
         // Close dropdown on outside click / ESC
         document.addEventListener("click", () => { showLoadMenu.val = false; });
@@ -707,6 +726,7 @@
         // Main Page
         const handleYadaRequestSubmit = async () => {
             isLoading.val = true;
+            statusText.val = "Thinking...";
 
             // Take a snapshot of what was asked
             const promptBeforeSend = textValue.val;
@@ -715,14 +735,13 @@
                 const payload = { input: promptBeforeSend };
                 if (sessionId.val) payload.session_id = sessionId.val;
 
-                const response = await fetch(YADA_REQUEST, {
+                const response = await fetch(YADA_REQUEST_STREAM, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(payload)
                 });
 
                 if (!response.ok) {
-                    // don't clear on error
                     let msg = `Request failed (${response.status})`;
                     try {
                         const errBody = await response.json();
@@ -732,24 +751,56 @@
                     throw new Error(msg);
                 }
 
-                const data = await response.json();
-                if (data?.session_id) {
-                    sessionId.val = data.session_id;
-                }
+                // Read the SSE stream line by line
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = "";
+                let currentEvent = "message";
+                let resultHandled = false;
 
-                await prependResultCard(promptBeforeSend, data.result);
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
 
-                // SUCCESS: clear textarea content + reset height
-                textValue.val = "";
-                if (inputTextareaEl) {
-                    inputTextareaEl.value = "";
-                    inputTextareaEl.style.height = "auto";
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split("\n");
+                    buffer = lines.pop(); // keep incomplete last line
+
+                    for (const line of lines) {
+                        if (line.startsWith("event:")) {
+                            currentEvent = line.slice(6).trim();
+                        } else if (line.startsWith("data:")) {
+                            const raw = line.slice(5).trim();
+                            let parsed;
+                            try { parsed = JSON.parse(raw); } catch (_) { continue; }
+
+                            if (currentEvent === "status" && parsed.text) {
+                                statusText.val = parsed.text;
+                            } else if (currentEvent === "result" && !resultHandled) {
+                                resultHandled = true;
+                                if (parsed.session_id) sessionId.val = parsed.session_id;
+                                statusText.val = "";
+                                isLoading.val = false;
+                                await prependResultCard(promptBeforeSend, parsed.result ?? "");
+                                // SUCCESS: clear textarea
+                                textValue.val = "";
+                                if (inputTextareaEl) {
+                                    inputTextareaEl.value = "";
+                                    inputTextareaEl.style.height = "auto";
+                                }
+                            } else if (currentEvent === "error") {
+                                throw new Error(parsed.message || "Unknown stream error");
+                            }
+                            currentEvent = "message"; // reset after data line
+                        }
+                    }
                 }
             } catch (err) {
                 alert(`Error: ${err.message}`);
                 // DO NOT clear textValue or textarea on error
             } finally {
                 isLoading.val = false;
+                statusText.val = "";
             }
         };
 
@@ -825,6 +876,15 @@
                     div({ class: "button-wrapper", style: "margin-top: .5rem; display:flex; gap:.5rem;" },
                         button({ class: "btn primary", onclick: handleYadaRequestSubmit }, "Submit"),
                         button({ class: "btn secondary", onclick: startNewChat, disabled: () => isLoading.val }, "New Chat")
+                    ),
+
+                    // Status bar — visible while agent is running
+                    div({
+                        class: "status-bar",
+                        style: () => statusText.val ? "display:flex" : "display:none",
+                    },
+                        div({ class: "status-spinner" }),
+                        span(() => statusText.val),
                     ),
 
                     // Header toggled dynamically
