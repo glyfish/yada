@@ -70,3 +70,33 @@ PROGRAMMING_LANGUAGE_MAP = {
     ".txt": "text",
 }
 
+# SSE streaming status labels for agent tool/node events
+TOOL_START_LABELS: dict[str, str] = {
+    # Orchestrator delegation tools
+    "delegate_to_search_agent":                  "Searching the web...",
+    "delegate_to_bar_chart_agent":               "Building bar chart...",
+    "delegate_to_time_series_plot_agent":        "Building time series plot...",
+    "delegate_to_document_store_info_agent":     "Querying document store info...",
+    "delegate_to_code_repository_search_agent":  "Searching code repositories...",
+    "delegate_to_research_library_search_agent": "Searching research library...",
+    "delegate_to_fred_data_info_search_agent":   "Searching FRED data...",
+    "extract_document_query_from_request":       "Extracting query filters...",
+    # Subagent graph nodes
+    "retrieve":                                  "Retrieving documents...",
+    "grade":                                     "Grading document relevance...",
+    "generate":                                  "Generating response...",
+    "model":                                     "Thinking...",
+}
+
+TOOL_END_LABELS: dict[str, str] = {
+    "delegate_to_search_agent":                  "Web search complete",
+    "delegate_to_bar_chart_agent":               "Bar chart ready",
+    "delegate_to_time_series_plot_agent":        "Time series plot ready",
+    "delegate_to_document_store_info_agent":     "Document store query complete",
+    "delegate_to_code_repository_search_agent":  "Code repository search complete",
+    "delegate_to_research_library_search_agent": "Research library search complete",
+    "delegate_to_fred_data_info_search_agent":   "FRED data search complete",
+    "retrieve":                                  "Documents retrieved",
+    "grade":                                     "Relevance grading complete",
+    "generate":                                  "Response ready",
+}
