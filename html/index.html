@@ -799,6 +799,7 @@
         // Build the textarea node first so we can keep a reference
         inputTextareaEl = textarea({
             rows: 4,
+            placeholder: "Ask something...",
             disabled: () => isLoading.val,
             oninput: e => {
                 // auto-resize logic
@@ -862,15 +863,6 @@
                         )
                     ),
 
-                    // Status bar — prompt hint at rest, status text while running
-                    div({ class: "status-bar" },
-                        div({
-                            class: "status-spinner",
-                            style: () => isLoading.val ? "visibility:visible" : "visibility:hidden",
-                        }),
-                        span(() => statusText.val || "Ask something..."),
-                    ),
-
                     // Our referenced textarea node
                     inputTextareaEl,
 
@@ -878,6 +870,15 @@
                     div({ class: "button-wrapper", style: "margin-top: .5rem; display:flex; gap:.5rem;" },
                         button({ class: "btn primary", onclick: handleYadaRequestSubmit, disabled: () => isLoading.val }, "Submit"),
                         button({ class: "btn secondary", onclick: startNewChat, disabled: () => isLoading.val }, "New Chat")
+                    ),
+
+                    // Status bar — visible while agent is running
+                    div({
+                        class: "status-bar",
+                        style: () => statusText.val ? "visibility:visible" : "visibility:hidden",
+                    },
+                        div({ class: "status-spinner" }),
+                        span(() => statusText.val),
                     ),
 
                     // Header toggled dynamically
