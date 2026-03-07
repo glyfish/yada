@@ -12,6 +12,7 @@ langgraph
 langchain-openai
 langchain-anthropic
 langchain_community
+langchain-tavily
 langchain_chroma
 chromadb
 statsmodels

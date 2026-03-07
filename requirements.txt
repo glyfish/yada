@@ -11,7 +11,9 @@ aiofiles==25.1.0
 aiohappyeyeballs==2.6.1
     # via aiohttp
 aiohttp==3.13.2
-    # via langchain-community
+    # via
+    #   langchain-community
+    #   langchain-tavily
 aiosignal==1.4.0
     # via aiohttp
 alembic==1.16.4
@@ -306,6 +308,7 @@ langchain==0.3.25
     # via
     #   -r requirements.in
     #   langchain-community
+    #   langchain-tavily
 langchain-anthropic==0.3.18
     # via -r requirements.in
 langchain-chroma==0.2.5
@@ -319,11 +322,14 @@ langchain-core==0.3.72
     #   langchain-chroma
     #   langchain-community
     #   langchain-openai
+    #   langchain-tavily
     #   langchain-text-splitters
     #   langgraph
     #   langgraph-checkpoint
     #   langgraph-prebuilt
 langchain-openai==0.3.21
+    # via -r requirements.in
+langchain-tavily==0.2.17
     # via -r requirements.in
 langchain-text-splitters==0.3.8
     # via langchain
@@ -632,6 +638,7 @@ requests==2.32.3
     #   kubernetes
     #   langchain
     #   langchain-community
+    #   langchain-tavily
     #   langsmith
     #   posthog
     #   requests-oauthlib
