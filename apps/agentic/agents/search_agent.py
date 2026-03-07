@@ -1,4 +1,4 @@
-from langchain_community.tools import TavilySearchResults
+from langchain_tavily import TavilySearch
 from langgraph.graph import StateGraph, START, END
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.prebuilt import ToolNode
@@ -13,7 +13,7 @@ class SearchAgent(ReactAgent):
     """
 
     def __init__(self):
-        tools: list[BaseTool] = [TavilySearchResults()]
+        tools: list[BaseTool] = [TavilySearch()]
         tool_node_name = "tavily_search_tool_node"
 
         super().__init__(tools, tool_node_name)
