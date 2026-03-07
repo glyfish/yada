@@ -22,6 +22,22 @@ from lib.logger import get_logger
 logger = get_logger("YADA")
 
 
+def _normalize_chroma_filter(query: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Ensure a ChromaDB where-filter is valid. A flat dict with multiple keys
+    is not accepted by ChromaDB — it requires a logical operator ($and/$or).
+    This wraps any such flat dict in $and so the filter works regardless of
+    how the caller constructed it.
+    """
+    if not query:
+        return query
+    if any(k.startswith("$") for k in query):
+        return query
+    if len(query) > 1:
+        return {"$and": [{k: v} for k, v in query.items()]}
+    return query
+
+
 class DocumentGrade(BaseModel):
     """Binary relevance score for a retrieved document chunk."""
     relevant: bool = Field(description="True if the document is relevant to the question")
@@ -39,7 +55,8 @@ class ChromaRAGAgent(ABC):
         self._llm = agent_llm_model()
         self._doc_loader = doc_loader
 
-        search_kwargs = {"k": retriever_k, "fetch_k": retriever_fetch_k, "filter": query}
+        normalized_query = _normalize_chroma_filter(query)
+        search_kwargs = {"k": retriever_k, "fetch_k": retriever_fetch_k, "filter": normalized_query}
         if score_threshold is not None:
             search_kwargs["score_threshold"] = score_threshold
 

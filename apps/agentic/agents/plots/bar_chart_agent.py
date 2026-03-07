@@ -67,9 +67,10 @@ class BarChartAgent(ReactAgent):
             "the x-axis labels should be 90 degrees if the largest category string is larger than 7 characters "
             "or 45 degrees if the largest category string is greater than 2 characters "
             "otherwise the rotation should be zero. Sort the values in descending order. The bar_chart_tool will return a path to the plot image file. "
-            "The returned response should be in markdown and should include commentary on the data displayed above and " 
+            "The returned response should be in markdown and should include commentary on the data displayed above and "
             "the html plot image should be styled using the bar_chart CSS class in an enclosing div. "
-            "If more than two variables are provided put the data in separate plots" 
+            "If more than two variables are provided put the data in separate plots. "
+            "If you choose to call a tool, do so; otherwise, provide your findings in plain text."
         )
 
         logger.debug(f"Bar Chart Agent prompt: {system_prompt}")
@@ -77,7 +78,6 @@ class BarChartAgent(ReactAgent):
         return ChatPromptTemplate.from_messages([
             ("system", system_prompt),
             MessagesPlaceholder(variable_name="messages"),
-            ("system", "If you choose to call a tool, do so; otherwise, provide your findings in plain text."),
         ])
     
     
