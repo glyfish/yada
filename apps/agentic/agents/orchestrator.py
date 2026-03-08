@@ -2,7 +2,7 @@ import shortuuid
 from pydantic import BaseModel, Field
 from typing import Tuple, Dict, Any, Optional
 
-from apps.agentic.core.subagent_routing import PositiveExample, SubagentRoutingMetadata, subagent_routing_tool
+from apps.agentic.core.tool_spec import PositiveExample, NegativeExample, ToolSpec, tool_spec
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -48,16 +48,20 @@ class SubagentRequest(BaseModel):
 
     request: str = Field(..., description="Request to send to the subagent")      
 
-@subagent_routing_tool(
+# delegate_to_search_agent
+@tool_spec(
     args_schema=SubagentRequest,
-    metadata=SubagentRoutingMetadata(
+    metadata=ToolSpec(
         primary_function=(
-            "Delegate a request to the Search Agent which performs web searches. "
-            "Use for factual questions, current events, data lookup, or research."
+            "Delegate a request to the Search Agent that performs web searches. "
+            "Use for factual questions, current events, data lookup, or research "
+            "if no other tool can fulfill the request. The Search Agent can also "
+            "be used to search for data to visualize with the plotting agents."
         ),
         positive_examples=[
             PositiveExample(input="What is the history of Tullahoma TN"),
-            PositiveExample(input="Compare the populations of the 10 largest cities in the world"),
+            PositiveExample(input="Compare the populations of the 10 largest cities in the world."),
+            PositiveExample(input="Plot a timeseries of the population of Tennessee"),
         ],
         suggests_followup=[
             "delegate_to_bar_chart_agent if the result contains categorical data to visualize",
@@ -72,9 +76,10 @@ async def delegate_to_search_agent(request: str) -> str:
     return result["messages"][-1].content
 
 
-@subagent_routing_tool(
+# delegate_to_bar_chart_agent
+@tool_spec(
     args_schema=SubagentRequest,
-    metadata=SubagentRoutingMetadata(
+    metadata=ToolSpec(
         primary_function=(
             "Delegate a request to the Bar Chart Agent which creates bar charts from categorical data. "
             "Use this when the user wants to visualize data as a bar chart. "
@@ -83,6 +88,10 @@ async def delegate_to_search_agent(request: str) -> str:
         ),
         positive_examples=[
             PositiveExample(input="Compare the populations of the 10 largest cities in the world in a bar chart"),
+        ],
+        negative_examples=[
+            NegativeExample(input="Plot the US GDP in a time series using FRED data", 
+                            reason="Use the FRED Data Info Agent to look up FRED time series information first")
         ],
     ),
 )
@@ -93,9 +102,10 @@ async def delegate_to_bar_chart_agent(request: str) -> str:
     return result["messages"][-1].content
 
 
-@subagent_routing_tool(
+# delegate_to_time_series_plot_agent
+@tool_spec(
     args_schema=SubagentRequest,
-    metadata=SubagentRoutingMetadata(
+    metadata=ToolSpec(
         primary_function=(
             "Delegate a request to the Time Series Plot Agent which creates time series plots from temporal data. "
             "Use this when the user wants to visualize data over time. "
@@ -115,9 +125,10 @@ async def delegate_to_time_series_plot_agent(request: str) -> str:
     return result["messages"][-1].content
 
 
-@subagent_routing_tool(
+# delegate_to_document_store_info_agent
+@tool_spec(
     args_schema=SubagentRequest,
-    metadata=SubagentRoutingMetadata(
+    metadata=ToolSpec(
         primary_function=(
             "Delegate a request to the Document Store Info Agent which provides information about "
             "the documents in the document stores. Available stores: Research Library (reference docs), "
@@ -141,10 +152,10 @@ async def delegate_to_document_store_info_agent(request: str) -> str:
     result = await _document_store_info_agent.agent.ainvoke(state, config)
     return result["messages"][-1].content
 
-
-@subagent_routing_tool(
+# delegate_to_code_repository_search_agent
+@tool_spec(
     args_schema=DocumentSubagentSearchInput,
-    metadata=SubagentRoutingMetadata(
+    metadata=ToolSpec(
         primary_function=(
             "Delegate a request to the Code Repository Search Agent which searches and retrieves code "
             "from indexed GitHub repositories. Use this when the user wants to search for specific "
@@ -156,7 +167,9 @@ async def delegate_to_document_store_info_agent(request: str) -> str:
             PositiveExample(input="What programming languages do I use in my code?"),
         ],
         requires_context=[
-            "'my code' / 'code database' → requester's indexed repositories in the code repository vector store",
+            "Call extract_document_query_from_request first to extract query filters and the cleaned query string. "
+            "Then pass the cleaned query string as 'request' and extracted filters as 'query'. ",
+            "Request should contain reference to 'my code' / 'code database' → requester's indexed repositories in the code repository vector store",
         ],
     ),
 )
@@ -167,10 +180,10 @@ async def delegate_to_code_repository_search_agent(request: str, query: Optional
     result = await code_repo_agent.agent.ainvoke(state, config)
     return result["messages"][-1].content
 
-
-@subagent_routing_tool(
+# delegate_to_research_library_search_agent
+@tool_spec(
     args_schema=DocumentSubagentSearchInput,
-    metadata=SubagentRoutingMetadata(
+    metadata=ToolSpec(
         primary_function=(
             "Delegate a request to the Research Library Search Agent which searches and retrieves documents "
             "from the research library. Use this when the user wants to search for specific documents "
@@ -182,7 +195,9 @@ async def delegate_to_code_repository_search_agent(request: str, query: Optional
             PositiveExample(input="Look in my research library for the definition of a Carnot Cycle"),
         ],
         requires_context=[
-            "'my research' → requester's indexed research library in the research_library vector store",
+            "Call extract_document_query_from_request first to extract query filters and the cleaned query string. "
+            "Then pass the cleaned query string as 'request' and extracted filters as 'query'. ",
+            "Request should contain reference to 'my research' → requester's indexed research library in the research_library vector store",
         ],
     ),
 )
@@ -193,10 +208,10 @@ async def delegate_to_research_library_search_agent(request: str, query: Optiona
     result = await research_library_agent.agent.ainvoke(state, config)
     return result["messages"][-1].content
 
-
-@subagent_routing_tool(
+# delegate_to_fred_data_info_search_agent
+@tool_spec(
     args_schema=DocumentSubagentSearchInput,
-    metadata=SubagentRoutingMetadata(
+    metadata=ToolSpec(
         primary_function=(
             "Delegate a request to the FRED Data Info Search Agent which searches and retrieves documents "
             "from the FRED data information store. FRED (Federal Reserve Economic Data) is a database of "
@@ -209,11 +224,17 @@ async def delegate_to_research_library_search_agent(request: str, query: Optiona
             PositiveExample(input="category_name:'Farm Products' What price indexes are in FRED?"),
         ],
         requires_context=[
-            "call extract_document_query_from_request first to extract query filters and the cleaned query string",
-            "pass the cleaned query string as 'request' and extracted filters as 'query'",
+            "Call extract_document_query_from_request first to extract query filters and the cleaned query string. "
+            "Then pass the cleaned query string as 'request' and extracted filters as 'query'. ",
+            "All requests should contain an explicit reference to FRED, FRED data, or FRED time series to ensure they are routed here first.",
+        ],
+        negative_examples=[
+            NegativeExample(input="Plot a time series for the population of Tennessee.", 
+                            reason="Use the FRED Data Info Agent to look up FRED time series only if the request explicitly references FRED data."
+            ),
         ],
         suggests_followup=[
-            "delegate_to_time_series_plot_agent to visualize a FRED time series once its series ID is known",
+            "delegate_to_time_series_plot_agent once a FRED series_id is known to visualize the time series and if a plot is requested",
         ],
     ),
 )
@@ -225,18 +246,25 @@ async def delegate_to_fred_data_info_search_agent(request: str, query: Optional[
     return result["messages"][-1].content
 
 
-@subagent_routing_tool(
+# extract_document_query_from_request
+@tool_spec(
     args_schema=SubagentRequest,
-    metadata=SubagentRoutingMetadata(
+    metadata=ToolSpec(
         primary_function=(
             "Extract a document query and any filter prefixes from a user request before passing it to a document search agent. "
             "Always call this first when the request may contain filter prefixes (e.g. title:, shelf:, popularity:). "
             "Returns a cleaned query string and an optional filters dictionary."
         ),
         positive_examples=[
-            PositiveExample(input="title:Thermodynamics Look in the document library for the definition of a Carnot Cycle."),
-            PositiveExample(input="shelf:publications Look in the document library for the definition of a Carnot Cycle"),
             PositiveExample(input="popularity:>40 What time series are available for Commodities in the FRED data?"),
+            PositiveExample(input="title:Thermodynamics Look in my research library for the definition of a Carnot Cycle."),
+            PositiveExample(input="shelf:publications Look in my research library for constraints on kinetic and magnetic " \
+                                  "energy in MHD relevant to magnetic dynamos?"),
+        ],
+        suggests_followup=[
+            "delegate_to_fred_data_info_search_agent to find information about FRED time series using the extracted query and filters.",
+            "delegate_to_research_library_search_agent to find documents in the research library using the extracted query and filters.",
+            "delegate_to_code_repository_search_agent to find code in the code repository using the extracted query and filters.",
         ],
     ),
 )
@@ -275,7 +303,9 @@ following functions,
 5. Document search
 
 The are two types document stores used in the app. One type contains reference documents for source code
-and research. Documents of this type will be referred to as "reference documents". The others contain documentation for APIs that may need to be consulted for information before making a request. Documents of this type will be referred as "API documents". The first type o
+and research. Documents of this type will be referred to as "reference documents". The others contain 
+documentation for APIs that may need to be consulted for information before making a request. 
+Documents of this type will be referred as "API documents".
 
 Analyze the user's request and call the appropriate tool(s) in the correct order.
 A request may require multiple subagents called sequentially, for example searching for data
@@ -319,10 +349,9 @@ Search my research library for the definition of the Carnot Cycle.
 Compare the populations of the 10 largest European cities in a bar chart.
 </input>
 <output>
-1. Call extract_document_query_from_request to extract the query and any filters from the request.
-2. Retrieve requested data using the appropriate data source tool. If no data source tool is available
+1. Retrieve requested data using the appropriate data source tool. If no data source tool is available
    do a web search for the data.
-3. Pass the data to the appropriate visualization tool.
+2. Pass the data to the appropriate visualization tool.
 </output>
 </example>
 

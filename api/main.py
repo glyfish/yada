@@ -1,10 +1,12 @@
 # backend/main.py
+import asyncio
 import os
 import json
 import re
 import uuid
 from typing import Any, Dict, Optional
 
+import langsmith
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -16,12 +18,46 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 from apps.agentic.agents.orchestrator import OrchestratorAgent
 from apps.agentic.core.constants import TOOL_START_LABELS, TOOL_END_LABELS
+from apps.agentic.core.pricing import estimate_cost
 from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 from api.document_router import router as document_router
+
+# ---------------------------------------------------------------------------
+# LangSmith trace URL helper — lazy-cached per process
+# ---------------------------------------------------------------------------
+_ls_client: langsmith.Client | None = None
+_ls_url_prefix: str | None = None   # "{host}/o/{tenant}/projects/p/{project}"
+
+
+def _get_ls_client() -> langsmith.Client | None:
+    if os.environ.get("LANGCHAIN_TRACING_V2", "").lower() != "true":
+        return None
+    api_key = os.environ.get("LANGCHAIN_API_KEY") or os.environ.get("LANGSMITH_API_KEY")
+    if not api_key:
+        return None
+    return langsmith.Client()
+
+
+def get_trace_url(run_id: str) -> str | None:
+    global _ls_client, _ls_url_prefix
+    try:
+        if _ls_client is None:
+            _ls_client = _get_ls_client()
+        if _ls_client is None:
+            return None
+        if _ls_url_prefix is None:
+            tenant_id = _ls_client._get_tenant_id()
+            project_name = os.environ.get("LANGCHAIN_PROJECT", "default")
+            project = _ls_client.read_project(project_name=project_name)
+            host = _ls_client._host_url
+            _ls_url_prefix = f"{host}/o/{tenant_id}/projects/p/{project.id}"
+        return f"{_ls_url_prefix}/r/{run_id}?poll=true"
+    except Exception:
+        return None
 
 logger = get_logger("YADA")
 
@@ -157,10 +193,44 @@ async def stream_request(req: RequestPayload):
                         if last_msg:
                             final_result = _message_content_to_text(last_msg)
 
+            # Send result immediately — do not block on LangSmith
             yield {
                 "event": "result",
                 "data": json.dumps({"result": final_result, "session_id": session_id}),
             }
+
+            # Poll LangSmith for the finalized root run (aggregates all subagents)
+            logger.debug(f"Meta poll: root_run_id={root_run_id}")
+            if root_run_id:
+                client = _get_ls_client()
+                logger.debug(f"Meta poll: client={client}")
+                if client:
+                    model = os.getenv("AGENT_LLM_MODEL", "gpt-4.1")
+                    for attempt in range(8):
+                        await asyncio.sleep(1)
+                        try:
+                            run = client.read_run(str(root_run_id))
+                            logger.debug(f"Meta poll attempt {attempt}: total_tokens={run.total_tokens}")
+                            if run.total_tokens:
+                                cost = float(run.total_cost) if run.total_cost else estimate_cost(
+                                    model,
+                                    run.prompt_tokens or 0,
+                                    run.completion_tokens or 0,
+                                )
+                                yield {
+                                    "event": "meta",
+                                    "data": json.dumps({
+                                        "input_tokens":  run.prompt_tokens or 0,
+                                        "output_tokens": run.completion_tokens or 0,
+                                        "total_tokens":  run.total_tokens,
+                                        "cost_usd":      cost,
+                                        "trace_url":     get_trace_url(str(root_run_id)),
+                                    }),
+                                }
+                                break
+                        except Exception as e:
+                            logger.debug(f"Meta poll attempt {attempt} error: {e}")
+                            continue
 
         except Exception as e:
             logger.error(f"Stream error [{session_id}]: {e}")

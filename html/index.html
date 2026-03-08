@@ -223,6 +223,16 @@
             padding: .5rem .75rem; font-weight: 600; background: #f7f7f7; border-bottom: 1px solid #eee;
         }
         .result-body { padding: .75rem .9rem; }
+        .result-meta {
+            display: flex; gap: 1.25rem; align-items: center; flex-wrap: wrap;
+            padding: .35rem .9rem;
+            font-size: .75rem; color: #888;
+            border-top: 1px solid #eee;
+            background: #fafafa;
+            min-height: 1.8rem;
+        }
+        .result-meta a { color: #666; text-decoration: none; }
+        .result-meta a:hover { text-decoration: underline; }
         .dropdown { display: inline-block; position: relative; }
         .dropdown-menu {
             position: absolute;
@@ -537,6 +547,24 @@
             }
         }
 
+        let lastCard = null;
+
+        function fillMetaFooter(card, meta) {
+            const footer = card.querySelector(".result-meta");
+            if (!footer || !meta) return;
+            const parts = [];
+            if (meta.total_tokens != null) {
+                parts.push(`${meta.total_tokens.toLocaleString()} tokens (${meta.input_tokens.toLocaleString()} in / ${meta.output_tokens.toLocaleString()} out)`);
+            }
+            if (meta.cost_usd != null) {
+                parts.push(`$${meta.cost_usd.toPrecision(4)}`);
+            }
+            if (meta.trace_url) {
+                parts.push(`<a href="${meta.trace_url}" target="_blank" rel="noopener">LangSmith trace</a>`);
+            }
+            footer.innerHTML = parts.join('<span style="color:#ccc">|</span>');
+        }
+
         async function prependResultCard(userPrompt, markdown) {
             const feed = document.getElementById("results-feed");
             const sc = document.scrollingElement || document.documentElement;
@@ -569,8 +597,13 @@
             body.appendChild(qDiv);
             body.appendChild(aDiv);
 
+            const metaFooter = document.createElement("div");
+            metaFooter.className = "result-meta";
+
             card.appendChild(head);
             card.appendChild(body);
+            card.appendChild(metaFooter);
+            lastCard = card;
 
             // Insert card before rendering, so MathJax/etc. can run after it's in DOM
             feed.insertBefore(card, feed.firstChild);
@@ -780,6 +813,8 @@
                                     inputTextareaEl.value = "";
                                     inputTextareaEl.style.height = "auto";
                                 }
+                            } else if (currentEvent === "meta") {
+                                fillMetaFooter(lastCard, parsed);
                             } else if (currentEvent === "error") {
                                 throw new Error(parsed.message || "Unknown stream error");
                             }

@@ -15,7 +15,7 @@ class NegativeExample:
 
 
 @dataclass
-class SubagentRoutingMetadata:
+class ToolSpec:
     primary_function: str
     positive_examples: list[PositiveExample] = field(default_factory=list)
     negative_examples: list[NegativeExample] = field(default_factory=list)
@@ -23,7 +23,7 @@ class SubagentRoutingMetadata:
     suggests_followup: list[str] = field(default_factory=list)
 
 
-def build_tool_description(metadata: SubagentRoutingMetadata) -> str:
+def build_tool_description(metadata: ToolSpec) -> str:
     parts = [metadata.primary_function.strip()]
 
     if metadata.positive_examples:
@@ -45,7 +45,7 @@ def build_tool_description(metadata: SubagentRoutingMetadata) -> str:
     return "\n\n".join(parts)
 
 
-def subagent_routing_tool(args_schema, metadata: SubagentRoutingMetadata):
+def tool_spec(args_schema, metadata: ToolSpec):
     def decorator(func):
         description = build_tool_description(metadata)
         return tool(args_schema=args_schema, description=description)(func)
