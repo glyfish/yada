@@ -15,6 +15,7 @@ from apps.agentic.core.agents.messages import WorkerState
 from apps.agentic.core.llm_factory import agent_llm_model, scoring_llm_model
 from apps.agentic.core.checkpointer import checkpointer
 from apps.agentic.core.constants import RAG_SCORE_THRESHOLD
+from apps.agentic.core.output_style import OUTPUT_STYLE
 from langsmith.run_helpers import traceable
 
 from lib.logger import get_logger
@@ -173,8 +174,12 @@ class ChromaRAGAgent(ABC):
         prompt = self._generate_prompt
         logger.debug(f"RAG Agent generate prompt: {prompt}")
 
-        rag_chain = prompt | self.llm | StrOutputParser()
-        response = rag_chain.invoke({"context": docs, "question": question})
+        prompt_messages = prompt.format_messages(context=docs, question=question)
+        if prompt_messages and isinstance(prompt_messages[0], SystemMessage):
+            prompt_messages[0] = SystemMessage(content=f"{prompt_messages[0].content}\n\n{OUTPUT_STYLE}")
+        else:
+            prompt_messages.insert(0, SystemMessage(content=OUTPUT_STYLE))
+        response = (self.llm | StrOutputParser()).invoke(prompt_messages)
         full_response = f"{response}\n\n---\n\n**Retrieved Documents:**\n\n{docs}"
         return {"messages": [AIMessage(content=full_response)]}
     

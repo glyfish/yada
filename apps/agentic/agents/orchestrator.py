@@ -152,7 +152,7 @@ async def delegate_to_document_store_info_agent(request: str) -> str:
         ),
         positive_examples=[
             PositiveExample(input="account:troystribling repo:zgomot ext:rb Where is MIDI output handled in my code?"),
-            PositiveExample(input="Find the latest commit message for the file that handles MIDI output in my code"),
+            PositiveExample(input="Find the latest commit message for the file that handles MIDI output in my code."),
             PositiveExample(input="What programming languages do I use in my code?"),
         ],
         requires_context=[
