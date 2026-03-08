@@ -3,8 +3,10 @@ from abc import ABC, abstractmethod
 from langgraph.graph import StateGraph, START, END
 from apps.agentic.core.agents.messages import WorkerState
 from apps.agentic.core.llm_factory import agent_llm_model
+from apps.agentic.core.output_style import OUTPUT_STYLE
 
 from langgraph.prebuilt import tools_condition
+from langchain_core.messages import SystemMessage
 from langchain_core.tools import BaseTool
 from lib.logger import get_logger
 from langgraph.prebuilt import ToolNode
@@ -104,6 +106,8 @@ class ReactAgent(ABC):
 
         messages = state["messages"]
         prompt_messages = self.prompt.format_messages(messages=messages)
+        if prompt_messages and isinstance(prompt_messages[0], SystemMessage):
+            prompt_messages[0] = SystemMessage(content=f"{prompt_messages[0].content}\n\n{OUTPUT_STYLE}")
         result = await self.tooled_llm.ainvoke(prompt_messages)
         return {"messages": [result]}
 
