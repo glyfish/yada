@@ -140,8 +140,8 @@ async def delegate_to_time_series_plot_agent(request: str) -> str:
             "research library: document shelves, authors, tags; FRED: category_name, series_id, series_title, popularity."
         ),
         positive_examples=[
-            PositiveExample(input="What are the repository names for my code repositories?"),
-            PositiveExample(input="What are the document shelves values available in my research library?"),
+            PositiveExample(input="List files in troystribling/zgomot."),
+            PositiveExample(input="What are the document shelves available in my research library?"),
             PositiveExample(input="What are the titles of the documents in the 'publications' shelf in my research library?"),
         ],
     ),
@@ -151,6 +151,7 @@ async def delegate_to_document_store_info_agent(request: str) -> str:
     config = RunnableConfig(configurable={"thread_id": shortuuid.uuid()})
     result = await _document_store_info_agent.agent.ainvoke(state, config)
     return result["messages"][-1].content
+
 
 # delegate_to_code_repository_search_agent
 @tool_spec(
@@ -220,7 +221,7 @@ async def delegate_to_research_library_search_agent(request: str, query: Optiona
         ),
         positive_examples=[
             PositiveExample(input="popularity:>40 What time series are available for Commodities in the FRED data?"),
-            PositiveExample(input="What price indexes are in FRED for Farm Products?"),
+            PositiveExample(input="popularity:>40 What price indexes are in FRED for Farm Products?"),
             PositiveExample(input="category_name:'Farm Products' What price indexes are in FRED?"),
         ],
         requires_context=[

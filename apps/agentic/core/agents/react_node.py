@@ -1,4 +1,6 @@
-from langchain_core.messages import SystemMessage
+from typing import cast
+
+from langchain_core.messages import AIMessage, SystemMessage
 from langchain_core.tools import BaseTool
 from langsmith.run_helpers import traceable
 
@@ -17,6 +19,7 @@ class ReactNode:
     """
 
     def __init__(self, tools: list[BaseTool], prompt, name: str = "ReactNode"):
+        self._name = name
         self._tools = tools
         self._llm = agent_llm_model()
         self._prompt = prompt
@@ -53,5 +56,10 @@ class ReactNode:
             prompt_messages[0] = SystemMessage(
                 content=f"{prompt_messages[0].content}\n\n{OUTPUT_STYLE}"
             )
-        result = await self.tooled_llm.ainvoke(prompt_messages)
+        result = cast(AIMessage, await self.tooled_llm.ainvoke(prompt_messages))
+
+        if result.tool_calls:
+            for tc in result.tool_calls:
+                logger.info(f"[{self._name}] routing → {tc['name']}({tc['args']})")
+
         return {"messages": [result]}
