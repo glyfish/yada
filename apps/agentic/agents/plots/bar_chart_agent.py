@@ -4,8 +4,7 @@ import shortuuid
 
 from langgraph.graph import StateGraph, START, END
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.tools import tool
-
+from apps.agentic.core.tool_spec import PositiveExample, NegativeExample, ToolSpec, tool_spec
 from apps.agentic.core.agents.messages import WorkerState
 
 import os
@@ -58,20 +57,37 @@ class BarChartAgent(ReactAgent):
         This defines how the model should interpret the messages and what it should do.
         """
     
-        system_prompt = (
-            "You are a chart generator. You may use the bar_chart_tool tool to generate a bar chart "
-            "as instructed by the user. The bar_chart_tool takes the following parameters: a dictionary "
-            "containing the data points to plot with keys identifying the data categories and values as the numeric "
-            "values to plot, a plot title, a description label of the categories to label the x-axis, a label for "
-            "the y-axis describing the data values and a rotation angle for "
-            "the x-axis labels should be 90 degrees if the largest category string is larger than 7 characters "
-            "or 45 degrees if the largest category string is greater than 2 characters "
-            "otherwise the rotation should be zero. Sort the values in descending order. The bar_chart_tool will return a path to the plot image file. "
-            "The returned response should be in markdown and should include commentary on the data displayed above and "
-            "the html plot image should be styled using the bar_chart CSS class in an enclosing div. "
-            "If more than two variables are provided put the data in separate plots. "
-            "If you choose to call a tool, do so; otherwise, provide your findings in plain text."
-        )
+        system_prompt = """
+            <instructions>
+            You are a chart generator. You may use the bar_chart_tool tool to generate a bar chart 
+            as instructed by the user.
+            </instructions>
+
+            <tool_instructions>
+            bar_chart_tool
+                Input
+                    - data: Dict[str, float]
+                        Data points to plot with keys identifying the data categories and values to plot
+                    - title: str 
+                        A brief description of the chart to use as the title
+                    - x_axis_label: str 
+                        A label for the x-axis describing the data categories
+                    - y_axis_label: str
+                        A label for the y-axis describing the data values
+                    - xlabel_rotation: float
+                        A rotation angle for the x-axis labels the x-axis labels should be 90 degrees if the 
+                        largest category string is larger than 7 characters or 45 degrees if the largest category string is 
+                        greater than 2 characters otherwise the rotation should be zero. Sort the values in descending order. 
+                Output        
+                    - The bar_chart_tool will return a path to the plot image file.
+                      The returned response should be in markdown and should include commentary on the data 
+                      displayed above the chart. The chart should be displayed using an <img> tag with the 
+                      source set to the returned file path. The html plot image should be styled using the 'bar_chart' 
+                      CSS class in an enclosing div.
+                    - If more than two variables are provided put the data in separate plots.
+                    - If you choose to call a tool, do so; otherwise, provide your findings in plain text
+            </tool_instructions>
+            """
 
         logger.debug(f"Bar Chart Agent prompt: {system_prompt}")
 
@@ -82,41 +98,39 @@ class BarChartAgent(ReactAgent):
     
     
     @staticmethod
-    @tool(args_schema=BarChartInput)
-    def bar_chart_tool(data: Dict[str, float], 
-                       title: str,  
-                       x_axis_label: str, 
+    @tool_spec(
+        args_schema=BarChartInput,
+        metadata=ToolSpec(
+            primary_function=
+                """
+                Generate a bar chart image from labeled numeric data.
+                Returns a file path to the rendered chart for display in the UI.
+                Sort values in descending order. Use xlabel_rotation=90 if the longest category label
+                exceeds 7 characters, 45 if it exceeds 2 characters, otherwise 0.
+                If more than two variables are provided, put the data in separate plots.
+                """
+            ,
+            positive_examples=[
+                PositiveExample(input="Create a bar chart of sales by region."),
+                PositiveExample(input="Plot the GDP of these countries as a bar chart."),
+                PositiveExample(input="Show me a bar chart comparing the populations of these cities."),
+            ],
+            requires_context=[
+            ],
+            negative_examples=[
+                NegativeExample(input="Plot this data as a time series.", 
+                                reason="Time series data requires a line chart, not a bar chart."),
+            ],
+        ),
+    )
+    def bar_chart_tool(data: Dict[str, float],
+                       title: str,
+                       x_axis_label: str,
                        y_axis_label: str,
                        xlabel_rotation: int) -> str:
-        """Generate a bar chart from data points and display it.
-        
-        Parameters
-        ----------
-            data: Dict[str, float]
-                Dictionary where keys are labels and values are numeric values to plot
-            title: str
-                Title of the chart.
-            x_axis_label: str
-                Label for the x-axis.
-            y_axis_label: str
-                Label for the y-axis.
-            xlabel_rotation: int
-                Rotation angle for the x-axis labels.
-        Returns:
-            plot file name: str
-                The file name of the generated bar chart image.
-            
-        Example:
-            input = BarChartInput(
-                data={"A": 10, "B": 20, "C": 15},
-                title="Sample Chart",
-                x_axis_label="Letter",
-                y_axis_label="Count",
-                xlabel_rotation=45
-            )
-        """
 
-        logger.debug(f"Calling bar_chart_tool: {data}, title: {title}, xlabel: {x_axis_label}, ylabel: {y_axis_label}, xlabel_rotation: {xlabel_rotation}")
+        logger.debug(f"Calling bar_chart_tool: {data}, title: {title}, xlabel: {x_axis_label}, "
+                     f"ylabel: {y_axis_label}, xlabel_rotation: {xlabel_rotation}")
 
         bar_chart_file = BarChartAgent.generate_bar_chart(
             data=data, 

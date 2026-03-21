@@ -210,10 +210,11 @@ class DocumentStoreInfoAgent(ReactAgent):
     @tool_spec(
         args_schema=None,
         metadata=ToolSpec(
-            primary_function=(
-                "List all repository names available in the code repository document store. "
-                "Returns account/repository pairs for every indexed GitHub repository."
-            ),
+            primary_function=
+            """
+            List all repository names available in the code repository document store.
+            Returns account/repository pairs for every indexed GitHub repository.
+            """,
             positive_examples=[
                 PositiveExample(input="What repositories are in my code store?"),
                 PositiveExample(input="List all code repositories in the glyfish account."),
@@ -244,10 +245,11 @@ class DocumentStoreInfoAgent(ReactAgent):
     @tool_spec(
         args_schema=RepositoryFilesInput,
         metadata=ToolSpec(
-            primary_function=(
-                "List filenames within a specific code repository."
-                "Returns relative file paths for all files in the given account/repository."
-            ),
+            primary_function=
+            """
+            List filenames within a specific code repository.
+            Returns relative file paths for all files in the given account/repository.
+            """,
             positive_examples=[
                 PositiveExample(input="What file are in the yada repository implement an agent?"),
                 PositiveExample(input="List files in troystribling/zgomot."),
@@ -283,10 +285,11 @@ class DocumentStoreInfoAgent(ReactAgent):
     @tool_spec(
         args_schema=ResearchLibraryMetadataListInput,
         metadata=ToolSpec(
-            primary_function=(
-                "Return paginated metadata rows (filename, title, author, topic, shelf) "
-                "for research notes in the research library."
-            ),
+            primary_function=
+            """
+            Return paginated metadata rows (filename, title, author, topic, shelf)
+            for research notes in the research library.
+            """,
             positive_examples=[
                 PositiveExample(input="What metadata is available for documents in the research library?"),
             ],
@@ -307,10 +310,11 @@ class DocumentStoreInfoAgent(ReactAgent):
     @tool_spec(
         args_schema=ResearchLibraryTitleQueryInput,
         metadata=ToolSpec(
-            primary_function=(
-                "Return research note titles filtered by author, topic, or shelf metadata. "
-                "All filters are optional and use case-insensitive matching."
-            ),
+            primary_function=
+            """
+            Return research note titles filtered by author, topic, or shelf metadata.
+            All filters are optional and use case-insensitive matching.
+            """,
             positive_examples=[
                 PositiveExample(input="What are the titles of papers by Jaynes in the research library?"),
                 PositiveExample(input="Find the titles of research notes on thermodynamics."),
