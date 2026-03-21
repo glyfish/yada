@@ -216,8 +216,9 @@ class DocumentStoreInfoAgent(ReactAgent):
             ),
             positive_examples=[
                 PositiveExample(input="What repositories are in my code store?"),
-                PositiveExample(input="List all code repositories."),
+                PositiveExample(input="List all code repositories in the glyfish account."),
                 PositiveExample(input="What GitHub repositories do I have?"),
+                PositiveExample(input="What GitHub accounts do I have?"),
             ],
             suggests_followup=[
                 "filenames_for_repository to list files within a specific repository",
@@ -248,7 +249,7 @@ class DocumentStoreInfoAgent(ReactAgent):
                 "Returns relative file paths for all files in the given account/repository."
             ),
             positive_examples=[
-                PositiveExample(input="What files in the yada repository implement an agent?"),
+                PositiveExample(input="What file are in the yada repository implement an agent?"),
                 PositiveExample(input="List files in troystribling/zgomot."),
                 PositiveExample(input="Show me the files in my gly.fish/navi repo."),
             ],
@@ -288,7 +289,6 @@ class DocumentStoreInfoAgent(ReactAgent):
             ),
             positive_examples=[
                 PositiveExample(input="What metadata is available for documents in the research library?"),
-                PositiveExample(input="List the first 10 research notes."),
             ],
             suggests_followup=[
                 "research_library_titles_by_metadata to filter results by author, topic, or shelf",
@@ -312,10 +312,13 @@ class DocumentStoreInfoAgent(ReactAgent):
                 "All filters are optional and use case-insensitive matching."
             ),
             positive_examples=[
-                PositiveExample(input="What are the titles of papers by Jaynes are in the research library?"),
+                PositiveExample(input="What are the titles of papers by Jaynes in the research library?"),
                 PositiveExample(input="Find the titles of research notes on thermodynamics."),
                 PositiveExample(input="What are the titles of documents on the 'publications' shelf?"),
                 PositiveExample(input="What are the document shelves available in my research library?"),                
+            ],
+            requires_context=[
+                "Call research_library_metadata_summary first to get available metadata before filtering titles.",
             ],
             negative_examples=[
             ],

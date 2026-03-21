@@ -1,5 +1,7 @@
 from typing import cast
 
+from anthropic import APIStatusError as AnthropicAPIStatusError, InternalServerError as AnthropicInternalServerError
+from openai import APIStatusError as OpenAIAPIStatusError, InternalServerError as OpenAIInternalServerError
 from langchain_core.messages import AIMessage, SystemMessage
 from langchain_core.tools import BaseTool
 from langsmith.run_helpers import traceable
@@ -23,7 +25,14 @@ class ReactNode:
         self._tools = tools
         self._llm = agent_llm_model()
         self._prompt = prompt
-        self._tooled_llm = self._llm.bind_tools(self._tools)
+        self._tooled_llm = self._llm.bind_tools(self._tools).with_retry(
+            retry_if_exception_type=(
+                AnthropicAPIStatusError, AnthropicInternalServerError,
+                OpenAIAPIStatusError, OpenAIInternalServerError,
+            ),
+            stop_after_attempt=3,
+            wait_exponential_jitter=True,
+        )
         self._model_runner = traceable(
             run_type="chain",
             name=f"{name}.model",
