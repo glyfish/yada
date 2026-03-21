@@ -1,21 +1,22 @@
-from langchain_community.tools import TavilySearchResults
+from langchain_tavily import TavilySearch
 from langgraph.graph import StateGraph, START, END
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.prebuilt import ToolNode
 
-from apps.agentic.core.agents.tool_agent import ToolAgent
+from apps.agentic.core.agents.react_agent import ReactAgent
+from langchain_core.tools import BaseTool
 
-class SearchAgent(ToolAgent):
+class SearchAgent(ReactAgent):
     """
     Search Agent that uses a language model to research and find relevant information.
     It can call tools like TavilySearchResults to fetch search results.
     """
 
     def __init__(self):
-        tools = [TavilySearchResults()]
-        tool_node = ToolNode(tools, name="tavily_search_tool_node")
+        tools: list[BaseTool] = [TavilySearch()]
+        tool_node_name = "tavily_search_tool_node"
 
-        super().__init__(tools, tool_node)
+        super().__init__(tools, tool_node_name)
     
 
     def create_prompt(self):
@@ -27,5 +28,4 @@ class SearchAgent(ToolAgent):
         return ChatPromptTemplate.from_messages([
             ("system", "You are a researcher. Given the conversation below, dig up relevant facts or decide which tool to call."),
             MessagesPlaceholder(variable_name="messages"),
-            ("system", "If you choose to call a tool, do so; otherwise, provide your findings in markdown text."),
         ])

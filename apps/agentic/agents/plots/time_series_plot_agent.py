@@ -4,9 +4,8 @@ import shortuuid
 
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.prebuilt import ToolNode
-from langchain_core.tools import tool
-
-from apps.agentic.core.agents.tool_agent import ToolAgent
+from apps.agentic.core.tool_spec import PositiveExample, NegativeExample, ToolSpec, tool_spec
+from apps.agentic.core.agents.react_agent import ReactAgent
 
 import os
 import sys
@@ -34,7 +33,7 @@ class TimeSeriesPlotInput(BaseModel):
     plot_axis_type: PlotType = Field(default=PlotType.LINEAR, description="Type of plot axis")
 
 
-class TimeSeriesPlotAgent(ToolAgent):
+class TimeSeriesPlotAgent(ReactAgent):
     """
     Time Series Plot Agent that uses a language model to generate time series plot data.
     It can call tools like TavilySearchResults to fetch search results.
@@ -56,14 +55,35 @@ class TimeSeriesPlotAgent(ToolAgent):
         This defines how the model should interpret the messages and what it should do.
         """
 
-        system_prompt = (
-            "You are a time series plot generator.You may use the time_series_plot_tool tool to generate a time series plot "
-            "based on the provided data. The input will include an array of timestamps, an array of numeric values, "
-            "a title for the plot, labels for the x-axis and y-axis, and the type of plot axis "
-            "(e.g., LINEAR, YLOG, XLOG, LOGLOG). "
-            "The plot image should be styled using the time_series_plot CSS class in an enclosing div. "
-            "If more than two variables are provided put the data in separate plots" 
-        )
+        system_prompt = """
+            <instructions>
+            You are a time series plot generator.You may use the time_series_plot_tool tool to generate a time series plot
+            based on the provided data.
+            </instructions>
+
+            <tool_instructions>
+            time_series_plot_tool
+                Input
+                    - time: list[datetime]
+                        Timestamps for the x-axis of the data points.
+                    - values: list[float] 
+                        Numeric values for the y-axis.
+                    - title: str 
+                        Title of the chart.
+                    - x_axis_label: str
+                        Label for the x-axis.
+                    - y_axis_label: str
+                        Label for the y-axis.
+                    - plot_axis_type: PlotType
+                        Type of plot axis (e.g., LINEAR, YLOG, XLOG, LOGLOG).
+                Output
+                    - The time_series_plot_tool will return a path to the plot image file.
+                      The returned response should be in markdown and should include commentary on the data 
+                      displayed above the chart. The chart should be displayed using an <img> tag with the
+                      source set to the returned file path. The html plot image should be styled 
+                      using the 'time_series_plot' CSS class in an enclosing div.
+            </tool_instructions>
+            """
 
         logger.debug(f"Time Series Plot Agent prompt: {system_prompt}")
 
@@ -74,43 +94,33 @@ class TimeSeriesPlotAgent(ToolAgent):
 
 
     @staticmethod
-    @tool(args_schema=TimeSeriesPlotInput)
-    def time_series_plot_tool(time: list[datetime], 
-                              values: list[float], 
-                              title: str, 
-                              x_axis_label: str, 
+    @tool_spec(
+        args_schema=TimeSeriesPlotInput,
+        metadata=ToolSpec(
+            primary_function=
+                """
+                Generate a time series plot from timestamped numeric data.
+                Returns a file path to the rendered chart for display in the UI.
+                Use plot_axis_type=YLOG for data spanning many orders of magnitude.
+                """,
+            positive_examples=[
+                PositiveExample(input="Plot the US GDP over time."),
+                PositiveExample(input="Show me a time series of Tennessee population."),
+            ],
+            requires_context=[
+            ],
+            negative_examples=[
+                NegativeExample(input="Compare sales by region in a chart.", 
+                                reason="Categorical data requires a bar chart, not a time series."),
+            ],
+        ),
+    )
+    def time_series_plot_tool(time: list[datetime],
+                              values: list[float],
+                              title: str,
+                              x_axis_label: str,
                               y_axis_label: str,
                               plot_axis_type: PlotType) -> str:
-        """Generate a time series plot from data points and display it.
-
-        Parameters
-        ----------
-            time: list[datetime]
-                Array of timestamps for the x-axis
-            values: list[float]
-                Array of numeric values for the y-axis
-            title: str
-                Title of the chart.
-            x_axis_label: str
-                Label for the x-axis.
-            y_axis_label: str
-                Label for the y-axis.
-            plot_axis_type: PlotType
-                Type of plot axis (e.g., YLOG for logarithmic y-axis)
-                (Possible values: LINEAR, YLOG, XLOG, LOGLOG)
-        Returns:
-            plot file name: str
-                The file name of the generated bar chart image.
-            
-        Example:
-            input = BarChartInput(
-                data={"A": 10, "B": 20, "C": 15},
-                title="Sample Chart",
-                x_axis_label="Letter",
-                y_axis_label="Count",
-                xlabel_rotation=45
-            )
-        """
 
         logger.debug(f"Calling time_series_plot_tool: {(time, values)}, title: {title}, "
                      f"xlabel: {x_axis_label}, ylabel: {y_axis_label}, plot_axis_type: {plot_axis_type}")

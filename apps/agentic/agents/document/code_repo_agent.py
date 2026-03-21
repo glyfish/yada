@@ -1,6 +1,7 @@
 from pathlib import Path
 from pydantic import BaseModel, Field
 from langchain.prompts import PromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 
 from apps.agentic.core.constants import (PROGRAMMING_LANGUAGE_MAP)
 from apps.agentic.core.agents.file_chroma_rag_agent import FileChromaRAGAgent
@@ -8,11 +9,6 @@ from apps.agentic.core.document_loaders.github_document_loader import GitHubChro
 from lib.logger import get_logger
 
 logger = get_logger("YADA")
-
-
-class DocumentGrade(BaseModel):
-    """Binary score for relevance check."""
-    binary_score: str = Field(description="Relevance score 'yes' or 'no'")
 
 
 class CodeRepoAgent(FileChromaRAGAgent):
@@ -32,14 +28,15 @@ class CodeRepoAgent(FileChromaRAGAgent):
         - after: Date to filter commits after (e.g., after:2014-01-01)
         
         **Example Queries Using Filter**
-        - account:troystribling repo:zgomot ext:rb Where is MIDI output handled?
-        - account:troystribling repo:zgomot ext:rb before:2014-01-01 Where is MIDI output handled?
-        - account:troystribling repo:zgomot ext:rb after:2014-01-01 Where is MIDI output handled?
+        - repo:zgomot In my code where is MIDI output handled?
+        - account:troystribling repo:zgomot ext:rb before:2014-01-01 In my code where is MIDI output handled?
+        - account:troystribling repo:zgomot ext:rb after:2014-01-01 In my code where is MIDI output handled?
     """
 
 
     def __init__(self, query):
         tool_name = "github_agent_tool"
+        
         tool_description = (
             "Troy Stribling Code Retriever"
             "Description: Search and retrieve content from Troy Stribling’s GitHub repositories "
@@ -48,7 +45,7 @@ class CodeRepoAgent(FileChromaRAGAgent):
             "Use this for any query about 'my code', 'my repo(s)', or requests for specific files/functions."
         )
 
-        prompt_template = (
+        document_prompt_template = (
             "You are searching Troy Stribling’s code (i.e. my code) in his indexed GitHub repositories vector store to answer "
             "requests about his code. Information about the code can be found in the metadata attached to each file. "
             "Following is a description of the metadata. The programming language should be deduced from the file extension."
@@ -63,9 +60,26 @@ class CodeRepoAgent(FileChromaRAGAgent):
             "{page_content}"
         )
 
-        document_prompt = PromptTemplate.from_template(template=prompt_template)
+        document_prompt = PromptTemplate.from_template(template=document_prompt_template)
 
         super().__init__(tool_name, tool_description, document_prompt, GitHubChromaDocumentLoader(), query)
+
+        self._generate_prompt = ChatPromptTemplate.from_messages([("human", """                                                                   
+        You are an expert assistant answering questions about Troy Stribling's code repositories.
+        Use the retrieved context below to answer the question. Each chunk includes metadata such as
+        repository name, file path, programming language, branch, and commit hash.
+
+        When answering:
+        - Reference the file path and repository name when discussing specific code
+        - Format code snippets in fenced code blocks with the appropriate language identifier
+        - Cite the commit hash or branch when version context is relevant
+        - If you don't know the answer from the context, say so clearly
+
+        Question: {question}
+        Context: {context}
+        Answer:
+        """
+        )])
 
 
     def read_file(self, top_files):

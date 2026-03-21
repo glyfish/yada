@@ -10,6 +10,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import HumanMessage
 from langgraph.graph import StateGraph, START, END
 from langchain.prompts import PromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 from langgraph.prebuilt import tools_condition
 from langchain.tools.retriever import create_retriever_tool
 from langgraph.prebuilt import ToolNode
@@ -36,10 +37,10 @@ class ResearchLibraryAgent(FileChromaRAGAgent):
         - date: Start date of work on the research note (e.g., date:2023-01-01)
 
         Example Queries:
-        - title: Thermodynamics Look in my research notes for the definition of a Carnot Cycle.
+        - title:Thermodynamics Look in my research notes for the definition of a Carnot Cycle.
         - author:Troy Stribling What research notes discuss Thermodynamics?
         - date:2023-01-01 What research notes discuss Thermodynamics??
-        - shelf:publications What research notes discuss thermodynamics?
+        - shelf:publications What research notes discuss statistical mechanics applied to MHD?
         - notes: What algorithm are used for generating fractional brownian motion?
     """
 
@@ -54,7 +55,7 @@ class ResearchLibraryAgent(FileChromaRAGAgent):
             research documents.
             """
 
-        prompt_template = """
+        document_prompt_template = """
             You are searching Troy Stribling’s research notes in his indexed library vector store to answer
             requests about his research. Information about the note can be found in the metadata attached to each file.
             Following is a description of the metadata.
@@ -73,9 +74,27 @@ class ResearchLibraryAgent(FileChromaRAGAgent):
             ---
             {page_content}
         """
-        document_prompt = PromptTemplate.from_template(template=prompt_template)
+        
+        document_prompt = PromptTemplate.from_template(template=document_prompt_template)
 
         super().__init__(tool_name, tool_description, document_prompt, ResearchLibraryChromaDocumentLoader(), query)
+
+        self._generate_prompt = ChatPromptTemplate.from_messages([("human", """
+            You are an expert assistant answering questions about Troy Stribling's research library.
+            Use the retrieved context below to answer the question. Each chunk includes metadata such as
+            title, author, topic, tags, section headings, and date.
+
+            When answering:
+            - Cite the research document title and section when summarizing findings
+            - Reference the author and start date when relevant
+            - If multiple documents are relevant, address each one separately
+            - If you don't know the answer from the context, say so clearly
+
+            Question: {question}
+            Context: {context}
+            Answer:
+        """
+        )])
 
 
     def read_file(self, top_files):

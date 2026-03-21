@@ -2,6 +2,7 @@ from langchain import hub
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import AIMessage
 from langchain.prompts import PromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 
 from apps.agentic.core.agents.chroma_rag_agent import ChromaRAGAgent
 from apps.agentic.core.document_loaders.fred_document_loader import FREDChromaDocumentLoader
@@ -46,7 +47,7 @@ class FredDataInfoAgent(ChromaRAGAgent):
                         data about time series from the FRED (Federal Reserve Economic Data) website.
         """
 
-        prompt_template = """
+        document_prompt_template = """
             You are an expert in retrieving information about time series from the FRED (Federal Reserve Economic Data)
             website based on the contents of documents describing the data. The time series data is organized in a 
             hierarchy of categories that describe the type of data contained in each time series. The categories are described"
@@ -68,8 +69,25 @@ class FredDataInfoAgent(ChromaRAGAgent):
             {page_content}"
         """
 
-        document_prompt = PromptTemplate.from_template(template=prompt_template)
+        document_prompt = PromptTemplate.from_template(template=document_prompt_template)
 
         super().__init__(tool_name, tool_description, document_prompt, FREDChromaDocumentLoader(), query,
                          retriever_k=50, retriever_fetch_k=200)
+
+        self._generate_prompt = ChatPromptTemplate.from_messages([("human", """
+            You are an expert assistant answering questions about FRED (Federal Reserve Economic Data) time series.
+            Use the retrieved context below to answer the question. The context contains metadata about FRED time
+            series including series_id, series_title, frequency, units, observation dates, category, and popularity.
+
+            When answering:
+            - List matching series with their series_id, title, frequency, popularity score, and units
+            - Include observation date ranges when relevant
+            - Group results by category_path if multiple series are returned
+            - If you don't know the answer from the context, say so clearly
+
+            Question: {question}
+            Context: {context}
+            Answer:
+        """
+        )])
 
