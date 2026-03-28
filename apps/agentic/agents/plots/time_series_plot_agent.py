@@ -17,7 +17,7 @@ matplotlib.use("Agg")
 from matplotlib import pyplot
 
 from lib import config
-from lib.plots import curve, PlotType
+from lib.plots import curve, stack, comparison, PlotType
 from lib.utils import generate_plot_file_name
 from lib.logger import get_logger
 
@@ -33,6 +33,28 @@ class TimeSeriesPlotInput(BaseModel):
     plot_axis_type: PlotType = Field(default=PlotType.LINEAR, description="Type of plot axis")
 
 
+class TimeSeriesStackInput(BaseModel):
+    """Input schema for the time series stack plot generator."""
+    time: list[datetime] = Field(..., description="Timestamps shared across all series")
+    values: list[list[float]] = Field(..., description="List of numeric series, one per stacked plot")
+    title: str = Field(default="Time Series Stack", description="Title of the chart")
+    x_axis_label: str = Field(default="Time", description="Label for the x-axis")
+    y_axis_labels: list[str] | None = Field(default=None, description="Y-axis label for each stacked plot")
+    labels: list[str] | None = Field(default=None, description="Text label annotated on each stacked plot")
+    plot_axis_type: PlotType = Field(default=PlotType.LINEAR, description="Type of plot axis")
+
+
+class TimeSeriesComparisonInput(BaseModel):
+    """Input schema for the time series comparison plot generator."""
+    time: list[datetime] = Field(..., description="Timestamps shared across all series")
+    values: list[list[float]] = Field(..., description="List of numeric series to overlay on the same axis")
+    title: str = Field(default="Time Series Comparison", description="Title of the chart")
+    x_axis_label: str = Field(default="Time", description="Label for the x-axis")
+    y_axis_label: str = Field(default="Value", description="Label for the y-axis")
+    labels: list[str] | None = Field(default=None, description="Legend label for each series")
+    plot_axis_type: PlotType = Field(default=PlotType.LINEAR, description="Type of plot axis")
+
+
 class TimeSeriesPlotAgent(ReactAgent):
     """
     Time Series Plot Agent that uses a language model to generate time series plot data.
@@ -40,7 +62,11 @@ class TimeSeriesPlotAgent(ReactAgent):
     """
 
     def __init__(self):
-        tools = [TimeSeriesPlotAgent.time_series_plot_tool]
+        tools = [
+            TimeSeriesPlotAgent.time_series_plot_tool,
+            TimeSeriesPlotAgent.time_series_stack_tool,
+            TimeSeriesPlotAgent.time_series_comparison_tool,
+        ]
         tool_node_name = "time_series_plot_tool_node"
 
         sys.path.append(os.path.abspath(os.path.join(os.getcwd(), '..')))
@@ -57,18 +83,21 @@ class TimeSeriesPlotAgent(ReactAgent):
 
         system_prompt = """
             <instructions>
-            You are a time series plot generator.You may use the time_series_plot_tool tool to generate a time series plot
-            based on the provided data.
+            You are a time series plot generator. You may use the following tools to generate time series plots:
+            - time_series_plot_tool: single time series
+            - time_series_stack_tool: multiple series on separate vertically stacked axes
+            - time_series_comparison_tool: multiple series overlaid on the same axis
             </instructions>
 
             <tool_instructions>
             time_series_plot_tool
+                Use when the user wants to plot a single time series.
                 Input
                     - time: list[datetime]
                         Timestamps for the x-axis of the data points.
-                    - values: list[float] 
+                    - values: list[float]
                         Numeric values for the y-axis.
-                    - title: str 
+                    - title: str
                         Title of the chart.
                     - x_axis_label: str
                         Label for the x-axis.
@@ -77,9 +106,55 @@ class TimeSeriesPlotAgent(ReactAgent):
                     - plot_axis_type: PlotType
                         Type of plot axis (e.g., LINEAR, YLOG, XLOG, LOGLOG).
                 Output
-                    - The time_series_plot_tool will return an HTML fragment containing the plot image that should be
-                      inserted into the tool response. The returned response should be in markdown and should 
-                      include commentary on the data displayed above the chart, followed by the returned 
+                    - The tool will return an HTML fragment containing the plot image that should be
+                      inserted into the tool response. The returned response should be in markdown and should
+                      include commentary on the data displayed above the chart, followed by the returned
+                      HTML fragment.
+
+            time_series_stack_tool
+                Use when the user wants to see multiple time series each on its own axis, stacked vertically.
+                Input
+                    - time: list[datetime]
+                        Timestamps shared across all series.
+                    - values: list[list[float]]
+                        One list of values per stacked plot.
+                    - title: str
+                        Title of the chart.
+                    - x_axis_label: str
+                        Label for the shared x-axis.
+                    - y_axis_labels: list[str] | None
+                        Y-axis label for each stacked plot.
+                    - labels: list[str] | None
+                        Text label annotated on each stacked plot.
+                    - plot_axis_type: PlotType
+                        Type of plot axis (e.g., LINEAR, YLOG, XLOG, LOGLOG).
+                Output
+                    - The tool will return an HTML fragment containing the plot image that should be
+                      inserted into the tool response. The returned response should be in markdown and should
+                      include commentary on the data displayed above the chart, followed by the returned
+                      HTML fragment.
+
+            time_series_comparison_tool
+                Use when the user wants to compare multiple time series overlaid on the same axis.
+                Input
+                    - time: list[datetime]
+                        Timestamps shared across all series.
+                    - values: list[list[float]]
+                        One list of values per series.
+                    - title: str
+                        Title of the chart.
+                    - x_axis_label: str
+                        Label for the x-axis.
+                    - y_axis_label: str
+                        Label for the y-axis.
+                    - labels: list[str] | None
+                        Legend label for each series.
+                    - plot_axis_type: PlotType
+                        Type of plot axis (e.g., LINEAR, YLOG, XLOG, LOGLOG).
+                Output
+                    - The tool will return an HTML fragment containing the plot image that should be
+                      inserted into the tool response. The returned response should be in markdown and should
+                      include commentary on the data displayed above the chart, followed by the returned
                       HTML fragment.
             </tool_instructions>
             """
@@ -98,8 +173,8 @@ class TimeSeriesPlotAgent(ReactAgent):
         metadata=ToolSpec(
             primary_function=
                 """
-                Generate a time series plot from timestamped numeric data.
-                Returns a file path to the rendered chart for display in the UI.
+                Generate a single time series plot from timestamped numeric data.
+                Returns an HTML fragment with the rendered chart for display in the UI.
                 Use plot_axis_type=YLOG for data spanning many orders of magnitude.
                 """,
             positive_examples=[
@@ -109,7 +184,7 @@ class TimeSeriesPlotAgent(ReactAgent):
             requires_context=[
             ],
             negative_examples=[
-                NegativeExample(input="Compare sales by region in a chart.", 
+                NegativeExample(input="Compare sales by region in a chart.",
                                 reason="Categorical data requires a bar chart, not a time series."),
             ],
         ),
@@ -125,10 +200,10 @@ class TimeSeriesPlotAgent(ReactAgent):
                      f"xlabel: {x_axis_label}, ylabel: {y_axis_label}, plot_axis_type: {plot_axis_type}")
 
         time_series_file = TimeSeriesPlotAgent.generate_time_series_plot(
-            time=numpy.array(time), 
+            time=numpy.array(time),
             values=numpy.array(values),
-            title=title, 
-            xlabel=x_axis_label, 
+            title=title,
+            xlabel=x_axis_label,
             ylabel=y_axis_label,
             plot_axis_type=plot_axis_type
         )
@@ -139,11 +214,124 @@ class TimeSeriesPlotAgent(ReactAgent):
 
 
     @staticmethod
+    @tool_spec(
+        args_schema=TimeSeriesStackInput,
+        metadata=ToolSpec(
+            primary_function=
+                """
+                Generate a stacked time series plot with multiple series each on its own vertically stacked axis
+                that share a common time axis. 
+                
+                Returns an HTML fragment with the rendered chart for display in the UI.
+                Use when the user wants to compare multiple time series without overlapping.
+                
+                This type of plot is especially useful when the series have different scales or units, as it allows 
+                each series to be scaled independently while still sharing the same time axis for easy comparison of
+                trends and patterns over time. Use plot_axis_type=YLOG for data spanning many orders of magnitude.
+                
+                Use this plot if the user explicitly asks for "stacked" time series comparison or if they want to see each 
+                series on its own axis.
+                """,
+            positive_examples=[
+                PositiveExample(input="Plot GDP, population, and unemployment rate over time as stacked charts."),
+                PositiveExample(input="Show me temperature, humidity, and pressure as stacked time series."),
+            ],
+            requires_context=[
+            ],
+            negative_examples=[
+                NegativeExample(input="Overlay multiple time series on the same axis.",
+                                reason="Use time_series_comparison_tool for overlaid series."),
+            ],
+        ),
+    )
+    def time_series_stack_tool(time: list[datetime],
+                               values: list[list[float]],
+                               title: str,
+                               x_axis_label: str,
+                               y_axis_labels: list[str] | None,
+                               labels: list[str] | None,
+                               plot_axis_type: PlotType) -> str:
+
+        logger.debug(f"Calling time_series_stack_tool: title: {title}, "
+                     f"xlabel: {x_axis_label}, ylabels: {y_axis_labels}, plot_axis_type: {plot_axis_type}")
+
+        time_series_file = TimeSeriesPlotAgent.generate_time_series_stack(
+            time=numpy.array(time),
+            values=[numpy.array(v) for v in values],
+            title=title,
+            xlabel=x_axis_label,
+            ylabels=y_axis_labels,
+            labels=labels,
+            plot_axis_type=plot_axis_type
+        )
+
+        logger.debug(f"Generated time series stack file: {time_series_file}")
+
+        return f'<div class="time-series-plot"><img src="{time_series_file}"></div>'
+
+
+    @staticmethod
+    @tool_spec(
+        args_schema=TimeSeriesComparisonInput,
+        metadata=ToolSpec(
+            primary_function=
+                """
+                Generate a comparison time series plot with multiple series overlaid on the same 
+                x and y axis.
+
+                Returns an HTML fragment with the rendered chart for display in the UI.
+                
+                Use when the user wants to compare multiple time series on the same scale
+                to easily compare trends and patterns. This type of plot is especially useful when the series have 
+                similar scales or units. Use plot_axis_type=YLOG for data spanning many orders of magnitude.
+                
+                Use this plot if the user explicitly asks for "overlaid" time series comparison or if they want to see each 
+                series on the same axis.
+                """,
+            positive_examples=[
+                PositiveExample(input="Compare US and UK GDP over time on the same chart."),
+                PositiveExample(input="Overlay the stock prices of Apple and Microsoft over time."),
+            ],
+            requires_context=[
+            ],
+            negative_examples=[
+                NegativeExample(input="Show each time series on its own axis.",
+                                reason="Use time_series_stack_tool for separate axes."),
+            ],
+        ),
+    )
+    def time_series_comparison_tool(time: list[datetime],
+                                    values: list[list[float]],
+                                    title: str,
+                                    x_axis_label: str,
+                                    y_axis_label: str,
+                                    labels: list[str] | None,
+                                    plot_axis_type: PlotType) -> str:
+
+        logger.debug(f"Calling time_series_comparison_tool: title: {title}, "
+                     f"xlabel: {x_axis_label}, ylabel: {y_axis_label}, plot_axis_type: {plot_axis_type}")
+
+        time_series_file = TimeSeriesPlotAgent.generate_time_series_comparison(
+            time=numpy.array(time),
+            values=[numpy.array(v) for v in values],
+            title=title,
+            xlabel=x_axis_label,
+            ylabel=y_axis_label,
+            labels=labels,
+            plot_axis_type=plot_axis_type
+        )
+
+        logger.debug(f"Generated time series comparison file: {time_series_file}")
+
+        return f'<div class="time-series-plot"><img src="{time_series_file}"></div>'
+
+
+    @staticmethod
     def generate_time_series_plot(time: NDArray, values: NDArray, title: str, xlabel: str, ylabel: str,
                                   plot_axis_type: PlotType) -> str:
         """
-        Create a bar chart from the provided data.
-        
+        Generate a single time series plot.
+
         Parameters
         ----------
             time: NDArray
@@ -155,24 +343,101 @@ class TimeSeriesPlotAgent(ReactAgent):
             xlabel: str
                 Chart xlabel
             ylabel: str
-                chart ylabel
+                Chart ylabel
             plot_axis_type: PlotType
                 Type of plot axis (e.g., YLOG for logarithmic y-axis)
-                (Possible values: PlotType.LINEAR, PlotType.YLOG, PlotType.XLOG, PlotType.LOGLOG)
 
         Returns:
-            str: A string representation of the bar chart
+            str: Relative file path to the rendered plot image
         """
 
-        logger.debug(f"Calling generate_time_series_plot: {time}, {values}, title: {title}, xlabel: {xlabel}, "
+        logger.debug(f"Calling generate_time_series_plot: title: {title}, xlabel: {xlabel}, "
                      f"ylabel: {ylabel}, plot_axis_type: {plot_axis_type}")
 
         uuid = shortuuid.uuid()
         output_file_name = generate_plot_file_name("time_series_plot", path="./html/plots", uuid=uuid)
 
-        curve(values, time, xlabel=xlabel, ylabel=ylabel, title=title, figsize=(10, 6), 
+        curve(values, time, xlabel=xlabel, ylabel=ylabel, title=title, figsize=(10, 6),
               file_name=output_file_name, plot_axis_type=plot_axis_type)
 
-        # Return file path for HTML rendering
-        # Note: The file path is relative to the HTML directory
         return generate_plot_file_name("time_series_plot", path="./plots", uuid=uuid)
+
+
+    @staticmethod
+    def generate_time_series_stack(time: NDArray, values: list[NDArray], title: str, xlabel: str,
+                                   ylabels: list[str] | None, labels: list[str] | None,
+                                   plot_axis_type: PlotType) -> str:
+        """
+        Generate a stacked time series plot.
+
+        Parameters
+        ----------
+            time: NDArray
+                Timestamps for the x-axis
+            values: list[NDArray]
+                One array of values per stacked plot
+            title: str
+                Title of the chart
+            xlabel: str
+                Chart xlabel
+            ylabels: list[str] | None
+                Y-axis label for each stacked plot
+            labels: list[str] | None
+                Text label annotated on each stacked plot
+            plot_axis_type: PlotType
+                Type of plot axis
+
+        Returns:
+            str: Relative file path to the rendered plot image
+        """
+
+        logger.debug(f"Calling generate_time_series_stack: title: {title}, xlabel: {xlabel}, "
+                     f"ylabels: {ylabels}, plot_axis_type: {plot_axis_type}")
+
+        uuid = shortuuid.uuid()
+        output_file_name = generate_plot_file_name("time_series_stack", path="./html/plots", uuid=uuid)
+
+        stack(values, time, xlabel=xlabel, ylabels=ylabels, labels=labels, title=title,
+              file_name=output_file_name, plot_axis_type=plot_axis_type)
+
+        return generate_plot_file_name("time_series_stack", path="./plots", uuid=uuid)
+
+
+    @staticmethod
+    def generate_time_series_comparison(time: NDArray, values: list[NDArray], title: str, xlabel: str,
+                                        ylabel: str, labels: list[str] | None,
+                                        plot_axis_type: PlotType) -> str:
+        """
+        Generate a comparison time series plot with multiple series on the same axis.
+
+        Parameters
+        ----------
+            time: NDArray
+                Timestamps for the x-axis
+            values: list[NDArray]
+                One array of values per series
+            title: str
+                Title of the chart
+            xlabel: str
+                Chart xlabel
+            ylabel: str
+                Chart ylabel
+            labels: list[str] | None
+                Legend label for each series
+            plot_axis_type: PlotType
+                Type of plot axis
+
+        Returns:
+            str: Relative file path to the rendered plot image
+        """
+
+        logger.debug(f"Calling generate_time_series_comparison: title: {title}, xlabel: {xlabel}, "
+                     f"ylabel: {ylabel}, plot_axis_type: {plot_axis_type}")
+
+        uuid = shortuuid.uuid()
+        output_file_name = generate_plot_file_name("time_series_comparison", path="./html/plots", uuid=uuid)
+
+        comparison(values, time, xlabel=xlabel, ylabel=ylabel, title=title, labels=labels,
+                   figsize=(10, 6), file_name=output_file_name, plot_axis_type=plot_axis_type)
+
+        return generate_plot_file_name("time_series_comparison", path="./plots", uuid=uuid)

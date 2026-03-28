@@ -120,7 +120,9 @@ async def delegate_to_bar_chart_agent(request: str) -> str:
         positive_examples=[
             PositiveExample(input="Plot a time series for the population of Tennessee."),
             PositiveExample(input="Plot the population of Tennessee using all available data."),
-        ],
+            PositiveExample(input="Compare the population of Tennessee and Alabama over time in the same plot."),
+            PositiveExample(input="Plot the GDP and population of Tennessee over time as stacked charts."),
+  ],
     ),
 )
 async def delegate_to_time_series_plot_agent(request: str) -> str:
