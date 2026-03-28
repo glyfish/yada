@@ -78,12 +78,11 @@ class BarChartAgent(ReactAgent):
                         A rotation angle for the x-axis labels the x-axis labels should be 90 degrees if the 
                         largest category string is larger than 7 characters or 45 degrees if the largest category string is 
                         greater than 2 characters otherwise the rotation should be zero. Sort the values in descending order. 
-                Output        
-                    - The bar_chart_tool will return a path to the plot image file.
-                      The returned response should be in markdown and should include commentary on the data 
-                      displayed above the chart. The chart should be displayed using an <img> tag with the 
-                      source set to the returned file path. The html plot image should be styled using the 'bar_chart' 
-                      CSS class in an enclosing div.
+                Output
+                    - The bar_chart_tool will return an HTML fragment containing the plot image that should be
+                      inserted into the tool response. The returned response should be in markdown and should
+                      include commentary on the data displayed above the chart, followed by the returned
+                      HTML fragment.
                     - If more than two variables are provided put the data in separate plots.
                     - If you choose to call a tool, do so; otherwise, provide your findings in plain text
             </tool_instructions>
@@ -141,8 +140,8 @@ class BarChartAgent(ReactAgent):
         )
 
         logger.debug(f"Generated bar chart file: {bar_chart_file}")
-        
-        return bar_chart_file
+
+        return f'<div class="bar-chart"><img src="{bar_chart_file}"></div>'
 
 
     @staticmethod

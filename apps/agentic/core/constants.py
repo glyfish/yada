@@ -81,6 +81,9 @@ TOOL_START_LABELS: dict[str, str] = {
     "delegate_to_research_library_search_agent": "Searching research library...",
     "delegate_to_fred_data_info_search_agent":   "Searching FRED data...",
     "extract_document_query_from_request":       "Extracting query filters...",
+    # Plot tools
+    "bar_chart_tool":                            "Rendering bar chart...",
+    "time_series_plot_tool":                     "Rendering time series plot...",
     # Subagent graph nodes
     "retrieve":                                  "Retrieving documents...",
     "grade":                                     "Grading document relevance...",
@@ -96,6 +99,8 @@ TOOL_END_LABELS: dict[str, str] = {
     "delegate_to_code_repository_search_agent":  "Code repository search complete",
     "delegate_to_research_library_search_agent": "Research library search complete",
     "delegate_to_fred_data_info_search_agent":   "FRED data search complete",
+    "bar_chart_tool":                            "Bar chart rendered",
+    "time_series_plot_tool":                     "Time series plot rendered",
     "retrieve":                                  "Documents retrieved",
     "grade":                                     "Relevance grading complete",
     "generate":                                  "Response ready",

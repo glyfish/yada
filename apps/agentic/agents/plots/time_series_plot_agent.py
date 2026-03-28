@@ -77,11 +77,10 @@ class TimeSeriesPlotAgent(ReactAgent):
                     - plot_axis_type: PlotType
                         Type of plot axis (e.g., LINEAR, YLOG, XLOG, LOGLOG).
                 Output
-                    - The time_series_plot_tool will return a path to the plot image file.
-                      The returned response should be in markdown and should include commentary on the data 
-                      displayed above the chart. The chart should be displayed using an <img> tag with the
-                      source set to the returned file path. The html plot image should be styled 
-                      using the 'time_series_plot' CSS class in an enclosing div.
+                    - The time_series_plot_tool will return an HTML fragment containing the plot image that should be
+                      inserted into the tool response. The returned response should be in markdown and should 
+                      include commentary on the data displayed above the chart, followed by the returned 
+                      HTML fragment.
             </tool_instructions>
             """
 
@@ -136,7 +135,8 @@ class TimeSeriesPlotAgent(ReactAgent):
 
         logger.debug(f"Generated time series file: {time_series_file}")
 
-        return time_series_file
+        return f'<div class="time-series-plot"><img src="{time_series_file}"></div>'
+
 
     @staticmethod
     def generate_time_series_plot(time: NDArray, values: NDArray, title: str, xlabel: str, ylabel: str,
