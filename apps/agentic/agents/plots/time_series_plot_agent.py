@@ -87,6 +87,10 @@ class TimeSeriesPlotAgent(ReactAgent):
             - time_series_plot_tool: single time series
             - time_series_stack_tool: multiple series on separate vertically stacked axes
             - time_series_comparison_tool: multiple series overlaid on the same axis
+
+            When writing commentary, do not use the $ symbol for currency as it will be interpreted as a
+            math delimiter by the markdown renderer. Use the currency name or abbreviation instead
+            (e.g. "USD", "EUR", "4,086B" not "$4,086B").
             </instructions>
 
             <tool_instructions>
@@ -174,7 +178,12 @@ class TimeSeriesPlotAgent(ReactAgent):
             primary_function=
                 """
                 Generate a single time series plot from timestamped numeric data.
+                
                 Returns an HTML fragment with the rendered chart for display in the UI.
+                The returned response should place all markdown commentary first, 
+                followed by the HTML fragment on its own line with a blank line before it.
+                Do not mix the HTML fragment within the markdown text.
+                
                 Use plot_axis_type=YLOG for data spanning many orders of magnitude.
                 """,
             positive_examples=[
@@ -223,6 +232,10 @@ class TimeSeriesPlotAgent(ReactAgent):
                 that share a common time axis. 
                 
                 Returns an HTML fragment with the rendered chart for display in the UI.
+                The returned response should place all markdown commentary first, 
+                followed by the HTML fragment on its own line with a blank line before it.
+                Do not mix the HTML fragment within the markdown text.
+                
                 Use when the user wants to compare multiple time series without overlapping.
                 
                 This type of plot is especially useful when the series have different scales or units, as it allows 
