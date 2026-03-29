@@ -16,6 +16,7 @@ from apps.agentic.agents.document.code_repo_agent import CodeRepoAgent
 from apps.agentic.agents.document.research_library_agent import ResearchLibraryAgent
 from apps.agentic.agents.document.document_store_info_agent import DocumentStoreInfoAgent
 from apps.agentic.agents.document.fred_data_info_agent import FredDataInfoAgent
+from apps.agentic.agents.data.data_fetcher_agent import DataFetcherAgent
 
 from lib.logger import get_logger
 
@@ -48,7 +49,15 @@ class SubagentRequest(BaseModel):
     Input schema for the subagent requests.
     """
 
-    request: str = Field(..., description="Request to send to the subagent")      
+    request: str = Field(..., description="Request to send to the subagent")
+
+
+class DataFetcherRequest(BaseModel):
+    """
+    Input schema for the data fetcher agent.
+    """
+
+    request: str = Field(..., description="Natural language request describing the data to fetch, including the series_id, source, and any date range.")      
 
 # delegate_to_search_agent
 @tool_spec(
@@ -261,6 +270,41 @@ async def delegate_to_fred_data_info_search_agent(request: str, query: Optional[
     return result["messages"][-1].content
 
 
+# delegate_to_data_fetcher_agent
+@tool_spec(
+    args_schema=DataFetcherRequest,
+    metadata=ToolSpec(
+        primary_function=
+            """
+            Delegate a request to the Data Fetcher Agent which retrieves time series data from
+            external data sources via MCP. Currently supports FRED (Federal Reserve Economic Data).
+            The agent discovers available MCP tools automatically on launch.
+            Pass the series_id, source, and any date range in the request string.
+            """,
+        positive_examples=[
+            PositiveExample(input="Fetch the GDP series from FRED."),
+            PositiveExample(input="Get UNRATE data from FRED since 2000-01-01."),
+        ],
+        requires_context=[
+            "A series_id must already be known. Call delegate_to_fred_data_info_search_agent first to find it.",
+        ],
+        negative_examples=[
+            NegativeExample(input="Search for GDP time series in FRED.",
+                            reason="Use delegate_to_fred_data_info_search_agent to find series IDs first."),
+        ],
+        suggests_followup=[
+            "delegate_to_time_series_plot_agent to visualize the returned data.",
+        ],
+    ),
+)
+async def delegate_to_data_fetcher_agent(request: str) -> str:
+    state = {"messages": [HumanMessage(content=request)]}
+    config = RunnableConfig(configurable={"thread_id": shortuuid.uuid()})
+    data_fetcher_agent = await DataFetcherAgent.create()
+    result = await data_fetcher_agent.agent.ainvoke(state, config)
+    return result["messages"][-1].content
+
+
 # extract_document_query_from_request
 @tool_spec(
     args_schema=SubagentRequest,
@@ -290,9 +334,10 @@ async def extract_document_query_from_request(request: str) -> Tuple[str, Option
 class OrchestratorAgent(ReactAgent):
 
     def __init__(self):
-        tools = [delegate_to_search_agent, 
+        tools = [delegate_to_search_agent,
                  delegate_to_bar_chart_agent,
                  delegate_to_time_series_plot_agent,
+                 delegate_to_data_fetcher_agent,
                  delegate_to_document_store_info_agent,
                  delegate_to_code_repository_search_agent,
                  delegate_to_research_library_search_agent,

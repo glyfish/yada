@@ -32,3 +32,4 @@ python-language-server[all]
 shortuuid
 tabulate
 mcp
+langchain-mcp-adapters

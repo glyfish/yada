@@ -28,6 +28,9 @@ FRED_DB_NAME = "fred"
 FRED_COLLECTION_NAME = "fred"
 FRED_LOCAL_PATH = "./clients/fred"
 
+# MCP server
+MCP_URL = "http://localhost:8080/sse"
+
 # PDF document library constants
 PDF_DOCUMENT_LIBRARY_DB_NAME = "pdf_document_library"
 PDF_DOCUMENT_LIBRARY_COLLECTION_NAME = "pdf-documents"
@@ -80,6 +83,7 @@ TOOL_START_LABELS: dict[str, str] = {
     "delegate_to_code_repository_search_agent":  "Searching code repositories...",
     "delegate_to_research_library_search_agent": "Searching research library...",
     "delegate_to_fred_data_info_search_agent":   "Searching FRED data...",
+    "delegate_to_data_fetcher_agent":            "Fetching data...",
     "extract_document_query_from_request":       "Extracting query filters...",
     # Plot tools
     "bar_chart_tool":                            "Rendering bar chart...",
@@ -99,6 +103,7 @@ TOOL_END_LABELS: dict[str, str] = {
     "delegate_to_code_repository_search_agent":  "Code repository search complete",
     "delegate_to_research_library_search_agent": "Research library search complete",
     "delegate_to_fred_data_info_search_agent":   "FRED data search complete",
+    "delegate_to_data_fetcher_agent":            "Data fetch complete",
     "bar_chart_tool":                            "Bar chart rendered",
     "time_series_plot_tool":                     "Time series plot rendered",
     "retrieve":                                  "Documents retrieved",
