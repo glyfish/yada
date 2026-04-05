@@ -55,8 +55,12 @@ class BarChartAgent(ReactAgent):
     It can call tools like TavilySearchResults to fetch search results.
     """
 
+    @classmethod
+    async def create(cls) -> "BarChartAgent":
+        return cls()
+
     def __init__(self):
-        tools = [BarChartAgent.bar_chart_tool, 
+        tools = [BarChartAgent.bar_chart_tool,
                  BarChartAgent.multi_bar_chart_tool]
         tool_node_name = "bar_chart_tool_node"
 

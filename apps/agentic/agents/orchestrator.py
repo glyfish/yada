@@ -52,13 +52,6 @@ class SubagentRequest(BaseModel):
     request: str = Field(..., description="Request to send to the subagent")
 
 
-class DataFetcherRequest(BaseModel):
-    """
-    Input schema for the data fetcher agent.
-    """
-
-    request: str = Field(..., description="Natural language request describing the data to fetch, including the series_id, source, and any date range.")      
-
 # delegate_to_search_agent
 @tool_spec(
     args_schema=SubagentRequest,
@@ -272,7 +265,7 @@ async def delegate_to_fred_data_info_search_agent(request: str, query: Optional[
 
 # delegate_to_data_fetcher_agent
 @tool_spec(
-    args_schema=DataFetcherRequest,
+    args_schema=SubagentRequest,
     metadata=ToolSpec(
         primary_function=
             """
@@ -332,6 +325,10 @@ async def extract_document_query_from_request(request: str) -> Tuple[str, Option
     return build_filter_and_query(request)
 
 class OrchestratorAgent(ReactAgent):
+
+    @classmethod
+    async def create(cls) -> "OrchestratorAgent":
+        return cls()
 
     def __init__(self):
         tools = [delegate_to_search_agent,

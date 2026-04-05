@@ -12,6 +12,10 @@ class SearchAgent(ReactAgent):
     It can call tools like TavilySearchResults to fetch search results.
     """
 
+    @classmethod
+    async def create(cls) -> "SearchAgent":
+        return cls()
+
     def __init__(self):
         tools: list[BaseTool] = [TavilySearch()]
         tool_node_name = "tavily_search_tool_node"

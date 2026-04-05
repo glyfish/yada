@@ -45,6 +45,14 @@ class ReactAgent(ABC):
     def agent(self):
         return self._agent
 
+    @classmethod
+    async def create(cls) -> "ReactAgent":
+        """
+        Async factory. Override in subclasses that require async setup (e.g. MCP tool discovery).
+        Subclasses with synchronous construction should override to call cls() with the required args.
+        """
+        raise NotImplementedError("Subclasses must implement create().")
+
     def create_prompt(self):
         raise NotImplementedError(
             "Subclasses must implement create_prompt() or pass a ReactNode to the constructor."

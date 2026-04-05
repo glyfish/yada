@@ -132,6 +132,10 @@ class DocumentStoreInfoAgent(ReactAgent):
     Handle requests for information about document libraries.
     """
 
+    @classmethod
+    async def create(cls) -> "DocumentStoreInfoAgent":
+        return cls()
+
     def __init__(self):
         tools = [
             DocumentStoreInfoAgent.repository_names,

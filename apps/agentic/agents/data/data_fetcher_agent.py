@@ -16,29 +16,42 @@ _mcp_servers: Mapping[str, SSEConnection] = {
     "fred": {"transport": "sse", "url": MCP_URL},
 }
 
+_REQUIRED_TOOLS = [
+    "fred_series_observations",
+]
+
 
 class DataFetcherAgent(ReactAgent):
     """
     Fetches time series data from external data sources via MCP tools.
-    Tool discovery runs on instantiation — all tools exposed by the MCP server
-    are loaded automatically and passed to the agent.
+    Only the tools listed in _REQUIRED_TOOLS are selected from the MCP server.
+    An exception is raised if any required tool is not found.
     """
 
     def __init__(self, tools: list):
         tool_node_name = "data_fetcher_tool_node"
         super().__init__(tools, tool_node_name)
 
+
     @classmethod
     async def create(cls) -> "DataFetcherAgent":
         """
         Async factory. Connects to the MCP server, discovers all available tools,
-        and returns a fully initialized DataFetcherAgent.
+        selects only the required tools, and returns a fully initialized DataFetcherAgent.
         """
         client = MultiServerMCPClient(dict(_mcp_servers))
-        tools = await client.get_tools()
+        discovered = {t.name: t for t in await client.get_tools()}
 
-        logger.debug(f"DataFetcherAgent discovered {len(tools)} MCP tools: {[t.name for t in tools]}")
+        logger.debug(f"DataFetcherAgent discovered {len(discovered)} MCP tools: {list(discovered.keys())}")
+
+        missing = [name for name in _REQUIRED_TOOLS if name not in discovered]
+        if missing:
+            raise RuntimeError(f"DataFetcherAgent: required MCP tools not found: {missing}")
+
+        tools = [discovered[name] for name in _REQUIRED_TOOLS]
+        logger.debug(f"DataFetcherAgent using tools: {[t.name for t in tools]}")
         return cls(tools)
+
 
     def create_prompt(self):
         system_prompt = """
@@ -48,7 +61,8 @@ class DataFetcherAgent(ReactAgent):
             reformat, or interpret it. The result will be consumed by downstream agents for
             plotting or analysis.
 
-            When fetching FRED data use a limit of 10000 to retrieve the full series.
+            When fetching FRED data use the fred_series_observations tool with a limit of 
+            10000 to retrieve the full series.
             </instructions>
             """
 

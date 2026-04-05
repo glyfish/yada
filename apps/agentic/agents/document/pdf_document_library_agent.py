@@ -33,6 +33,10 @@ class PDFDocumentLibraryAgent(FileChromaRAGAgent):
         - shelf:publications Look in the document library for the definition of a Carnot Cycle
     """
 
+    @classmethod
+    async def create(cls, query=None) -> "PDFDocumentLibraryAgent":
+        return cls(query)
+
     def __init__(self, query):
         tool_name = "document_library_agent_tool"
         tool_description = """
@@ -47,13 +51,13 @@ class PDFDocumentLibraryAgent(FileChromaRAGAgent):
             requests about the contents of the documents. Information about the document can be found 
             in the metadata attached to each file.
             Following is a description of the metadata.
-            - Document filename: {metadata[filename]}
-            - Document file path: {metadata[path]}
-            - Document title: {metadata[title]}
-            - Document published date: {metadata[published_date]}
-            - Document authors: {metadata[authors]}
-            - Document topic description: {metadata[topic]}
-            - Document shelf: {metadata[shelf]}
+            - Document filename: {{metadata[filename]}}
+            - Document file path: {{metadata[path]}}
+            - Document title: {{metadata[title]}}
+            - Document published date: {{metadata[published_date]}}
+            - Document authors: {{metadata[authors]}}
+            - Document topic description: {{metadata[topic]}}
+            - Document shelf: {{metadata[shelf]}}
             ---
             {page_content}
         """

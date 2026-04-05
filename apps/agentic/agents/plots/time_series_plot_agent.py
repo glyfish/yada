@@ -61,6 +61,11 @@ class TimeSeriesPlotAgent(ReactAgent):
     It can call tools like TavilySearchResults to fetch search results.
     """
 
+    @classmethod
+    async def create(cls) -> "TimeSeriesPlotAgent":
+        return cls()
+
+
     def __init__(self):
         tools = [
             TimeSeriesPlotAgent.time_series_plot_tool,

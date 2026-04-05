@@ -34,6 +34,10 @@ class CodeRepoAgent(FileChromaRAGAgent):
     """
 
 
+    @classmethod
+    async def create(cls, query=None) -> "CodeRepoAgent":
+        return cls(query)
+
     def __init__(self, query):
         tool_name = "github_agent_tool"
         
