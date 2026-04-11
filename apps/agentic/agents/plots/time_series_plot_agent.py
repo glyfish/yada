@@ -93,6 +93,10 @@ class TimeSeriesPlotAgent(ReactAgent):
             - time_series_stack_tool: multiple series on separate vertically stacked axes
             - time_series_comparison_tool: multiple series overlaid on the same axis
 
+            Always provide insightful commentary on the data in markdown format above the chart. Then, on a 
+            new line with a blank line before it, include the HTML fragment returned by the tool to 
+            display the chart image. Do not mix the HTML fragment within the markdown text.
+
             When writing commentary, do not use the $ symbol for currency as it will be interpreted as a
             math delimiter by the markdown renderer. Use the currency name or abbreviation instead
             (e.g. "USD", "EUR", "4,086B" not "$4,086B").
