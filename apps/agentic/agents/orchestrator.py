@@ -330,7 +330,7 @@ class OrchestratorAgent(ReactAgent):
     async def create(cls) -> "OrchestratorAgent":
         return cls()
 
-    def __init__(self):
+    def __init__(self, mcp_tools: list = []):
         tools = [delegate_to_search_agent,
                  delegate_to_bar_chart_agent,
                  delegate_to_time_series_plot_agent,
@@ -341,7 +341,7 @@ class OrchestratorAgent(ReactAgent):
                  delegate_to_fred_data_info_search_agent,
                  extract_document_query_from_request]
         tool_node_name = "orchestrator_tool_node"
-        super().__init__(tools, tool_node_name)
+        super().__init__(tools, tool_node_name, mcp_tools=mcp_tools)
 
 
     def create_prompt(self):

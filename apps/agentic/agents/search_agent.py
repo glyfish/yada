@@ -16,11 +16,11 @@ class SearchAgent(ReactAgent):
     async def create(cls) -> "SearchAgent":
         return cls()
 
-    def __init__(self):
+    def __init__(self, mcp_tools: list = []):
         tools: list[BaseTool] = [TavilySearch()]
         tool_node_name = "tavily_search_tool_node"
 
-        super().__init__(tools, tool_node_name)
+        super().__init__(tools, tool_node_name, mcp_tools=mcp_tools)
     
 
     def create_prompt(self):

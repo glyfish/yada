@@ -136,7 +136,7 @@ class DocumentStoreInfoAgent(ReactAgent):
     async def create(cls) -> "DocumentStoreInfoAgent":
         return cls()
 
-    def __init__(self):
+    def __init__(self, mcp_tools: list = []):
         tools = [
             DocumentStoreInfoAgent.repository_names,
             DocumentStoreInfoAgent.filenames_for_repository,
@@ -145,7 +145,7 @@ class DocumentStoreInfoAgent(ReactAgent):
         ]
         tool_node_name = "document_info_tool_node"
 
-        super().__init__(tools, tool_node_name)
+        super().__init__(tools, tool_node_name, mcp_tools=mcp_tools)
 
     
     def create_prompt(self):

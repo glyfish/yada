@@ -59,7 +59,7 @@ class BarChartAgent(ReactAgent):
     async def create(cls) -> "BarChartAgent":
         return cls()
 
-    def __init__(self):
+    def __init__(self, mcp_tools: list = []):
         tools = [BarChartAgent.bar_chart_tool,
                  BarChartAgent.multi_bar_chart_tool]
         tool_node_name = "bar_chart_tool_node"
@@ -67,7 +67,7 @@ class BarChartAgent(ReactAgent):
         sys.path.append(os.path.abspath(os.path.join(os.getcwd(), '..')))
         pyplot.style.use(config.glyfish_style)
 
-        super().__init__(tools, tool_node_name)
+        super().__init__(tools, tool_node_name, mcp_tools=mcp_tools)
 
     
     def create_prompt(self):

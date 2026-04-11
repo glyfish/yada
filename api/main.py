@@ -4,6 +4,7 @@ import os
 import json
 import re
 import uuid
+from contextlib import asynccontextmanager
 from typing import Any, Dict, Optional
 
 import langsmith
@@ -17,7 +18,8 @@ from lib.logger import get_logger
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 from apps.agentic.agents.orchestrator import OrchestratorAgent
-from apps.agentic.core.constants import TOOL_START_LABELS, TOOL_END_LABELS
+from apps.agentic.core.constants import TOOL_START_LABELS, TOOL_END_LABELS, MCP_URL
+from apps.agentic.core.mcp_tool_registry import MCPToolRegistry
 from apps.agentic.core.pricing import estimate_cost
 from pathlib import Path
 from dotenv import load_dotenv
@@ -61,7 +63,17 @@ def get_trace_url(run_id: str) -> str | None:
 
 logger = get_logger("YADA")
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await MCPToolRegistry.initialize(
+        servers={"fred": {"transport": "sse", "url": MCP_URL}},
+        required=["fred_series_observations"],
+    )
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -104,7 +116,7 @@ async def generate_markdown(req: RequestPayload):
     session_id = req.session_id or str(uuid.uuid4())
     logger.debug(f"YADA request [{session_id}]: {req.input}")
 
-    orchestrator = OrchestratorAgent()
+    orchestrator = await OrchestratorAgent.create()
     config = RunnableConfig(configurable={"thread_id": session_id})
     state = await orchestrator.agent.ainvoke(
         {"messages": [HumanMessage(content=req.input)]},
@@ -138,7 +150,7 @@ async def stream_request(req: RequestPayload):
     session_id = req.session_id or str(uuid.uuid4())
     logger.debug(f"YADA stream request [{session_id}]: {req.input}")
 
-    orchestrator = OrchestratorAgent()
+    orchestrator = await OrchestratorAgent.create()
     config = RunnableConfig(configurable={"thread_id": session_id})
 
     async def event_generator():
