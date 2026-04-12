@@ -269,9 +269,8 @@ async def delegate_to_fred_data_info_search_agent(request: str, query: Optional[
     metadata=ToolSpec(
         primary_function=
             """
-            Delegate a request to the Data Fetcher Agent which retrieves time series data from
-            external data sources via MCP. Currently supports FRED (Federal Reserve Economic Data).
-            The agent discovers available MCP tools automatically on launch.
+            Delegate a request to the Data Fetcher Agent which retrieves data from
+            external data sources via MCP. The agent discovers available MCP tools automatically on launch.
             Pass the series_id, source, and any date range in the request string.
             """,
         positive_examples=[

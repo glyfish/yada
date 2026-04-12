@@ -65,6 +65,6 @@ def push_all() -> None:
     """
     Push all markdown prompt files in the prompts directory to LangChain Hub.
     """
-    
+
     for path in PROMPTS_DIR.glob("*.md"):
         push_prompt(path.stem)
