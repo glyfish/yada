@@ -32,6 +32,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[4]
 
 class LoadResearchDocumentInput(BaseModel):
     filename: str = Field(..., description="Filename of the research document to load.")
+    path: str = Field(..., description="Full file path to the document.")
     title: str = Field(..., description="Document title.")
     authors: str = Field(..., description="Document authors.")
     document_date: str = Field(..., description="Publication or document date.")
@@ -174,21 +175,20 @@ class DocumentLoaderAgent(ReactAgent):
     )
     async def load_research_document(
         filename: str,
+        path: str,
         title: str,
         authors: str,
         document_date: str,
         topic: str,
         shelf: str,
     ) -> str:
-        note_path = _resolve_research_note_path(filename)
-        try:
-            relative_note_path = note_path.relative_to(PROJECT_ROOT)
-        except ValueError:
-            relative_note_path = note_path
+        note_path = Path(path)
+        if not note_path.exists():
+            return f"Error: file not found at path '{path}'."
 
         meta_data = {
             "filename": filename,
-            "path": str(relative_note_path),
+            "path": path,
             "title": title,
             "authors": authors,
             "document_date": document_date,

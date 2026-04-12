@@ -93,6 +93,29 @@ class GitHubChromaDocumentLoader(ChromaDocumentLoader):
             await self.load_github_repo(path)
 
 
+    def _delete_repo(self, account: str, repo_name: str) -> int:
+        """
+        Delete all chunks in the collection for the given account/repo pair.
+        """
+        collection = getattr(self._vectorstore, "_collection", None)
+        if collection is None:
+            logger.warning("_delete_repo: vector store collection unavailable, skipping delete.")
+            return 0
+
+        result = collection.get(
+            where={"$and": [{"account": account}, {"repo": repo_name}]},
+            include=[],
+        )
+        ids = result.get("ids") or []
+        if ids:
+            collection.delete(ids=ids)
+            logger.info(
+                f"_delete_repo: deleted {len(ids)} chunks for {account}/{repo_name} "
+                f"from collection '{self.collection_name}'."
+            )
+        return len(ids)
+
+
     def get_default_branch(self, repo_path: str) -> str:
         repo = Repo(repo_path)
         # If HEAD is pointing to a branch, use that
@@ -122,6 +145,10 @@ class GitHubChromaDocumentLoader(ChromaDocumentLoader):
         Load the GitHub repositories into the ChromaDB collection.
         """
 
+        account = os.path.basename(os.path.dirname(path.rstrip("/")))
+        repo_name = os.path.basename(path.rstrip("/"))
+        self._delete_repo(account, repo_name)
+
         branch = self.get_default_branch(path)        
         logger.info(f"Setting default branch {branch} for {path}.")        
         loader = GitLoader(repo_path=path, branch=branch)
@@ -130,9 +157,6 @@ class GitHubChromaDocumentLoader(ChromaDocumentLoader):
 
         repo = Repo(path)
         repo_root = os.path.realpath(repo.working_tree_dir or path)
-
-        account = os.path.basename(os.path.dirname(path.rstrip("/")))
-        repo_name = os.path.basename(path.rstrip("/"))
 
         for d in documents:
             src = d.metadata.get("source")  # may be absolute or relative from GitLoader

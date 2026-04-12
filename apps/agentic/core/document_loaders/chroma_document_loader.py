@@ -81,6 +81,37 @@ class ChromaDocumentLoader(ABC):
         return self._vectorstore
     
 
+    def delete_document(self, filename: str) -> int:
+        """
+        Delete all chunks in the collection that match the given filename.
+
+        Parameters
+        ----------
+        filename : str
+            The filename metadata value to match. All chunks with
+            ``metadata["filename"] == filename`` are deleted.
+
+        Returns
+        -------
+        int
+            Number of chunks deleted.
+        """
+        collection = getattr(self._vectorstore, "_collection", None)
+        if collection is None:
+            logger.warning("delete_document: vector store collection unavailable, skipping delete.")
+            return 0
+
+        result = collection.get(where={"filename": filename}, include=[])
+        ids = result.get("ids") or []
+        if ids:
+            collection.delete(ids=ids)
+            logger.info(
+                f"delete_document: deleted {len(ids)} chunks for filename='{filename}' "
+                f"from collection '{self._collection_name}'."
+            )
+        return len(ids)
+
+
     @staticmethod
     def num_tokens(text):
         encoding = tiktoken.encoding_for_model("text-embedding-ada-002")

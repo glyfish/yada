@@ -1,14 +1,19 @@
 import shortuuid
 from pydantic import BaseModel, Field
-from typing import Tuple, Dict, Any, Optional
+from typing import Literal, Tuple, Dict, Any, Optional
 
 from apps.agentic.core.tool_spec import PositiveExample, NegativeExample, ToolSpec, tool_spec
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langgraph.graph import StateGraph, START, END
+from langgraph.prebuilt import tools_condition, ToolNode
 
 from apps.agentic.core.agents.query_filters import build_filter_and_query
 from apps.agentic.core.agents.react_agent import ReactAgent
+from apps.agentic.core.agents.messages import WorkerState
+from apps.agentic.core.agents.human_input_node import HumanInputNode
+from apps.agentic.core.checkpointer import checkpointer
 from apps.agentic.agents.search_agent import SearchAgent
 from apps.agentic.agents.plots.bar_chart_agent import BarChartAgent
 from apps.agentic.agents.plots.time_series_plot_agent import TimeSeriesPlotAgent
@@ -16,6 +21,7 @@ from apps.agentic.agents.document.code_repo_agent import CodeRepoAgent
 from apps.agentic.agents.document.research_library_agent import ResearchLibraryAgent
 from apps.agentic.agents.document.document_store_info_agent import DocumentStoreInfoAgent
 from apps.agentic.agents.document.fred_data_info_agent import FredDataInfoAgent
+from apps.agentic.agents.document.document_loader_agent import DocumentLoaderAgent
 from apps.agentic.agents.data.data_fetcher_agent import DataFetcherAgent
 
 from lib.logger import get_logger
@@ -26,6 +32,18 @@ _search_agent = SearchAgent()
 _bar_chart_agent = BarChartAgent()
 _time_series_plot_agent = TimeSeriesPlotAgent()
 _document_store_info_agent = DocumentStoreInfoAgent()
+_document_loader_agent = DocumentLoaderAgent()
+
+class RequestHumanFormInput(BaseModel):
+    form_type: Literal[
+        "load_research_document",
+        "load_github_repo",
+        "load_pdf_document",
+    ] = Field(
+        ...,
+        description="The form type to request from the user.",
+    )
+
 
 class DocumentSubagentSearchInput(BaseModel):
     """
@@ -297,6 +315,57 @@ async def delegate_to_data_fetcher_agent(request: str) -> str:
     return result["messages"][-1].content
 
 
+# request_human_form
+@tool_spec(
+    args_schema=RequestHumanFormInput,
+    metadata=ToolSpec(
+        primary_function=
+            """
+            Signal that structured user input is required before proceeding.
+            Calling this tool suspends execution and presents the specified form
+            to the user. The graph resumes automatically once the user submits.
+            """,
+        positive_examples=[
+            PositiveExample(input="Load a research document into the library."),
+            PositiveExample(input="Add the yada repo to my code store."),
+            PositiveExample(input="Load a PDF into the document library."),
+        ],
+    ),
+)
+def request_human_form(form_type: str) -> str:
+    # Return value is never used — the graph routes to human_input before
+    # a ToolMessage is produced. This body exists only to satisfy LangChain's
+    # tool registration requirement.
+    return f"Requesting form: {form_type}"
+
+
+# delegate_to_document_loader_agent
+@tool_spec(
+    args_schema=SubagentRequest,
+    metadata=ToolSpec(
+        primary_function=
+            """
+            Delegate a document loading request to the Document Loader Agent
+            after form data has been collected from the user. Pass the full
+            form data JSON as the request string.
+            """,
+        positive_examples=[
+            PositiveExample(input="Load all GitHub repositories."),
+        ],
+        requires_context=[
+            "For load_research_document, load_github_repo, and load_pdf_document: "
+            "call request_human_form first to collect required fields from the user. "
+            "For load_all_github_repos: call directly without a form.",
+        ],
+    ),
+)
+async def delegate_to_document_loader_agent(request: str) -> str:
+    state = {"messages": [HumanMessage(content=request)]}
+    config = RunnableConfig(configurable={"thread_id": shortuuid.uuid()})
+    result = await _document_loader_agent.agent.ainvoke(state, config)
+    return result["messages"][-1].content
+
+
 # extract_document_query_from_request
 @tool_spec(
     args_schema=SubagentRequest,
@@ -330,17 +399,65 @@ class OrchestratorAgent(ReactAgent):
         return cls()
 
     def __init__(self, mcp_tools: list = []):
-        tools = [delegate_to_search_agent,
-                 delegate_to_bar_chart_agent,
-                 delegate_to_time_series_plot_agent,
-                 delegate_to_data_fetcher_agent,
-                 delegate_to_document_store_info_agent,
-                 delegate_to_code_repository_search_agent,
-                 delegate_to_research_library_search_agent,
-                 delegate_to_fred_data_info_search_agent,
-                 extract_document_query_from_request]
+        tools = [
+            request_human_form,
+            delegate_to_search_agent,
+            delegate_to_bar_chart_agent,
+            delegate_to_time_series_plot_agent,
+            delegate_to_data_fetcher_agent,
+            delegate_to_document_store_info_agent,
+            delegate_to_document_loader_agent,
+            delegate_to_code_repository_search_agent,
+            delegate_to_research_library_search_agent,
+            delegate_to_fred_data_info_search_agent,
+            extract_document_query_from_request,
+        ]
         tool_node_name = "orchestrator_tool_node"
         super().__init__(tools, tool_node_name, mcp_tools=mcp_tools)
+
+
+    def _create_agent(self):
+        """
+        Override the default ReAct graph to inject the human_input node.
+
+        When the LLM calls request_human_form the conditional edge routes
+        to human_input instead of the tool node. After the user submits the
+        form and the graph resumes, human_input injects the validated form
+        data as a HumanMessage and routes back to the model node, which then
+        calls delegate_to_document_loader_agent to complete the action.
+        """
+        all_tools = self._node.tools
+
+        # Separate request_human_form from the rest so it never reaches ToolNode
+        tool_names_for_node = {t.name for t in all_tools if t.name != "request_human_form"}
+        tools_for_node = [t for t in all_tools if t.name in tool_names_for_node]
+
+        tool_node = ToolNode(tools_for_node, name=self._tool_node_name)
+
+        def route_model(state: WorkerState):
+            last = state["messages"][-1]
+            tool_calls = getattr(last, "tool_calls", None)
+            if not tool_calls:
+                return END
+            if any(tc["name"] == "request_human_form" for tc in tool_calls):
+                return "human_input"
+            return "tools"
+
+        graph = (
+            StateGraph(WorkerState)
+            .add_node("model", self._node.model_runner)
+            .add_node("tools", tool_node)
+            .add_node("human_input", HumanInputNode())
+            .add_edge(START, "model")
+            .add_edge("tools", "model")
+            .add_edge("human_input", "model")
+            .add_conditional_edges(
+                "model",
+                route_model,
+                {"tools": "tools", "human_input": "human_input", END: END},
+            )
+        )
+        return graph.compile(checkpointer=checkpointer)
 
 
     def create_prompt(self):
@@ -386,6 +503,16 @@ The tool responses contain precise formatting (HTML tags, image references, mark
 that must be preserved exactly. Any modification breaks downstream rendering.
 </output_rule>
 
+
+<document_loading>
+When the user wants to load a document into a document store:
+1. Call request_human_form with the appropriate form_type to collect required fields:
+   - Loading a research note → form_type: load_research_document
+   - Loading a GitHub repository → form_type: load_github_repo
+   - Loading a PDF document → form_type: load_pdf_document
+2. After the user submits the form, call delegate_to_document_loader_agent with the form data.
+Exception: load_all_github_repos requires no form — call delegate_to_document_loader_agent directly.
+</document_loading>
 
 <examples>
 In the following request examples the expected routing to subagent tools by

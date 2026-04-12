@@ -50,6 +50,7 @@ class ResearchLibraryChromaDocumentLoader(ChromaDocumentLoader):
 
         meta_data = get_param_throw_if_missing("meta_data", **kwargs)
         filename = meta_data["filename"]
+        self.delete_document(filename)
         logger.info(f"Loading research document from {path}.")
 
         async with aiofiles.open(path, "r", encoding="utf-8", errors="ignore") as f:

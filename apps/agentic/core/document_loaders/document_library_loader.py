@@ -58,6 +58,7 @@ class DocumentLibraryLoader(ChromaDocumentLoader):
             return
 
         meta = kwargs.get("meta_data", {}) or {}
+        self.delete_document(file_path.name)
 
         # Normalize scalar metadata values for Chroma (no lists allowed)
         def _to_scalar(val):

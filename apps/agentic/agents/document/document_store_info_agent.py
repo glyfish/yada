@@ -2,7 +2,6 @@ from pydantic import BaseModel, Field
 
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 
-from functools import lru_cache
 
 from apps.agentic.core.tool_spec import PositiveExample, NegativeExample, ToolSpec, tool_spec
 
@@ -188,7 +187,6 @@ class DocumentStoreInfoAgent(ReactAgent):
 
 
     @staticmethod
-    @lru_cache(maxsize=1)
     def _research_library_metadata(db_path=DB_PATH) -> list[dict]:
         """
         Aggregate research library metadata from the Chroma collection, one row per file.
@@ -202,7 +200,7 @@ class DocumentStoreInfoAgent(ReactAgent):
                 "filename": meta.get("filename") or Path(path).name,
                 "path": path,
                 "title": meta.get("title") or Path(path).stem,
-                "author": meta.get("author") or "",
+                "authors": meta.get("authors") or "",
                 "topic": meta.get("topic") or "",
                 "shelf": shelf,
             }

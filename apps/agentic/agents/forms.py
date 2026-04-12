@@ -13,6 +13,10 @@ class LoadResearchDocumentForm(BaseModel):
         ...,
         description="Filename of the document to load.",
     )
+    path: str = Field(
+        ...,
+        description="Relative file path to the document with respect to application root directory.",
+    )
     title: str = Field(
         ...,
         description="Document title.",

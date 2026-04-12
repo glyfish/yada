@@ -17,6 +17,7 @@ from lib.logger import get_logger
 
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
+from langgraph.types import Command
 from apps.agentic.agents.orchestrator import OrchestratorAgent
 from apps.agentic.core.constants import TOOL_START_LABELS, TOOL_END_LABELS, MCP_URL
 from apps.agentic.core.mcp_tool_registry import MCPToolRegistry
@@ -205,6 +206,17 @@ async def stream_request(req: RequestPayload):
                         if last_msg:
                             final_result = _message_content_to_text(last_msg)
 
+            # Check for a pending interrupt before sending result
+            state = await orchestrator.agent.aget_state(config)
+            if state.tasks and state.tasks[0].interrupts:
+                interrupt_value = state.tasks[0].interrupts[0].value
+                logger.debug(f"Stream interrupted [{session_id}]: form_type={interrupt_value.get('type')}")
+                yield {
+                    "event": "interrupt",
+                    "data": json.dumps({"form_schema": interrupt_value, "session_id": session_id}),
+                }
+                return
+
             # Send result immediately — do not block on LangSmith
             yield {
                 "event": "result",
@@ -246,6 +258,48 @@ async def stream_request(req: RequestPayload):
 
         except Exception as e:
             logger.error(f"Stream error [{session_id}]: {e}")
+            yield {
+                "event": "error",
+                "data": json.dumps({"message": str(e)}),
+            }
+
+    return EventSourceResponse(event_generator())
+
+
+class ResumePayload(BaseModel):
+    session_id: str
+    form_data: Dict[str, Any]
+
+
+@app.post("/api/request/resume")
+async def resume_request(req: ResumePayload):
+    logger.debug(f"YADA resume request [{req.session_id}]: {req.form_data}")
+
+    orchestrator = await OrchestratorAgent.create()
+    config = RunnableConfig(configurable={"thread_id": req.session_id})
+
+    async def event_generator():
+        try:
+            state = await orchestrator.agent.ainvoke(
+                Command(resume=req.form_data),
+                config,
+            )
+
+            messages = state.get("messages", [])
+            last_msg = next(
+                (m for m in reversed(messages)
+                 if isinstance(m, AIMessage) and not getattr(m, "tool_calls", None)),
+                None,
+            )
+            final_result = _message_content_to_text(last_msg) if last_msg else ""
+
+            yield {
+                "event": "result",
+                "data": json.dumps({"result": final_result, "session_id": req.session_id}),
+            }
+
+        except Exception as e:
+            logger.error(f"Resume error [{req.session_id}]: {e}")
             yield {
                 "event": "error",
                 "data": json.dumps({"message": str(e)}),
