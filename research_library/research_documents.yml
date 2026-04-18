@@ -565,3 +565,17 @@
     to individual cases. We note several examples of the difference this makes in
     real applications.'
   shelf: jaynes
+
+- filename: probablility-as-logic-745d2827-334d-4614-b95f-042357f32150.md
+  path: research_library/Jaynes/probablility-as-logic-745d2827-334d-4614-b95f-042357f32150.md
+  title: Probability as Logic
+  authors: E. T. Jaynes
+  published_date: '2003-01-01'
+  topic: At the 1988 workshop we called attention to the "Mind Projection Fallacy"
+    which is present in all fields that use probability. Here we give a more complete
+    discussion showing why probabilities need not correspond to physical causal influences,
+    or "propensities" affecting mass phenomena. Probability theory is far more useful
+    if we recognize that probabilities express fundamentally logical inferences pertaining
+    to individual cases. We note several examples of the difference this makes in
+    real applications.
+  shelf: jaynes

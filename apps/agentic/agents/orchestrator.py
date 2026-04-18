@@ -307,6 +307,7 @@ async def delegate_to_fred_data_info_search_agent(request: str, query: Optional[
         ],
     ),
 )
+
 async def delegate_to_data_fetcher_agent(request: str) -> str:
     state = {"messages": [HumanMessage(content=request)]}
     config = RunnableConfig(configurable={"thread_id": shortuuid.uuid()})

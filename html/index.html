@@ -401,120 +401,253 @@
         const statusText = state("");
         const feedCount = state(0);
         const sessionId = state(null);
-        const showLoadMenu = state(false);
 
         let inputTextareaEl;
 
-        const GITHUB_LOAD_ALL_REPOS = "/api/document/load_all_github_repos";
-        const GITHUB_LOAD_REPO = "/api/document/load_github_repo";
-        const RESEARCH_NOTE_LOAD = "/api/document/load_research_document";
         const YADA_REQUEST_STREAM = "/api/request/stream";
-
-        // Close dropdown on outside click / ESC
-        document.addEventListener("click", () => { showLoadMenu.val = false; });
-        document.addEventListener("keydown", (e) => { if (e.key === "Escape") showLoadMenu.val = false; });
+        const YADA_REQUEST_RESUME = "/api/request/resume";
 
         const FEED_MAX_CARDS = 40;
         const FEED_MAX_CHARS = 80000;
 
-        // Load Research Document (Markdown) Dialog
-        const handleLoadResearchDocumentDialog = () => {
+        // ===== Human-in-the-loop: resume helper and form dialog =====
+
+        async function handleResumeRequest(sessionId, formData, promptLabel) {
+            isLoading.val = true;
+            statusText.val = "Processing...";
+            try {
+                const response = await fetch(YADA_REQUEST_RESUME, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ session_id: sessionId, form_data: formData })
+                });
+                if (!response.ok) {
+                    let msg = `Resume failed (${response.status})`;
+                    try { const e = await response.json(); msg = e?.detail || e?.message || msg; } catch (_) {}
+                    throw new Error(msg);
+                }
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = "";
+                let currentEvent = "message";
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split("\n");
+                    buffer = lines.pop();
+                    for (const line of lines) {
+                        if (line.startsWith("event:")) {
+                            currentEvent = line.slice(6).trim();
+                        } else if (line.startsWith("data:")) {
+                            const raw = line.slice(5).trim();
+                            let parsed;
+                            try { parsed = JSON.parse(raw); } catch (_) { continue; }
+                            if (currentEvent === "status" && parsed.text) {
+                                statusText.val = parsed.text;
+                            } else if (currentEvent === "result") {
+                                statusText.val = "";
+                                isLoading.val = false;
+                                await prependResultCard(promptLabel, parsed.result ?? "");
+                                textValue.val = "";
+                                if (inputTextareaEl) {
+                                    inputTextareaEl.value = "";
+                                    inputTextareaEl.style.height = "auto";
+                                }
+                            } else if (currentEvent === "error") {
+                                throw new Error(parsed.message || "Unknown resume error");
+                            }
+                            currentEvent = "message";
+                        }
+                    }
+                }
+            } catch (err) {
+                alert(`Error: ${err.message}`);
+            } finally {
+                isLoading.val = false;
+                statusText.val = "";
+            }
+        }
+
+
+        function showFormDialog(formSchema, sessionId, promptLabel) {
+            const formType = formSchema.type;
             const dialog = document.createElement("dialog");
             dialog.className = "modal";
-            dialog.innerHTML = `
-                <form method="dialog" novalidate autocomplete="off">
-                    <label for="rn-filename">Filename:</label>
-                    <div class="dialog-input-with-button">
+
+            if (formType === "load_research_document") {
+                dialog.innerHTML = `
+                    <form method="dialog" novalidate autocomplete="off">
+                        <label for="rn-filename">Filename:</label>
                         <input id="rn-filename" name="filename" type="text" placeholder="document.md" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
-                        <input id="rn-file" type="file" accept=".md,.markdown,.txt" style="display:none">
-                        <button type="button" class="btn secondary" id="rn-file-btn">Browse…</button>
-                    </div>
 
-                    <label for="rn-title">Title:</label>
-                    <input id="rn-title" name="title" type="text" placeholder="My Research Library" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text">
+                        <label for="rn-path">Path:</label>
+                        <input id="rn-path" name="path" type="text" placeholder="Relative path from project root" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
 
-                    <label for="rn-authors">Authors:</label>
-                    <input id="rn-authors" name="authors" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text"  placeholder="Troy Stribling">
+                        <label for="rn-title">Title:</label>
+                        <input id="rn-title" name="title" type="text" placeholder="Document title" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
 
-                    <label for="rn-document-date">Date:</label>
-                    <input id="rn-document-date" name="document_date" type="date" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text">
+                        <label for="rn-authors">Authors:</label>
+                        <input id="rn-authors" name="authors" type="text" placeholder="Troy Stribling" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
 
-                    <label for="rn-topic">Topic:</label>
-                    <textarea id="rn-topic" name="topic" rows="3" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="e.g., Signal Processing"></textarea>
+                        <label for="rn-document-date">Date:</label>
+                        <input id="rn-document-date" name="document_date" type="date" autocomplete="off" required>
 
-                    <label for="rn-shelf">Shelf:</label>
-                    <input id="rn-shelf" name="shelf" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" placeholder="e.g., reading_list">
+                        <label for="rn-topic">Topic:</label>
+                        <textarea id="rn-topic" name="topic" rows="3" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="e.g., Signal Processing" required></textarea>
 
-                    <menu>
-                        <button type="button" class="btn" id="cancelRNBtn">Cancel</button>
-                        <button type="button" class="btn primary" id="loadRNBtn">Load Research Document</button>
-                    </menu>
-                </form>
-            `;
-            document.body.appendChild(dialog);
-            dialog.showModal();
+                        <label for="rn-shelf">Shelf:</label>
+                        <input id="rn-shelf" name="shelf" type="text" placeholder="e.g., reading_list" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
 
-            const cancelBtn = dialog.querySelector("#cancelRNBtn");
-            const loadBtn   = dialog.querySelector("#loadRNBtn");
+                        <menu>
+                            <button type="button" class="btn" id="cancelFormBtn">Cancel</button>
+                            <button type="button" class="btn primary" id="submitFormBtn">Load Research Document</button>
+                        </menu>
+                    </form>
+                `;
+                document.body.appendChild(dialog);
+                dialog.showModal();
 
-            const filenameInput     = dialog.querySelector("input[name='filename']");
-            const titleInput        = dialog.querySelector("input[name='title']");
-            const authorsInput      = dialog.querySelector("input[name='authors']");
-            const dateInput         = dialog.querySelector("input[name='document_date']");
-            const topicInput        = dialog.querySelector("textarea[name='topic']");
-            const shelfInput        = dialog.querySelector("input[name='shelf']");
-            const fileInput         = dialog.querySelector("#rn-file");
-            const fileButton        = dialog.querySelector("#rn-file-btn");
+                const filenameInput = dialog.querySelector("input[name='filename']");
+                const pathInput     = dialog.querySelector("input[name='path']");
+                const titleInput    = dialog.querySelector("input[name='title']");
+                const authorsInput  = dialog.querySelector("input[name='authors']");
+                const dateInput     = dialog.querySelector("input[name='document_date']");
+                const topicInput    = dialog.querySelector("textarea[name='topic']");
+                const shelfInput    = dialog.querySelector("input[name='shelf']");
 
-            if (fileButton && fileInput) {
-                fileButton.addEventListener("click", () => fileInput.click());
-                fileInput.addEventListener("change", () => {
-                    if (fileInput.files && fileInput.files[0]) {
-                        filenameInput.value = fileInput.files[0].name;
-                    }
-                });
-            }
+                requestAnimationFrame(() => filenameInput.focus());
 
-            requestAnimationFrame(() => filenameInput.focus());
+                const close = () => { dialog.close(); dialog.remove(); };
+                dialog.querySelector("#cancelFormBtn").addEventListener("click", close);
+                dialog.addEventListener("cancel", e => { e.preventDefault(); close(); });
 
-            const close = () => { dialog.close(); dialog.remove(); };
-            cancelBtn.addEventListener("click", close);
-            dialog.addEventListener("cancel", e => { e.preventDefault(); close(); }); // Esc key
-
-            const submit = async () => {
-                // Only filename is required for now
-                if (!dialog.querySelector("form").reportValidity()) return;
-                const payload = {
-                    filename:       filenameInput.value.trim(),
-                    title:          titleInput.value.trim(),
-                    authors:        authorsInput.value.trim(),
-                    date:           dateInput.value,
-                    topic:          topicInput.value.trim(),
-                    shelf:         shelfInput.value.trim()
-                };
-                const prev = loadBtn.textContent;
-                loadBtn.disabled = true;
-                loadBtn.textContent = "Loading…";
-                try {
-                    const res = await fetch(RESEARCH_NOTE_LOAD, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(payload)
-                    });
-                    const result = await res.json().catch(() => ({}));
-                    if (!res.ok) throw new Error(result?.detail || result?.message || `Request failed (${res.status})`);
-                    alert(result.status || "Research document load requested.");
-                } catch (err) {
-                    alert(`Error loading research document: ${err.message || err}`);
-                } finally {
-                    loadBtn.disabled = false;
-                    loadBtn.textContent = prev;
+                const submit = async () => {
+                    if (!dialog.querySelector("form").reportValidity()) return;
                     close();
-                }
-            };
-            loadBtn.addEventListener("click", submit);
-            [filenameInput, titleInput, authorsInput, dateInput, shelfInput].forEach(el => el.addEventListener("keydown", e => {if (e.key === "Enter") { e.preventDefault(); submit(); }}));
-        };
+                    await handleResumeRequest(sessionId, {
+                        filename:      filenameInput.value.trim(),
+                        path:          pathInput.value.trim(),
+                        title:         titleInput.value.trim(),
+                        authors:       authorsInput.value.trim(),
+                        document_date: dateInput.value,
+                        topic:         topicInput.value.trim(),
+                        shelf:         shelfInput.value.trim(),
+                    }, promptLabel);
+                };
+                dialog.querySelector("#submitFormBtn").addEventListener("click", submit);
+                [filenameInput, pathInput, titleInput, authorsInput, dateInput, shelfInput].forEach(
+                    el => el.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); submit(); } })
+                );
+
+            } else if (formType === "load_github_repo") {
+                dialog.innerHTML = `
+                    <form method="dialog" novalidate autocomplete="off">
+                        <label for="gh-account">GitHub Account:</label>
+                        <input id="gh-account" name="account" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
+
+                        <label for="gh-repo">Repository Name:</label>
+                        <input id="gh-repo" name="repo" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
+
+                        <menu>
+                            <button type="button" class="btn" id="cancelFormBtn">Cancel</button>
+                            <button type="button" class="btn primary" id="submitFormBtn">Load Repo</button>
+                        </menu>
+                    </form>
+                `;
+                document.body.appendChild(dialog);
+                dialog.showModal();
+
+                const accInput  = dialog.querySelector("input[name='account']");
+                const repoInput = dialog.querySelector("input[name='repo']");
+
+                const saved = localStorage.getItem("gh_account");
+                if (saved) accInput.value = saved;
+                requestAnimationFrame(() => accInput.focus());
+
+                const close = () => { dialog.close(); dialog.remove(); };
+                dialog.querySelector("#cancelFormBtn").addEventListener("click", close);
+                dialog.addEventListener("cancel", e => { e.preventDefault(); close(); });
+
+                const submit = async () => {
+                    if (!dialog.querySelector("form").reportValidity()) return;
+                    const account = accInput.value.trim();
+                    localStorage.setItem("gh_account", account);
+                    close();
+                    await handleResumeRequest(sessionId, {
+                        account,
+                        repo: repoInput.value.trim(),
+                    }, promptLabel);
+                };
+                dialog.querySelector("#submitFormBtn").addEventListener("click", submit);
+                [accInput, repoInput].forEach(
+                    el => el.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); submit(); } })
+                );
+
+            } else if (formType === "load_pdf_document") {
+                dialog.innerHTML = `
+                    <form method="dialog" novalidate autocomplete="off">
+                        <label for="pdf-filename">Filename:</label>
+                        <input id="pdf-filename" name="filename" type="text" placeholder="document.pdf" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
+
+                        <label for="pdf-title">Title:</label>
+                        <input id="pdf-title" name="title" type="text" placeholder="Document title" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
+
+                        <label for="pdf-authors">Authors:</label>
+                        <input id="pdf-authors" name="authors" type="text" placeholder="Author Name" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
+
+                        <label for="pdf-published-date">Published Date:</label>
+                        <input id="pdf-published-date" name="published_date" type="date" autocomplete="off" required>
+
+                        <label for="pdf-topic">Topic:</label>
+                        <textarea id="pdf-topic" name="topic" rows="3" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="e.g., Machine Learning" required></textarea>
+
+                        <label for="pdf-shelf">Shelf:</label>
+                        <input id="pdf-shelf" name="shelf" type="text" placeholder="e.g., reading_list" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
+
+                        <menu>
+                            <button type="button" class="btn" id="cancelFormBtn">Cancel</button>
+                            <button type="button" class="btn primary" id="submitFormBtn">Load PDF Document</button>
+                        </menu>
+                    </form>
+                `;
+                document.body.appendChild(dialog);
+                dialog.showModal();
+
+                const filenameInput    = dialog.querySelector("input[name='filename']");
+                const titleInput       = dialog.querySelector("input[name='title']");
+                const authorsInput     = dialog.querySelector("input[name='authors']");
+                const dateInput        = dialog.querySelector("input[name='published_date']");
+                const topicInput       = dialog.querySelector("textarea[name='topic']");
+                const shelfInput       = dialog.querySelector("input[name='shelf']");
+
+                requestAnimationFrame(() => filenameInput.focus());
+
+                const close = () => { dialog.close(); dialog.remove(); };
+                dialog.querySelector("#cancelFormBtn").addEventListener("click", close);
+                dialog.addEventListener("cancel", e => { e.preventDefault(); close(); });
+
+                const submit = async () => {
+                    if (!dialog.querySelector("form").reportValidity()) return;
+                    close();
+                    await handleResumeRequest(sessionId, {
+                        filename:       filenameInput.value.trim(),
+                        title:          titleInput.value.trim(),
+                        authors:        authorsInput.value.trim(),
+                        published_date: dateInput.value,
+                        topic:          topicInput.value.trim(),
+                        shelf:          shelfInput.value.trim(),
+                    }, promptLabel);
+                };
+                dialog.querySelector("#submitFormBtn").addEventListener("click", submit);
+                [filenameInput, titleInput, authorsInput, dateInput, shelfInput].forEach(
+                    el => el.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); submit(); } })
+                );
+
+            } else {
+                alert(`Unknown form type: ${formType}`);
+            }
+        }
 
         // ===== Feed helpers: scoped markdown render, prepend card =====
 
@@ -660,94 +793,6 @@
             h.style.display = feedCount.val > 0 ? "block" : "none";
         }
 
-        // Load Repository Dialog
-        const handleLoadGitHubRepoDialog = () => {
-            const dialog = document.createElement("dialog");
-            dialog.className = "modal";
-            dialog.innerHTML = `
-                <form method="dialog" novalidate autocomplete="off">
-                    <label for="gh-account">GitHub Account:</label>
-                    <input id="gh-account" name="account" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
-                    <label for="gh-repo">Repository Name:</label>
-                    <input id="gh-repo" name="repo" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text"  required>
-                    <menu>
-                        <button type="button" class="btn" id="cancelRepoBtn">Cancel</button>
-                        <button type="button" class="btn primary" id="loadRepoBtn">Load Repo</button>
-                    </menu>
-                </form>
-            `;
-            document.body.appendChild(dialog);
-            dialog.showModal();
-
-            const cancelBtn = dialog.querySelector("#cancelRepoBtn");
-            const loadBtn   = dialog.querySelector("#loadRepoBtn");
-            const accInput  = dialog.querySelector("input[name='account']");
-            const repoInput = dialog.querySelector("input[name='repo']");
-
-            const saved = localStorage.getItem("gh_account");
-            if (saved) accInput.value = saved;
-
-            requestAnimationFrame(() => accInput.focus());
-
-            const close = () => { dialog.close(); dialog.remove(); };
-            cancelBtn.addEventListener("click", close);
-            dialog.addEventListener("cancel", e => { e.preventDefault(); close(); }); // Esc key
-
-            const submit = async () => {
-                const account = accInput.value.trim();
-                const repo    = repoInput.value.trim();
-                if (!account || !repo) {
-                    [accInput, repoInput].forEach(el => {
-                        if (!el.value.trim()) el.style.borderColor = "#d33";
-                    });
-                    return;
-                }
-                const prev = loadBtn.textContent;
-                loadBtn.disabled = true;
-                loadBtn.textContent = "Loading…";
-                try {
-                    const res = await fetch(GITHUB_LOAD_REPO, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ account, repo })
-                    });
-                    const result = await res.json().catch(() => ({}));
-                    alert(result.status || "Repo load requested.");
-                } catch (err) {
-                    alert(`Error loading repo: ${err.message}`);
-                } finally {
-                    loadBtn.disabled = false;
-                    loadBtn.textContent = prev;
-                    close();
-                }
-            };
-
-            loadBtn.addEventListener("click", submit);
-            [accInput, repoInput].forEach(el => el.addEventListener("keydown", e => {
-                if (e.key === "Enter") { e.preventDefault(); submit(); }
-            }));
-        };
-
-        // Load All Repositories
-        const gitHubLoadAllReposStatus = state(""); 
-        const gitHubLoadAllReposLoading = state(false);
-
-        const handleGitHubLoadAllRepos = async () => {
-            gitHubLoadAllReposLoading.val = true;
-            try {
-                const response = await fetch(GITHUB_LOAD_ALL_REPOS, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" }
-                });
-                const data = await response.json();
-                alert(data.status || "gitHubLoadAllRepos request sent.");
-            } catch (err) {
-                alert(`Error: ${err.message}`);
-            } finally {
-                gitHubLoadAllReposLoading.val = false;
-            }
-        };
-
         // Main Page
         const handleYadaRequestSubmit = async () => {
             isLoading.val = true;
@@ -782,6 +827,7 @@
                 let buffer = "";
                 let currentEvent = "message";
                 let resultHandled = false;
+                let interruptData = null;
 
                 while (true) {
                     const { done, value } = await reader.read();
@@ -813,6 +859,10 @@
                                     inputTextareaEl.value = "";
                                     inputTextareaEl.style.height = "auto";
                                 }
+                            } else if (currentEvent === "interrupt" && !resultHandled) {
+                                resultHandled = true;
+                                if (parsed.session_id) sessionId.val = parsed.session_id;
+                                interruptData = parsed;
                             } else if (currentEvent === "meta") {
                                 fillMetaFooter(lastCard, parsed);
                             } else if (currentEvent === "error") {
@@ -821,6 +871,14 @@
                             currentEvent = "message"; // reset after data line
                         }
                     }
+                }
+
+                // Show form dialog after stream closes if interrupted
+                if (interruptData) {
+                    isLoading.val = false;
+                    statusText.val = "";
+                    showFormDialog(interruptData.form_schema, interruptData.session_id, promptBeforeSend);
+                    return;
                 }
             } catch (err) {
                 alert(`Error: ${err.message}`);
@@ -848,56 +906,6 @@
         add(document.getElementById("app"),
             div(
                 div({ class: "input-container" },
-                    // Button row
-                    div({ class: "button-wrapper", style: "margin-bottom: 1.0rem; text-align: left; position: relative;" },
-                        div({ class: "dropdown" },
-                            button(
-                                {
-                                    class: "btn",
-                                    style: "min-width: 175px;",
-                                    disabled: () => isLoading.val,
-                                    onclick: (e) => { e.stopPropagation(); showLoadMenu.val = !showLoadMenu.val; }
-                                },
-                                "Load Documents ", span({ style: "opacity:.6; margin-left:.25rem;" }, "▾")
-                            ),
-                            div(
-                                { class: "dropdown-menu", style: () => showLoadMenu.val ? "display:block" : "display:none" },
-                                // Update GitHub Repos
-                                button(
-                                    {
-                                        class: "menu-item",
-                                        onclick: async (e) => {
-                                            e.stopPropagation();
-                                            showLoadMenu.val = false;
-                                            await handleGitHubLoadAllRepos();
-                                        }
-                                    },
-                                    span({
-                                        class: "button-spinner",
-                                        style: () => (gitHubLoadAllReposLoading.val ? "display: inline-block;" : "display: none;")
-                                    }),
-                                    "Update GitHub Repos"
-                                ),
-                                // Update GitHub Repo
-                                button(
-                                    {
-                                        class: "menu-item",
-                                        onclick: (e) => { e.stopPropagation(); showLoadMenu.val = false; handleLoadGitHubRepoDialog(); }
-                                    },
-                                    "Update GitHub Repo"
-                                ),
-                                // Load Research Document
-                                button(
-                                    {
-                                        class: "menu-item",
-                                        onclick: (e) => { e.stopPropagation(); showLoadMenu.val = false; handleLoadResearchDocumentDialog(); }
-                                    },
-                                    "Load Research Document"
-                                )
-                            )
-                        )
-                    ),
-
                     // Our referenced textarea node
                     inputTextareaEl,
 

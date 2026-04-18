@@ -1,7 +1,5 @@
 import os
-from datetime import timezone
-import aiofiles
-
+from datetime import timezone, datetime
 from lib.logger import get_logger
 from git import Repo
 
@@ -127,17 +125,38 @@ class GitHubChromaDocumentLoader(ChromaDocumentLoader):
             return remote_head.reference.name.split("/")[-1]
 
 
-    def latest_commit_info(self, repo, rel_path: str) -> tuple[str | None, str | None, int | None]:
+    def build_commit_map(self, repo) -> dict[str, tuple[str, str, int]]:
         """
-        Returns (short_sha, ISO-8601 UTC timestamp, unix timestamp) for the latest commit touching rel_path.
+        Build a map of rel_path -> (short_sha, iso_ts, unix_ts) for all files
+        in a single git log subprocess call, avoiding one iter_commits per file.
         """
-        try:
-            c = next(repo.iter_commits(paths=rel_path, max_count=1))
-            ts = c.committed_datetime.astimezone(timezone.utc).isoformat()
-            ts_unix = int(c.committed_datetime.astimezone(timezone.utc).timestamp())
-            return c.hexsha[:12], ts, ts_unix
-        except StopIteration:
-            return None, None, None
+        import subprocess
+
+        repo_root = os.path.realpath(repo.working_tree_dir or "")
+        commit_map: dict[str, tuple[str, str, int]] = {}
+
+        result = subprocess.run(
+            ["git", "log", "--format=COMMIT %H %ct", "--name-only", "--diff-filter=AM"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+        )
+
+        current_sha = None
+        current_ts_unix = None
+
+        for line in result.stdout.splitlines():
+            if line.startswith("COMMIT "):
+                parts = line.split()
+                current_sha = parts[1][:12]
+                current_ts_unix = int(parts[2])
+            elif line.strip() and current_sha is not None:
+                rel = line.strip()
+                if rel not in commit_map:
+                    ts_iso = datetime.fromtimestamp(current_ts_unix, tz=timezone.utc).isoformat()
+                    commit_map[rel] = (current_sha, ts_iso, current_ts_unix)
+
+        return commit_map
 
 
     async def load_github_repo(self, path: str):
@@ -149,14 +168,17 @@ class GitHubChromaDocumentLoader(ChromaDocumentLoader):
         repo_name = os.path.basename(path.rstrip("/"))
         self._delete_repo(account, repo_name)
 
-        branch = self.get_default_branch(path)        
-        logger.info(f"Setting default branch {branch} for {path}.")        
+        branch = self.get_default_branch(path)
+        logger.info(f"Setting default branch {branch} for {path}.")
         loader = GitLoader(repo_path=path, branch=branch)
 
         documents = await loader.aload()
 
         repo = Repo(path)
         repo_root = os.path.realpath(repo.working_tree_dir or path)
+
+        logger.info(f"Building commit map for {path}.")
+        commit_map = self.build_commit_map(repo)
 
         for d in documents:
             src = d.metadata.get("source")  # may be absolute or relative from GitLoader
@@ -173,12 +195,11 @@ class GitHubChromaDocumentLoader(ChromaDocumentLoader):
                 if src_abs.startswith(repo_root + os.sep) or src_abs == repo_root:
                     rel = os.path.relpath(src_abs, start=repo_root)
                 else:
-                    # Reduce noise: this can happen for symlinks or odd metadata; skip commit lookup.
                     logger.debug(f"Skipping commit lookup for out-of-repo file resolved from '{src}': {src_abs}")
 
             filename = os.path.basename(rel) if rel else (os.path.basename(src_abs) if src_abs else None)
             ext = os.path.splitext(rel)[1] if rel else (os.path.splitext(src_abs)[1] if src_abs else None)
-            last_commit, commit_ts, commit_ts_unix = self.latest_commit_info(repo, rel) if rel else (None, None, None)
+            last_commit, commit_ts, commit_ts_unix = commit_map.get(rel, (None, None, None)) if rel else (None, None, None)
 
             file_metadata = {
                 "account": account,
