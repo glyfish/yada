@@ -579,3 +579,34 @@
     to individual cases. We note several examples of the difference this makes in
     real applications.
   shelf: jaynes
+
+- filename: what-is-fragility-f0473a3d-f959-4c83-9100-a75dbbdbe3f9.md
+  path: research_library/Reading List/what-is-fragility-f0473a3d-f959-4c83-9100-a75dbbdbe3f9.md
+  title: What is Fragility?
+  authors: N. N. Taleb
+  published_date: '2012-08-01'
+  topic: We provide a mathematical definition of fragility and antifragility as 
+         negative or positive sensitivity to a semi-measure of dispersion and volatility 
+         (a variant of negative or positive "vega") and examine the link to nonlinear 
+         effects. We integrate model error (and biases) into the fragile or antifragile 
+         context. Unlike risk, which is linked to psychological notions such as 
+         subjective preferences (hence cannot apply to a coffee cup) we offer a measure 
+         that is universal and concerns any object that has a probability distribution 
+         (whether such distribution is known or, critically, unknown).
+  shelf: reading_list
+
+- filename: what-is-fragility-f0473a3d-f959-4c83-9100-a75dbbdbe3f9.md
+  path: research_library/Reading List/what-is-fragility-f0473a3d-f959-4c83-9100-a75dbbdbe3f9.md
+  title: What is Fragility?
+  authors: N. N. Taleb
+  published_date: '2012-08-01'
+  topic: "We provide a mathematical definition of fragility and antifragility as \n\
+    \         negative or positive sensitivity to a semi-measure of dispersion and\
+    \ volatility \n         (a variant of negative or positive \"vega\") and examine\
+    \ the link to nonlinear \n         effects. We integrate model error (and biases)\
+    \ into the fragile or antifragile \n         context. Unlike risk, which is linked\
+    \ to psychological notions such as \n         subjective preferences (hence cannot\
+    \ apply to a coffee cup) we offer a measure \n         that is universal and concerns\
+    \ any object that has a probability distribution \n         (whether such distribution\
+    \ is known or, critically, unknown)."
+  shelf: reading_list

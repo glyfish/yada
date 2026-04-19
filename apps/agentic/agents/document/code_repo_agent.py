@@ -22,7 +22,7 @@ class CodeRepoAgent(FileChromaRAGAgent):
         **code_repository_search Query Filters**
         The agent supports the following query filters to refine searches:
         - account: GitHub account name (e.g., account:troystribling)
-        - repo: Repository name (e.g., repo:zgomot)
+        - repo: Repository name (e.g., repo:BlueCap)
         - ext: File extension (e.g., ext:rb, ext:js, ext:py)
         - before: Date to filter commits before (e.g., before:2014-01-01)
         - after: Date to filter commits after (e.g., after:2014-01-01)

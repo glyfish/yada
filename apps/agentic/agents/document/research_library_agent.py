@@ -34,7 +34,7 @@ class ResearchLibraryAgent(FileChromaRAGAgent):
         - author: Author name (e.g., author:Troy Stribling)
         - topic: Research topic (e.g., topic:AI)
         - shelf: Tag used to identify document groups
-        - date: Start date of work on the research note (e.g., date:2023-01-01)
+        - date: Date of work on the research note (e.g., date:2023-01-01)
 
         Example Queries:
         - title:Thermodynamics Look in my research notes for the definition of a Carnot Cycle.

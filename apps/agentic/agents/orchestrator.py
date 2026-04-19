@@ -189,7 +189,15 @@ async def delegate_to_document_store_info_agent(request: str) -> str:
             """
             Delegate a request to the Code Repository Search Agent which searches and retrieves code
             from indexed GitHub repositories. Use this when the user wants to search for specific
-            code or files in Troy Stribling's GitHub repositories.
+            code or files in Troy Stribling's GitHub repositories. The following metadata fields are 
+            available for filtering and retrieval,
+                account: Github account name (e.g. account:troystribling)
+                repo: Repository name (e.g. repo:BlueCap)
+                ext: File extension (e.g. ext:rb)
+                before: Date before which to search (e.g. before:2023-01-01)
+                after: Date after which to search (e.g. after:2022-01-01)
+            Requests should contain explicit reference to 'my code' or 'code database' to ensure they are routed
+            to the Code Repository Search Agent.
             """,
         positive_examples=[
             PositiveExample(input="account:troystribling repo:zgomot ext:rb Where is MIDI output handled in my code?"),
@@ -217,8 +225,9 @@ async def delegate_to_code_repository_search_agent(request: str, query: Optional
         primary_function=
             """
             Delegate a request to the Research Library Search Agent which searches and retrieves documents
-            from the research library. Use this when the user wants to search for specific documents
-            in the research library.
+            from the research library. The following metadata fields are available for filtering and retrieval: 
+            shelf, author and topic. Requests should contain explicit reference to 'my research' or 
+            'research library' to ensure they are routed here.
             """,
         positive_examples=[
             PositiveExample(input="title:Thermodynamics Look in my research library for the definition of a Carnot Cycle."),
@@ -248,7 +257,11 @@ async def delegate_to_research_library_search_agent(request: str, query: Optiona
             Delegate a request to the FRED Data Info Search Agent which searches and retrieves documents
             from the FRED data information store. FRED (Federal Reserve Economic Data) is a database of
             economic data time series. Use this tool to find FRED time series identifiers for specific
-            economic indicators.
+            economic indicators. The following metadata fields are available for filtering and retrieval: 
+            category_name, series_id, series_title, popularity, category_id, popularity, 
+            popularity:> | >= | < | <=, last_updated, last_updated:after, last_updated:before.
+            Requests should contain explicit reference to FRED data or FRED time series to ensure 
+            they are routed here.
             """,
         positive_examples=[
             PositiveExample(input="popularity:>40 What time series are available for Commodities in the FRED data?"),
@@ -292,7 +305,7 @@ async def delegate_to_fred_data_info_search_agent(request: str, query: Optional[
             Pass the series_id, source, and any date range in the request string.
             """,
         positive_examples=[
-            PositiveExample(input="Fetch the GDP series from FRED."),
+            PositiveExample(input="Plot the US GDP time series using FRED data."),
             PositiveExample(input="Get UNRATE data from FRED since 2000-01-01."),
         ],
         requires_context=[
@@ -313,7 +326,9 @@ async def delegate_to_data_fetcher_agent(request: str) -> str:
     config = RunnableConfig(configurable={"thread_id": shortuuid.uuid()})
     data_fetcher_agent = await DataFetcherAgent.create()
     result = await data_fetcher_agent.agent.ainvoke(state, config)
-    return result["messages"][-1].content
+    content = result["messages"][-1].content
+    logger.debug(f"Data Fetcher Agent returned content: {content}")
+    return content
 
 
 # request_human_form
