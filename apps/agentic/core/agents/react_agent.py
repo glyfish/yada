@@ -93,13 +93,17 @@ class ReactAgent(ABC):
         )
 
 
+    def _post_tools_target(self) -> str:
+        return "model"
+
+
     def _create_agent(self):
         graph = (
             StateGraph(WorkerState)
             .add_node("model", self._node.model_runner)
             .add_node("tools", self.tool_node)
             .add_edge(START, "model")
-            .add_edge("tools", "model")
+            .add_edge("tools", self._post_tools_target())
             .add_conditional_edges(
                 "model",
                 tools_condition,

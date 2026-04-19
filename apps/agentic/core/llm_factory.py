@@ -37,7 +37,8 @@ class LLMSettings:
     openai      gpt-4.1, gpt-4.1-mini, 
                 gpt-3.5-turbo, gpt-4o,
                 gpt-4o-mini
-    anthropic   claude-opus-4-6, 
+    anthropic   claude-opus-4-6,
+                claude-sonnet-4-6,
                 claude-sonnet-4-5,
                 claude-haiku-4-5
     """

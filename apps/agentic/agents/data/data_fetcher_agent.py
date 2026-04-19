@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 
-from apps.agentic.core.agents.react_agent import ReactAgent
+from apps.agentic.core.agents.linear_agent import LinearAgent
 from lib.logger import get_logger
 
 logger = get_logger("YADA")
 
 
-class DataFetcherAgent(ReactAgent):
+class DataFetcherAgent(LinearAgent):
     """
     Fetches time series data from external data sources via MCP tools.
     Only the tools listed in _mcp_tool_names are selected from the MCP server.

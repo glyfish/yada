@@ -261,7 +261,7 @@ async def delegate_to_research_library_search_agent(request: str, query: Optiona
             category_name, series_id, series_title, popularity, category_id, popularity, 
             popularity:> | >= | < | <=, last_updated, last_updated:after, last_updated:before.
             Requests should contain explicit reference to FRED data or FRED time series to ensure 
-            they are routed here.
+            they are routed here. 
             """,
         positive_examples=[
             PositiveExample(input="popularity:>40 What time series are available for Commodities in the FRED data?"),
