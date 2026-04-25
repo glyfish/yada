@@ -33,3 +33,5 @@ shortuuid
 tabulate
 mcp
 langchain-mcp-adapters
+pip-tools
+psycopg2
