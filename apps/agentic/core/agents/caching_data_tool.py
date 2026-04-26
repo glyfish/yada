@@ -45,6 +45,7 @@ class CachingDataTool(BaseTool):
         data = await self._fetch_raw(**kwargs)
         obs_start, obs_end, obs_count = self._obs_range(data)
 
+        meta = await self._fetch_metadata(native_id)
         cache_id = await SeriesCache.put(
             source=self.source,
             native_id=native_id,
@@ -52,6 +53,9 @@ class CachingDataTool(BaseTool):
             observation_start=obs_start,
             observation_end=obs_end,
             observation_count=obs_count,
+            frequency=meta.get("frequency"),
+            units=meta.get("units"),
+            title=meta.get("title"),
         )
 
         ref = SeriesRef(source=self.source, native_id=native_id, cache_id=cache_id)
@@ -66,3 +70,6 @@ class CachingDataTool(BaseTool):
 
     @abstractmethod
     def _obs_range(self, data: dict) -> tuple[str, str, int]: ...
+
+    async def _fetch_metadata(self, native_id: str) -> dict:  # noqa: ARG002
+        return {}

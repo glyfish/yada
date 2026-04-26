@@ -16,7 +16,7 @@ class DataFetcherAgent(LinearAgent):
     flows through the agent messages — never the raw observations.
     """
 
-    _mcp_tool_names: list[str] = ["fred_series_observations"]
+    _mcp_tool_names: list[str] = ["fred_series_observations", "fred_series_info"]
 
 
     def __init__(self, mcp_tools: list):
@@ -27,9 +27,12 @@ class DataFetcherAgent(LinearAgent):
     @classmethod
     async def create(cls) -> "DataFetcherAgent":
         mcp_tools = cls._discover_mcp_tools()
+        by_name = {t.name: t for t in mcp_tools}
         wrapped = [
-            CachingFredTool(t) if t.name == "fred_series_observations" else t
-            for t in mcp_tools
+            CachingFredTool(
+                wrapped=by_name["fred_series_observations"],
+                info_tool=by_name.get("fred_series_info"),
+            )
         ]
         return cls(mcp_tools=wrapped)
 

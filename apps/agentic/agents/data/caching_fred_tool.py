@@ -26,10 +26,12 @@ class CachingFredTool(CachingDataTool):
     )
 
     _wrapped: BaseTool = PrivateAttr()
+    _info_tool: BaseTool | None = PrivateAttr(default=None)
 
-    def __init__(self, wrapped: BaseTool, **kwargs: Any):
+    def __init__(self, wrapped: BaseTool, info_tool: BaseTool | None = None, **kwargs: Any):
         super().__init__(args_schema=_Input, **kwargs)
         self._wrapped = wrapped
+        self._info_tool = info_tool
 
     def _native_id(self, **kwargs: Any) -> str:
         return kwargs["series_id"]
@@ -46,3 +48,18 @@ class CachingFredTool(CachingDataTool):
         obs_start = observations[0]["date"] if observations else ""
         obs_end = observations[-1]["date"] if observations else ""
         return obs_start, obs_end, len(observations)
+
+    async def _fetch_metadata(self, native_id: str) -> dict:
+        if self._info_tool is None:
+            return {}
+        raw = await self._info_tool.ainvoke({"series_id": native_id})
+        info = json.loads(raw)
+        series_list = info.get("seriess", [])  # "seriess" is the FRED API's key
+        if not series_list:
+            return {}
+        s = series_list[0]
+        return {
+            "title": s.get("title"),
+            "frequency": s.get("frequency_short"),
+            "units": s.get("units_short"),
+        }
