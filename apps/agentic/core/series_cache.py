@@ -24,6 +24,7 @@ class SeriesCache:
     _engine: Engine | None = None
     _table: Table | None = None
 
+
     @classmethod
     def initialize(cls, url: str | None = None) -> None:
         db_url = url or os.getenv("YADA_DB_URL", "postgresql://yada@localhost/yada")
@@ -35,17 +36,20 @@ class SeriesCache:
         cls._table = metadata.tables["time_series_cache"]
         logger.info(f"SeriesCache initialized: {db_url}")
 
+
     @classmethod
     def _engine_or_raise(cls) -> Engine:
         if cls._engine is None:
             raise RuntimeError("SeriesCache not initialized — call SeriesCache.initialize() at startup")
         return cls._engine
 
+
     @classmethod
     def _table_or_raise(cls) -> Table:
         if cls._table is None:
             raise RuntimeError("SeriesCache not initialized — call SeriesCache.initialize() at startup")
         return cls._table
+
 
     @classmethod
     def _get_by_cache_id_sync(cls, cache_id: str) -> dict | None:
@@ -63,6 +67,7 @@ class SeriesCache:
             return None
         return entry
 
+
     @classmethod
     def _get_by_native_id_sync(cls, source: str, native_id: str) -> dict | None:
         engine = cls._engine_or_raise()
@@ -79,6 +84,7 @@ class SeriesCache:
             logger.debug(f"SeriesCache: {source}:{native_id} expired")
             return None
         return entry
+
 
     @classmethod
     def _put_sync(
@@ -137,13 +143,16 @@ class SeriesCache:
         logger.debug(f"SeriesCache: stored {source}:{native_id} → {cache_id}")
         return cache_id
 
+
     @classmethod
     async def get_by_cache_id(cls, cache_id: str) -> dict | None:
         return await asyncio.to_thread(cls._get_by_cache_id_sync, cache_id)
 
+
     @classmethod
     async def get_by_native_id(cls, source: str, native_id: str) -> dict | None:
         return await asyncio.to_thread(cls._get_by_native_id_sync, source, native_id)
+
 
     @classmethod
     async def put(
