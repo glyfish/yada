@@ -6,6 +6,8 @@ from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.prebuilt import ToolNode
 from apps.agentic.core.tool_spec import PositiveExample, NegativeExample, ToolSpec, tool_spec
 from apps.agentic.core.agents.react_agent import ReactAgent
+from apps.agentic.core.series_cache import SeriesCache
+from apps.agentic.core.series_ref import SeriesRef
 
 import os
 import sys
@@ -22,6 +24,50 @@ from lib.utils import generate_plot_file_name
 from lib.logger import get_logger
 
 logger = get_logger("YADA")
+
+
+def _load_series(series_ref_json: str, date_from: str | None, date_to: str | None) -> tuple[list[datetime], list[float]]:
+    ref = SeriesRef.from_json(series_ref_json)
+    entry = SeriesCache._get_by_cache_id_sync(ref.cache_id)
+    if entry is None:
+        raise ValueError(f"Series {ref.native_id} not found in cache")
+    observations = entry["data"].get("observations", [])
+    times, values = [], []
+    for obs in observations:
+        if obs.get("value") == ".":
+            continue
+        d = obs["date"]
+        if date_from and d < date_from:
+            continue
+        if date_to and d > date_to:
+            continue
+        times.append(datetime.strptime(d, "%Y-%m-%d"))
+        values.append(float(obs["value"]))
+    return times, values
+
+class SeriesFromCacheInput(BaseModel):
+    """Input schema for single-series cache-based plot."""
+    series_ref: str = Field(..., description="SeriesRef JSON string returned by the data fetcher agent")
+    date_from: str | None = Field(None, description="Filter start date ISO format YYYY-MM-DD (inclusive)")
+    date_to: str | None = Field(None, description="Filter end date ISO format YYYY-MM-DD (inclusive)")
+    title: str = Field(default="Time Series Plot", description="Title of the chart")
+    x_axis_label: str = Field(default="Time", description="Label for the x-axis")
+    y_axis_label: str = Field(default="Value", description="Label for the y-axis")
+    plot_axis_type: PlotType = Field(default=PlotType.LINEAR, description="Type of plot axis")
+
+
+class MultiSeriesFromCacheInput(BaseModel):
+    """Input schema for multi-series cache-based plots."""
+    series_refs: list[str] = Field(..., description="List of SeriesRef JSON strings, one per series")
+    date_from: str | None = Field(None, description="Filter start date ISO format YYYY-MM-DD (inclusive)")
+    date_to: str | None = Field(None, description="Filter end date ISO format YYYY-MM-DD (inclusive)")
+    title: str = Field(default="Time Series Plot", description="Title of the chart")
+    x_axis_label: str = Field(default="Time", description="Label for the x-axis")
+    y_axis_labels: list[str] | None = Field(default=None, description="Y-axis label for each series")
+    y_axis_label: str = Field(default="Value", description="Shared y-axis label (comparison plot only)")
+    labels: list[str] | None = Field(default=None, description="Legend or annotation label for each series")
+    plot_axis_type: PlotType = Field(default=PlotType.LINEAR, description="Type of plot axis")
+
 
 class TimeSeriesPlotInput(BaseModel):
     """Input schema for the time series plot generator."""
@@ -68,6 +114,9 @@ class TimeSeriesPlotAgent(ReactAgent):
 
     def __init__(self, mcp_tools: list = []):
         tools = [
+            TimeSeriesPlotAgent.time_series_plot_from_cache,
+            TimeSeriesPlotAgent.time_series_stack_from_cache,
+            TimeSeriesPlotAgent.time_series_comparison_from_cache,
             TimeSeriesPlotAgent.time_series_plot_tool,
             TimeSeriesPlotAgent.time_series_stack_tool,
             TimeSeriesPlotAgent.time_series_comparison_tool,
@@ -89,6 +138,13 @@ class TimeSeriesPlotAgent(ReactAgent):
         system_prompt = """
             <instructions>
             You are a time series plot generator. You may use the following tools to generate time series plots:
+
+            When the request contains a SeriesRef JSON string (from the data fetcher agent), use the cache tools:
+            - time_series_plot_from_cache: single series from cache
+            - time_series_stack_from_cache: multiple series stacked on separate axes, each from cache
+            - time_series_comparison_from_cache: multiple series overlaid on the same axis, each from cache
+
+            When raw time and value arrays are provided directly, use:
             - time_series_plot_tool: single time series
             - time_series_stack_tool: multiple series on separate vertically stacked axes
             - time_series_comparison_tool: multiple series overlaid on the same axis
@@ -178,6 +234,119 @@ class TimeSeriesPlotAgent(ReactAgent):
             ("system", system_prompt),
             MessagesPlaceholder(variable_name="messages"),
         ])
+
+
+    @staticmethod
+    @tool_spec(
+        args_schema=SeriesFromCacheInput,
+        metadata=ToolSpec(
+            primary_function=
+                """
+                Generate a single time series plot for a series stored in the cache.
+                Use when the request contains a SeriesRef JSON string from the data fetcher agent.
+                Optionally filter the date range with date_from and date_to (YYYY-MM-DD).
+                Returns an HTML fragment with the rendered chart.
+                """,
+            positive_examples=[
+                PositiveExample(input='Plot {"source":"fred","native_id":"UNRATE","cache_id":"..."} since 2000.'),
+            ],
+        ),
+    )
+    def time_series_plot_from_cache(series_ref: str,
+                                    date_from: str | None,
+                                    date_to: str | None,
+                                    title: str,
+                                    x_axis_label: str,
+                                    y_axis_label: str,
+                                    plot_axis_type: PlotType) -> str:
+        times, values = _load_series(series_ref, date_from, date_to)
+        file = TimeSeriesPlotAgent.generate_time_series_plot(
+            time=numpy.array(times),
+            values=numpy.array(values),
+            title=title,
+            xlabel=x_axis_label,
+            ylabel=y_axis_label,
+            plot_axis_type=plot_axis_type,
+        )
+        return f'<div class="time-series-plot"><img src="{file}"></div>'
+
+
+    @staticmethod
+    @tool_spec(
+        args_schema=MultiSeriesFromCacheInput,
+        metadata=ToolSpec(
+            primary_function=
+                """
+                Generate a stacked time series plot for multiple series stored in the cache,
+                each on its own vertically stacked axis sharing a common time axis.
+                Use when the request contains multiple SeriesRef JSON strings.
+                Optionally filter the date range with date_from and date_to (YYYY-MM-DD).
+                Returns an HTML fragment with the rendered chart.
+                """,
+            positive_examples=[
+                PositiveExample(input="Stack UNRATE and GDP from cache since 2000."),
+            ],
+        ),
+    )
+    def time_series_stack_from_cache(series_refs: list[str],
+                                     date_from: str | None,
+                                     date_to: str | None,
+                                     title: str,
+                                     x_axis_label: str,
+                                     y_axis_labels: list[str] | None,
+                                     labels: list[str] | None,
+                                     plot_axis_type: PlotType,
+                                     **kwargs) -> str:
+        all_times, all_values = zip(*[_load_series(r, date_from, date_to) for r in series_refs])
+        file = TimeSeriesPlotAgent.generate_time_series_stack(
+            time=numpy.array(all_times[0]),
+            values=[numpy.array(v) for v in all_values],
+            title=title,
+            xlabel=x_axis_label,
+            ylabels=y_axis_labels,
+            labels=labels,
+            plot_axis_type=plot_axis_type,
+        )
+        return f'<div class="time-series-plot"><img src="{file}"></div>'
+
+
+    @staticmethod
+    @tool_spec(
+        args_schema=MultiSeriesFromCacheInput,
+        metadata=ToolSpec(
+            primary_function=
+                """
+                Generate a comparison time series plot for multiple series stored in the cache,
+                overlaid on the same axis.
+                Use when the request contains multiple SeriesRef JSON strings.
+                Optionally filter the date range with date_from and date_to (YYYY-MM-DD).
+                Returns an HTML fragment with the rendered chart.
+                """,
+            positive_examples=[
+                PositiveExample(input="Compare UNRATE and GDP from cache on the same chart."),
+            ],
+        ),
+    )
+    def time_series_comparison_from_cache(series_refs: list[str],
+                                          date_from: str | None,
+                                          date_to: str | None,
+                                          title: str,
+                                          x_axis_label: str,
+                                          y_axis_label: str,
+                                          labels: list[str] | None,
+                                          plot_axis_type: PlotType,
+                                          **kwargs) -> str:
+        all_times, all_values = zip(*[_load_series(r, date_from, date_to) for r in series_refs])
+        file = TimeSeriesPlotAgent.generate_time_series_comparison(
+            time=numpy.array(all_times[0]),
+            values=[numpy.array(v) for v in all_values],
+            title=title,
+            xlabel=x_axis_label,
+            ylabel=y_axis_label,
+            labels=labels,
+            plot_axis_type=plot_axis_type,
+        )
+        return f'<div class="time-series-plot"><img src="{file}"></div>'
 
 
     @staticmethod
