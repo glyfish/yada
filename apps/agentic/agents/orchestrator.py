@@ -23,6 +23,7 @@ from apps.agentic.agents.document.document_store_info_agent import DocumentStore
 from apps.agentic.agents.document.fred_data_info_agent import FredDataInfoAgent
 from apps.agentic.agents.document.document_loader_agent import DocumentLoaderAgent
 from apps.agentic.agents.data.data_fetcher_agent import DataFetcherAgent
+from apps.agentic.agents.time_series_report_agent import TimeSeriesReportAgent
 
 from lib.logger import get_logger
 
@@ -33,12 +34,14 @@ _bar_chart_agent = BarChartAgent()
 _time_series_plot_agent = TimeSeriesPlotAgent()
 _document_store_info_agent = DocumentStoreInfoAgent()
 _document_loader_agent = DocumentLoaderAgent()
+_time_series_report_agent = TimeSeriesReportAgent()
 
 class RequestHumanFormInput(BaseModel):
     form_type: Literal[
         "load_research_document",
         "load_github_repo",
         "load_pdf_document",
+        "create_time_series_report",
     ] = Field(
         ...,
         description="The form type to request from the user.",
@@ -331,6 +334,34 @@ async def delegate_to_data_fetcher_agent(request: str) -> str:
     return content
 
 
+# delegate_to_time_series_report_agent
+@tool_spec(
+    args_schema=SubagentRequest,
+    metadata=ToolSpec(
+        primary_function=
+            """
+            Delegate a request to the Time Series Report Agent which creates, retrieves,
+            and lists time series reports. A report groups a set of time series cache IDs
+            under a title and description for later reference.
+            Use after collecting form data for report creation, or directly for list/get requests.
+            """,
+        positive_examples=[
+            PositiveExample(input="List all my time series reports."),
+            PositiveExample(input="Show me the report with ID abc-123."),
+            PositiveExample(input="What reports do I have?"),
+        ],
+        requires_context=[
+            "For creating a report: call request_human_form with form_type='create_time_series_report' first.",
+        ],
+    ),
+)
+async def delegate_to_time_series_report_agent(request: str) -> str:
+    state = {"messages": [HumanMessage(content=request)]}
+    config = RunnableConfig(configurable={"thread_id": shortuuid.uuid()})
+    result = await _time_series_report_agent.agent.ainvoke(state, config)
+    return result["messages"][-1].content
+
+
 # request_human_form
 @tool_spec(
     args_schema=RequestHumanFormInput,
@@ -420,6 +451,7 @@ class OrchestratorAgent(ReactAgent):
             delegate_to_search_agent,
             delegate_to_bar_chart_agent,
             delegate_to_time_series_plot_agent,
+            delegate_to_time_series_report_agent,
             delegate_to_data_fetcher_agent,
             delegate_to_document_store_info_agent,
             delegate_to_document_loader_agent,
@@ -529,6 +561,15 @@ When the user wants to load a document into a document store:
 2. After the user submits the form, call delegate_to_document_loader_agent with the form data.
 Exception: load_all_github_repos requires no form — call delegate_to_document_loader_agent directly.
 </document_loading>
+
+<time_series_reports>
+When the user wants to create a time series report:
+1. Call request_human_form with form_type: create_time_series_report to collect the title,
+   description, and comma-separated list of time series cache IDs from the user.
+2. After the user submits the form, pass the form data as the request to delegate_to_time_series_report_agent.
+
+When the user wants to list or retrieve an existing report, call delegate_to_time_series_report_agent directly.
+</time_series_reports>
 
 <examples>
 In the following request examples the expected routing to subagent tools by

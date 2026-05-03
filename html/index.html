@@ -412,14 +412,14 @@
 
         // ===== Human-in-the-loop: resume helper and form dialog =====
 
-        async function handleResumeRequest(sessionId, formData, promptLabel) {
+        async function handleResumeRequest(resumeSessionId, formData, promptLabel) {
             isLoading.val = true;
             statusText.val = "Processing...";
             try {
                 const response = await fetch(YADA_REQUEST_RESUME, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ session_id: sessionId, form_data: formData })
+                    body: JSON.stringify({ session_id: resumeSessionId, form_data: formData })
                 });
                 if (!response.ok) {
                     let msg = `Resume failed (${response.status})`;
@@ -448,6 +448,7 @@
                             } else if (currentEvent === "result") {
                                 statusText.val = "";
                                 isLoading.val = false;
+                                if (parsed.session_id) sessionId.val = parsed.session_id;
                                 await prependResultCard(promptLabel, parsed.result ?? "");
                                 textValue.val = "";
                                 if (inputTextareaEl) {
@@ -641,6 +642,51 @@
                 };
                 dialog.querySelector("#submitFormBtn").addEventListener("click", submit);
                 [filenameInput, titleInput, authorsInput, dateInput, shelfInput].forEach(
+                    el => el.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); submit(); } })
+                );
+
+            } else if (formType === "create_time_series_report") {
+                dialog.innerHTML = `
+                    <form method="dialog" novalidate autocomplete="off">
+                        <label for="tsr-title">Title:</label>
+                        <input id="tsr-title" name="report_title" type="text" placeholder="Report title" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
+
+                        <label for="tsr-description">Description:</label>
+                        <textarea id="tsr-description" name="report_description" rows="3" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Brief description of this report" required></textarea>
+
+                        <label for="tsr-ids">Time Series IDs:</label>
+                        <input id="tsr-ids" name="time_series_ids" type="text" placeholder="id-001, id-002, id-003" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
+
+                        <menu>
+                            <button type="button" class="btn" id="cancelFormBtn">Cancel</button>
+                            <button type="button" class="btn primary" id="submitFormBtn">Create Report</button>
+                        </menu>
+                    </form>
+                `;
+                document.body.appendChild(dialog);
+                dialog.showModal();
+
+                const titleInput       = dialog.querySelector("input[name='report_title']");
+                const descriptionInput = dialog.querySelector("textarea[name='report_description']");
+                const idsInput         = dialog.querySelector("input[name='time_series_ids']");
+
+                requestAnimationFrame(() => titleInput.focus());
+
+                const close = () => { dialog.close(); dialog.remove(); };
+                dialog.querySelector("#cancelFormBtn").addEventListener("click", close);
+                dialog.addEventListener("cancel", e => { e.preventDefault(); close(); });
+
+                const submit = async () => {
+                    if (!dialog.querySelector("form").reportValidity()) return;
+                    close();
+                    await handleResumeRequest(sessionId, {
+                        report_title:       titleInput.value.trim(),
+                        report_description: descriptionInput.value.trim(),
+                        time_series_ids:    idsInput.value.trim(),
+                    }, promptLabel);
+                };
+                dialog.querySelector("#submitFormBtn").addEventListener("click", submit);
+                [titleInput, idsInput].forEach(
                     el => el.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); submit(); } })
                 );
 
@@ -861,7 +907,6 @@
                                 }
                             } else if (currentEvent === "interrupt" && !resultHandled) {
                                 resultHandled = true;
-                                if (parsed.session_id) sessionId.val = parsed.session_id;
                                 interruptData = parsed;
                             } else if (currentEvent === "meta") {
                                 fillMetaFooter(lastCard, parsed);

@@ -85,12 +85,32 @@ class LoadPDFDocumentForm(BaseModel):
     )
 
 
+class CreateTimeSeriesReportForm(BaseModel):
+    """Form data for creating a time series report."""
+
+    type: Literal["create_time_series_report"] = "create_time_series_report"
+
+    report_title: str = Field(
+        ...,
+        description="Title of the report.",
+    )
+    report_description: str = Field(
+        ...,
+        description="Description of the report.",
+    )
+    time_series_ids: str = Field(
+        ...,
+        description="Comma-separated list of time series cache IDs to include in the report.",
+    )
+
+
 # Maps the form type discriminator to its model class.
 # Used by HumanInputNode to validate resumed form data.
 FORM_REGISTRY: dict[str, type[BaseModel]] = {
     "load_research_document": LoadResearchDocumentForm,
     "load_github_repo": LoadGitHubRepoForm,
     "load_pdf_document": LoadPDFDocumentForm,
+    "create_time_series_report": CreateTimeSeriesReportForm,
 }
 
 

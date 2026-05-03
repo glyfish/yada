@@ -21,7 +21,8 @@ from langgraph.types import Command
 from apps.agentic.agents.orchestrator import OrchestratorAgent
 from apps.agentic.core.constants import TOOL_START_LABELS, TOOL_END_LABELS, MCP_URL
 from apps.agentic.core.mcp_tool_registry import MCPToolRegistry
-from apps.agentic.core.series_cache import SeriesCache
+from apps.agentic.db.series_cache import SeriesCache
+from apps.agentic.db.report_cache import ReportCache
 from apps.agentic.core.pricing import estimate_cost
 from pathlib import Path
 from dotenv import load_dotenv
@@ -69,6 +70,7 @@ logger = get_logger("YADA")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     SeriesCache.initialize()
+    ReportCache.initialize()
     await MCPToolRegistry.initialize(
         servers={"fred": {"transport": "sse", "url": MCP_URL}},
         required=["fred_series_observations"],

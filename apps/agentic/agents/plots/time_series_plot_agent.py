@@ -6,8 +6,8 @@ from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.prebuilt import ToolNode
 from apps.agentic.core.tool_spec import PositiveExample, NegativeExample, ToolSpec, tool_spec
 from apps.agentic.core.agents.react_agent import ReactAgent
-from apps.agentic.core.series_cache import SeriesCache
-from apps.agentic.core.series_ref import SeriesRef
+from apps.agentic.db.series_cache import SeriesCache
+from apps.agentic.db.series_ref import SeriesRef
 
 import os
 import sys
@@ -21,6 +21,8 @@ from matplotlib import pyplot
 from lib import config
 from lib.plots import curve, stack, comparison, PlotType
 from lib.utils import generate_plot_file_name
+from apps.plots.time_series_plots import generate_time_series_plot, generate_time_series_stack, generate_time_series_comparison
+
 from lib.logger import get_logger
 
 logger = get_logger("YADA")
@@ -260,7 +262,7 @@ class TimeSeriesPlotAgent(ReactAgent):
                                     y_axis_label: str,
                                     plot_axis_type: PlotType) -> str:
         times, values = _load_series(series_ref, date_from, date_to)
-        file = TimeSeriesPlotAgent.generate_time_series_plot(
+        file = generate_time_series_plot(
             time=numpy.array(times),
             values=numpy.array(values),
             title=title,
@@ -298,7 +300,7 @@ class TimeSeriesPlotAgent(ReactAgent):
                                      plot_axis_type: PlotType,
                                      **kwargs) -> str:
         all_times, all_values = zip(*[_load_series(r, date_from, date_to) for r in series_refs])
-        file = TimeSeriesPlotAgent.generate_time_series_stack(
+        file = generate_time_series_stack(
             time=numpy.array(all_times[0]),
             values=[numpy.array(v) for v in all_values],
             title=title,
@@ -337,7 +339,7 @@ class TimeSeriesPlotAgent(ReactAgent):
                                           plot_axis_type: PlotType,
                                           **kwargs) -> str:
         all_times, all_values = zip(*[_load_series(r, date_from, date_to) for r in series_refs])
-        file = TimeSeriesPlotAgent.generate_time_series_comparison(
+        file = generate_time_series_comparison(
             time=numpy.array(all_times[0]),
             values=[numpy.array(v) for v in all_values],
             title=title,
@@ -386,7 +388,7 @@ class TimeSeriesPlotAgent(ReactAgent):
         logger.debug(f"Calling time_series_plot_tool: {(time, values)}, title: {title}, "
                      f"xlabel: {x_axis_label}, ylabel: {y_axis_label}, plot_axis_type: {plot_axis_type}")
 
-        time_series_file = TimeSeriesPlotAgent.generate_time_series_plot(
+        time_series_file = generate_time_series_plot(
             time=numpy.array(time),
             values=numpy.array(values),
             title=title,
@@ -446,7 +448,7 @@ class TimeSeriesPlotAgent(ReactAgent):
         logger.debug(f"Calling time_series_stack_tool: title: {title}, "
                      f"xlabel: {x_axis_label}, ylabels: {y_axis_labels}, plot_axis_type: {plot_axis_type}")
 
-        time_series_file = TimeSeriesPlotAgent.generate_time_series_stack(
+        time_series_file = generate_time_series_stack(
             time=numpy.array(time),
             values=[numpy.array(v) for v in values],
             title=title,
@@ -502,7 +504,7 @@ class TimeSeriesPlotAgent(ReactAgent):
         logger.debug(f"Calling time_series_comparison_tool: title: {title}, "
                      f"xlabel: {x_axis_label}, ylabel: {y_axis_label}, plot_axis_type: {plot_axis_type}")
 
-        time_series_file = TimeSeriesPlotAgent.generate_time_series_comparison(
+        time_series_file = generate_time_series_comparison(
             time=numpy.array(time),
             values=[numpy.array(v) for v in values],
             title=title,
@@ -515,120 +517,3 @@ class TimeSeriesPlotAgent(ReactAgent):
         logger.debug(f"Generated time series comparison file: {time_series_file}")
 
         return f'<div class="time-series-plot"><img src="{time_series_file}"></div>'
-
-
-    @staticmethod
-    def generate_time_series_plot(time: NDArray, values: NDArray, title: str, xlabel: str, ylabel: str,
-                                  plot_axis_type: PlotType) -> str:
-        """
-        Generate a single time series plot.
-
-        Parameters
-        ----------
-            time: NDArray
-                Array of timestamps for the x-axis
-            values: NDArray
-                Array of numeric values for the y-axis
-            title: str
-                Title of the chart
-            xlabel: str
-                Chart xlabel
-            ylabel: str
-                Chart ylabel
-            plot_axis_type: PlotType
-                Type of plot axis (e.g., YLOG for logarithmic y-axis)
-
-        Returns:
-            str: Relative file path to the rendered plot image
-        """
-
-        logger.debug(f"Calling generate_time_series_plot: title: {title}, xlabel: {xlabel}, "
-                     f"ylabel: {ylabel}, plot_axis_type: {plot_axis_type}")
-
-        uuid = shortuuid.uuid()
-        output_file_name = generate_plot_file_name("time_series_plot", path="./html/plots", uuid=uuid)
-
-        curve(values, time, xlabel=xlabel, ylabel=ylabel, title=title, figsize=(10, 6),
-              file_name=output_file_name, plot_axis_type=plot_axis_type)
-
-        return generate_plot_file_name("time_series_plot", path="./plots", uuid=uuid)
-
-
-    @staticmethod
-    def generate_time_series_stack(time: NDArray, values: list[NDArray], title: str, xlabel: str,
-                                   ylabels: list[str] | None, labels: list[str] | None,
-                                   plot_axis_type: PlotType) -> str:
-        """
-        Generate a stacked time series plot.
-
-        Parameters
-        ----------
-            time: NDArray
-                Timestamps for the x-axis
-            values: list[NDArray]
-                One array of values per stacked plot
-            title: str
-                Title of the chart
-            xlabel: str
-                Chart xlabel
-            ylabels: list[str] | None
-                Y-axis label for each stacked plot
-            labels: list[str] | None
-                Text label annotated on each stacked plot
-            plot_axis_type: PlotType
-                Type of plot axis
-
-        Returns:
-            str: Relative file path to the rendered plot image
-        """
-
-        logger.debug(f"Calling generate_time_series_stack: title: {title}, xlabel: {xlabel}, "
-                     f"ylabels: {ylabels}, plot_axis_type: {plot_axis_type}")
-
-        uuid = shortuuid.uuid()
-        output_file_name = generate_plot_file_name("time_series_stack", path="./html/plots", uuid=uuid)
-
-        stack(values, time, xlabel=xlabel, ylabels=ylabels, labels=labels, title=title,
-              file_name=output_file_name, plot_axis_type=plot_axis_type)
-
-        return generate_plot_file_name("time_series_stack", path="./plots", uuid=uuid)
-
-
-    @staticmethod
-    def generate_time_series_comparison(time: NDArray, values: list[NDArray], title: str, xlabel: str,
-                                        ylabel: str, labels: list[str] | None,
-                                        plot_axis_type: PlotType) -> str:
-        """
-        Generate a comparison time series plot with multiple series on the same axis.
-
-        Parameters
-        ----------
-            time: NDArray
-                Timestamps for the x-axis
-            values: list[NDArray]
-                One array of values per series
-            title: str
-                Title of the chart
-            xlabel: str
-                Chart xlabel
-            ylabel: str
-                Chart ylabel
-            labels: list[str] | None
-                Legend label for each series
-            plot_axis_type: PlotType
-                Type of plot axis
-
-        Returns:
-            str: Relative file path to the rendered plot image
-        """
-
-        logger.debug(f"Calling generate_time_series_comparison: title: {title}, xlabel: {xlabel}, "
-                     f"ylabel: {ylabel}, plot_axis_type: {plot_axis_type}")
-
-        uuid = shortuuid.uuid()
-        output_file_name = generate_plot_file_name("time_series_comparison", path="./html/plots", uuid=uuid)
-
-        comparison(values, time, xlabel=xlabel, ylabel=ylabel, title=title, labels=labels,
-                   figsize=(10, 6), file_name=output_file_name, plot_axis_type=plot_axis_type)
-
-        return generate_plot_file_name("time_series_comparison", path="./plots", uuid=uuid)
