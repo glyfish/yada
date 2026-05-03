@@ -46,6 +46,13 @@ class RequestHumanFormInput(BaseModel):
         ...,
         description="The form type to request from the user.",
     )
+    prefill: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "Optional pre-filled values for form fields extracted from the user's request. "
+            "For create_time_series_report: keys are report_title, report_description, time_series_ids."
+        ),
+    )
 
 
 class DocumentSubagentSearchInput(BaseModel):
@@ -566,6 +573,8 @@ Exception: load_all_github_repos requires no form — call delegate_to_document_
 When the user wants to create a time series report:
 1. Call request_human_form with form_type: create_time_series_report to collect the title,
    description, and comma-separated list of time series cache IDs from the user.
+   If the user's request already contains any of these values, pass them in prefill so the
+   form fields are pre-populated. Keys: report_title, report_description, time_series_ids.
 2. After the user submits the form, pass the form data as the request to delegate_to_time_series_report_agent.
 
 When the user wants to list or retrieve an existing report, call delegate_to_time_series_report_agent directly.

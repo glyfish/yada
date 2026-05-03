@@ -61,6 +61,7 @@ class HumanInputNode:
             )
 
         model_cls = FORM_REGISTRY[form_type]
+        prefill = self._find_prefill(state)
         schema = {
             "type": form_type,
             "fields": {
@@ -72,8 +73,10 @@ class HumanInputNode:
                 if name != "type"
             },
         }
+        if prefill:
+            schema["prefill"] = prefill
 
-        logger.debug(f"HumanInputNode: interrupting for form '{form_type}'")
+        logger.debug(f"HumanInputNode: interrupting for form '{form_type}' prefill={prefill}")
 
         form_data: dict = interrupt(schema)
 
@@ -162,3 +165,24 @@ class HumanInputNode:
         # 3. Fallback for tests that inject form_type via additional_kwargs directly
         last = state["messages"][-1]
         return (getattr(last, "additional_kwargs", None) or {}).get("form_type")
+
+
+    def _find_prefill(self, state: WorkerState) -> dict | None:
+        """Extract the prefill dict from the most recent request_human_form tool call."""
+        for msg in reversed(state["messages"]):
+            tool_calls = getattr(msg, "tool_calls", None)
+            if tool_calls:
+                for tc in tool_calls:
+                    name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
+                    if name == "request_human_form":
+                        args = tc.get("args", {}) if isinstance(tc, dict) else getattr(tc, "args", {})
+                        return (args or {}).get("prefill")
+
+            content = getattr(msg, "content", None)
+            if isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict) and block.get("type") == "tool_use":
+                        if block.get("name") == "request_human_form":
+                            return (block.get("input") or {}).get("prefill")
+
+        return None

@@ -670,6 +670,11 @@
                 const descriptionInput = dialog.querySelector("textarea[name='report_description']");
                 const idsInput         = dialog.querySelector("input[name='time_series_ids']");
 
+                const prefill = formSchema.prefill || {};
+                if (prefill.report_title)       titleInput.value       = prefill.report_title;
+                if (prefill.report_description) descriptionInput.value = prefill.report_description;
+                if (prefill.time_series_ids)    idsInput.value         = prefill.time_series_ids;
+
                 requestAnimationFrame(() => titleInput.focus());
 
                 const close = () => { dialog.close(); dialog.remove(); };
