@@ -61,5 +61,5 @@ class CachingFredTool(CachingDataTool):
         return {
             "title": s.get("title"),
             "frequency": s.get("frequency_short"),
-            "units": s.get("units_short"),
+            "units": s.get("units_short") or s.get("units"),
         }

@@ -33,7 +33,7 @@ def _load_series(series_ref_json: str, date_from: str | None, date_to: str | Non
     entry = SeriesCache._get_by_cache_id_sync(ref.cache_id)
     if entry is None:
         raise ValueError(f"Series {ref.native_id} not found in cache")
-    observations = entry["data"].get("observations", [])
+    observations = entry["observations"].get("observations", [])
     times, values = [], []
     for obs in observations:
         if obs.get("value") == ".":

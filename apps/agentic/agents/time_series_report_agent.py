@@ -7,6 +7,7 @@ from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from apps.agentic.core.tool_spec import PositiveExample, NegativeExample, ToolSpec, tool_spec
 from apps.agentic.core.agents.react_agent import ReactAgent
 from apps.agentic.db.report_cache import ReportCache
+from apps.agentic.db.series_cache import SeriesCache
 
 from lib.logger import get_logger
 
@@ -58,7 +59,7 @@ class TimeSeriesReportAgent(ReactAgent):
             Use list_time_series_reports when the user wants to see all existing reports.
 
             Always respond in markdown. For created reports, confirm the title and report ID.
-            For retrieved reports, format the details clearly including the list of time series IDs.
+            For retrieved reports, format the details clearly including each series native_id, title, and source.
             For listed reports, present a markdown table with report ID and title columns.
             </instructions>
             """
@@ -74,7 +75,8 @@ class TimeSeriesReportAgent(ReactAgent):
         metadata=ToolSpec(
             primary_function="""
                 Create a new time series report with a title, description, and list of time series cache IDs.
-                The time series IDs are provided as a comma-separated string and stored as a list.
+                The time series IDs are provided as a comma-separated string and resolved from the cache.
+                The report stores structured time_series_info records.
                 Returns a confirmation message containing the new report ID.
             """,
             positive_examples=[
@@ -95,16 +97,48 @@ class TimeSeriesReportAgent(ReactAgent):
         time_series_ids_csv: str,
     ) -> str:
         ids = [s.strip() for s in time_series_ids_csv.split(",") if s.strip()]
+        if not ids:
+            raise ValueError("No time series cache IDs were provided.")
+
+        time_series_info: list[dict[str, str]] = []
+        missing: list[str] = []
+        for cache_id in ids:
+            entry = SeriesCache._get_by_cache_id_sync(cache_id)
+            if not entry:
+                missing.append(cache_id)
+                continue
+            time_series_info.append(
+                {
+                    "native_id": str(entry["native_id"]),
+                    "title": entry.get("title") or "",
+                    "source": entry.get("source") or "",
+                    "external_id": entry.get("external_id") or "",
+                    "frequency": entry.get("frequency") or "",
+                    "metadata": entry.get("metadata") or {},
+                }
+            )
+
+        if missing:
+            raise ValueError(
+                "Report creation aborted. Missing cache IDs: "
+                + ", ".join(missing)
+            )
+
         report_id = ReportCache._put_sync(
             report_title=report_title,
             report_description=report_description,
-            time_series_ids=ids,
+            time_series_info=time_series_info,
         )
         logger.debug(f"TimeSeriesReportAgent: created report '{report_title}' → {report_id}")
+        detail_lines = "\n".join(
+            f"  - `{row['native_id']}` | {row['source']} | {row['title']}"
+            for row in time_series_info
+        )
         return (
             f"Report **{report_title}** created successfully.\n\n"
             f"- **Report ID:** `{report_id}`\n"
-            f"- **Time series IDs:** {', '.join(ids)}"
+            f"- **Time Series Count:** {len(time_series_info)}\n"
+            f"- **Series:**\n{detail_lines}"
         )
 
     @staticmethod
@@ -129,11 +163,17 @@ class TimeSeriesReportAgent(ReactAgent):
         record = ReportCache._get_by_report_id_sync(report_id)
         if record is None:
             return f"No report found with ID `{report_id}`."
-        ids = record["time_series_ids"]
-        id_list = "\n".join(f"- `{i}`" for i in ids)
+        info = record.get("time_series_info") or []
+        lines = []
+        for item in info:
+            lines.append(
+                f"- `{item.get('native_id', '')}` | {item.get('source', '')} | {item.get('title', '')}"
+            )
+        series_block = "\n".join(lines) if lines else "- (none)"
         return (
             f"## {record['report_title']}\n\n"
-            f"**Time Series IDs:**\n{id_list}"
+            f"{record.get('report_description', '')}\n\n"
+            f"**Time Series Info:**\n{series_block}"
         )
 
     @staticmethod

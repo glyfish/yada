@@ -26,8 +26,20 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("report_title", sa.Text(), nullable=False),
-        sa.Column("report_description", sa.Text(), nullable=False),
-        sa.Column("time_series_ids", JSONB(), nullable=False),
+        sa.Column("report_description", sa.Text(), nullable=False, server_default=""),
+        sa.Column("time_series_info", JSONB(), nullable=False, server_default=sa.text("'[]'::jsonb")),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
     )
 
     op.create_index(
@@ -35,8 +47,15 @@ def upgrade() -> None:
         "time_series_reports",
         ["report_title"],
     )
+    op.create_index(
+        "idx_tsr_time_series_info_gin",
+        "time_series_reports",
+        ["time_series_info"],
+        postgresql_using="gin",
+    )
 
 
 def downgrade() -> None:
+    op.drop_index("idx_tsr_time_series_info_gin", table_name="time_series_reports")
     op.drop_index("idx_tsr_report_title", table_name="time_series_reports")
     op.drop_table("time_series_reports")

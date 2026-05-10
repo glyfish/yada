@@ -55,7 +55,7 @@ class ReportCache:
         cls,
         report_title: str,
         report_description: str,
-        time_series_ids: list[str],
+        time_series_info: list[dict[str, Any]],
     ) -> str:
         engine = cls._engine_or_raise()
         report_id = uuid.uuid4()
@@ -65,7 +65,7 @@ class ReportCache:
                 report_id=report_id,
                 report_title=report_title,
                 report_description=report_description,
-                time_series_ids=time_series_ids,
+                time_series_info=time_series_info,
             )
             .returning(cls._table_or_raise().c.report_id)
         )
@@ -106,9 +106,9 @@ class ReportCache:
         cls,
         report_title: str,
         report_description: str,
-        time_series_ids: list[str],
+        time_series_info: list[dict[str, Any]],
     ) -> str:
-        return await asyncio.to_thread(cls._put_sync, report_title, report_description, time_series_ids)
+        return await asyncio.to_thread(cls._put_sync, report_title, report_description, time_series_info)
 
 
     @classmethod
