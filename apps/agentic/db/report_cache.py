@@ -3,7 +3,8 @@ from __future__ import annotations
 import asyncio
 import os
 import uuid
-from typing import Any
+from datetime import date
+from typing import Any, Mapping, Sequence
 
 from sqlalchemy import MetaData, Table, create_engine, select, text
 from sqlalchemy.dialects.postgresql import insert
@@ -55,17 +56,27 @@ class ReportCache:
         cls,
         report_title: str,
         report_description: str,
-        time_series_info: list[dict[str, Any]],
+        time_series_info: Sequence[Mapping[str, Any]],
+        time_range_from: str,
+        time_range_to: str | None = None,
     ) -> str:
         engine = cls._engine_or_raise()
         report_id = uuid.uuid4()
+
+        def _as_date(v: str | None) -> date | None:
+            if not v:
+                return None
+            return date.fromisoformat(v[:10])
+
         stmt = (
             insert(cls._table_or_raise())
             .values(
                 report_id=report_id,
                 report_title=report_title,
                 report_description=report_description,
-                time_series_info=time_series_info,
+                time_series_info=list(time_series_info),
+                time_range_from=_as_date(time_range_from),
+                time_range_to=_as_date(time_range_to),
             )
             .returning(cls._table_or_raise().c.report_id)
         )
@@ -102,13 +113,31 @@ class ReportCache:
 
 
     @classmethod
+    def _search_by_title_sync(cls, title_fragment: str) -> list[dict[str, Any]]:
+        engine = cls._engine_or_raise()
+        stmt = select(
+            cls._table_or_raise().c.report_id,
+            cls._table_or_raise().c.report_title,
+        ).where(
+            cls._table_or_raise().c.report_title.ilike(f"%{title_fragment}%")
+        ).order_by(cls._table_or_raise().c.report_title)
+        with engine.connect() as conn:
+            rows = conn.execute(stmt).mappings().all()
+        return [{"report_id": str(r["report_id"]), "report_title": r["report_title"]} for r in rows]
+
+
+    @classmethod
     async def put(
         cls,
         report_title: str,
         report_description: str,
-        time_series_info: list[dict[str, Any]],
+        time_series_info: Sequence[Mapping[str, Any]],
+        time_range_from: str,
+        time_range_to: str | None = None,
     ) -> str:
-        return await asyncio.to_thread(cls._put_sync, report_title, report_description, time_series_info)
+        return await asyncio.to_thread(
+            cls._put_sync, report_title, report_description, time_series_info, time_range_from, time_range_to
+        )
 
 
     @classmethod
@@ -119,3 +148,8 @@ class ReportCache:
     @classmethod
     async def list_reports(cls) -> list[dict[str, Any]]:
         return await asyncio.to_thread(cls._list_reports_sync)
+
+
+    @classmethod
+    async def search_by_title(cls, title_fragment: str) -> list[dict[str, Any]]:
+        return await asyncio.to_thread(cls._search_by_title_sync, title_fragment)

@@ -657,6 +657,12 @@
                         <label for="tsr-ids">Time Series IDs:</label>
                         <input id="tsr-ids" name="time_series_ids" type="text" placeholder="id-001, id-002, id-003" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
 
+                        <label for="tsr-from">Start Time:</label>
+                        <input id="tsr-from" name="time_range_from" type="date" autocomplete="off" required>
+
+                        <label for="tsr-to">End Time (omit for latest):</label>
+                        <input id="tsr-to" name="time_range_to" type="date" autocomplete="off">
+
                         <menu>
                             <button type="button" class="btn" id="cancelFormBtn">Cancel</button>
                             <button type="button" class="btn primary" id="submitFormBtn">Create Report</button>
@@ -669,11 +675,15 @@
                 const titleInput       = dialog.querySelector("input[name='report_title']");
                 const descriptionInput = dialog.querySelector("textarea[name='report_description']");
                 const idsInput         = dialog.querySelector("input[name='time_series_ids']");
+                const fromInput        = dialog.querySelector("input[name='time_range_from']");
+                const toInput          = dialog.querySelector("input[name='time_range_to']");
 
                 const prefill = formSchema.prefill || {};
                 if (prefill.report_title)       titleInput.value       = prefill.report_title;
                 if (prefill.report_description) descriptionInput.value = prefill.report_description;
                 if (prefill.time_series_ids)    idsInput.value         = prefill.time_series_ids;
+                if (prefill.time_range_from)    fromInput.value        = prefill.time_range_from;
+                if (prefill.time_range_to)      toInput.value          = prefill.time_range_to;
 
                 requestAnimationFrame(() => titleInput.focus());
 
@@ -684,11 +694,14 @@
                 const submit = async () => {
                     if (!dialog.querySelector("form").reportValidity()) return;
                     close();
-                    await handleResumeRequest(sessionId, {
+                    const payload = {
                         report_title:       titleInput.value.trim(),
                         report_description: descriptionInput.value.trim(),
                         time_series_ids:    idsInput.value.trim(),
-                    }, promptLabel);
+                        time_range_from:    fromInput.value.trim(),
+                    };
+                    if (toInput.value.trim()) payload.time_range_to = toInput.value.trim();
+                    await handleResumeRequest(sessionId, payload, promptLabel);
                 };
                 dialog.querySelector("#submitFormBtn").addEventListener("click", submit);
                 [titleInput, idsInput].forEach(

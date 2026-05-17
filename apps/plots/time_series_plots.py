@@ -1,7 +1,8 @@
+from matplotlib.pyplot import ylabel
 from numpy.typing import NDArray
 import shortuuid
 
-from lib.plots import curve, stack, comparison, PlotType
+from lib.plots import curve, stack, comparison, PlotType, twinx, twinx_comparison
 from lib.utils import generate_plot_file_name
 
 from lib.logger import get_logger
@@ -122,3 +123,87 @@ def generate_time_series_comparison(time: NDArray, values: list[NDArray], title:
                 figsize=(10, 6), file_name=output_file_name, plot_axis_type=plot_axis_type)
 
     return generate_plot_file_name("time_series_comparison", path="./plots", uuid=uuid)
+
+
+def generate_time_series_twinx(time: NDArray, left: NDArray, right: NDArray, title: str, xlabel: str, 
+                               left_ylabel: str, right_ylabel: str, plot_axis_type: PlotType) -> str:
+    """
+    Generate a single time series plot.
+
+    Parameters
+    ----------
+    time: NDArray
+        Timestamps for the x-axis
+    left : numpy.ndarray
+        Value plotted on left y-axis.
+    right : numpy.ndarray
+        Value plotted on right y-axis.
+    title : string, optional
+        Plot title (default is None)
+    xlabel : string, optional
+        Plot x-axis label (default is 'x')
+    left_ylabel : string, optional
+        Plot left y-axis label (default is 'y')
+    right_ylabel : string, optional
+        Plot left y-axis label (default is 'y')
+    labels : [string], optional
+        Curve labels shown in legend.
+    plot_axis_type : PlotAxisType
+        Axis type. (default PlotAxisType.LINEAR)
+
+    Returns:
+        str: Relative file path to the rendered plot image
+    """
+
+    logger.debug(f"Calling generate_time_series_plot: title: {title}, xlabel: {xlabel}, "
+                    f"ylabel: {ylabel}, plot_axis_type: {plot_axis_type}")
+
+    uuid = shortuuid.uuid()
+    output_file_name = generate_plot_file_name("time_series_plot", path="./html/plots", uuid=uuid)
+
+    twinx(left, right, time, xlabel=xlabel, left_ylabel=left_ylabel, right_ylabel=right_ylabel, title=title, 
+          figsize=(10, 6), file_name=output_file_name, plot_axis_type=plot_axis_type)
+
+    return generate_plot_file_name("time_series_twinx", path="./plots", uuid=uuid)
+
+
+def generate_time_series_twinx_comparison(time: NDArray, left: list[NDArray], right: list[NDArray], title: str, xlabel: str, 
+                                          left_ylabel: str, right_ylabel: str, plot_axis_type: PlotType) -> str:
+    """
+    Generate a single time series plot.
+
+    Parameters
+    ----------
+    time: NDArray
+        Timestamps for the x-axis
+    left : list[numpy.ndarray]
+        Value plotted on left y-axis.
+    right : list[numpy.ndarray]
+        Value plotted on right y-axis.
+    title : string, optional
+        Plot title (default is None)
+    xlabel : string, optional
+        Plot x-axis label (default is 'x')
+    left_ylabel : string, optional
+        Plot left y-axis label (default is 'y')
+    right_ylabel : string, optional
+        Plot left y-axis label (default is 'y')
+    labels : [string], optional
+        Curve labels shown in legend.
+    plot_axis_type : PlotAxisType
+        Axis type. (default PlotAxisType.LINEAR)
+
+    Returns:
+        str: Relative file path to the rendered plot image
+    """
+
+    logger.debug(f"Calling generate_time_series_plot: title: {title}, xlabel: {xlabel}, "
+                    f"ylabel: {ylabel}, plot_axis_type: {plot_axis_type}")
+
+    uuid = shortuuid.uuid()
+    output_file_name = generate_plot_file_name("time_series_plot", path="./html/plots", uuid=uuid)
+
+    twinx_comparison(left, right, time, xlabel=xlabel, left_ylabel=left_ylabel, right_ylabel=right_ylabel, title=title, 
+                     figsize=(10, 6), file_name=output_file_name, plot_axis_type=plot_axis_type)
+
+    return generate_plot_file_name("time_series_twinx", path="./plots", uuid=uuid)

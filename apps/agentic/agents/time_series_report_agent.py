@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any, TypedDict
+
 from pydantic import BaseModel, Field
 
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -14,12 +16,31 @@ from lib.logger import get_logger
 logger = get_logger("YADA")
 
 
+class TimeSeriesInfoEntry(TypedDict):
+    native_id: str
+    title: str
+    source: str
+    external_id: str
+    frequency: str
+    observation_start: str
+    observation_end: str
+    metadata: dict[str, Any]
+
+
 class CreateReportInput(BaseModel):
     report_title: str = Field(..., description="Title of the report.")
     report_description: str = Field(..., description="Description of the report.")
     time_series_ids_csv: str = Field(
         ...,
         description="Comma-separated list of time series cache IDs to include in the report.",
+    )
+    time_range_from: str = Field(
+        ...,
+        description="Start date of the report time range in ISO format YYYY-MM-DD.",
+    )
+    time_range_to: str | None = Field(
+        None,
+        description="End date of the report time range in ISO format YYYY-MM-DD. Omit for latest available data.",
     )
 
 
@@ -95,26 +116,40 @@ class TimeSeriesReportAgent(ReactAgent):
         report_title: str,
         report_description: str,
         time_series_ids_csv: str,
+        time_range_from: str,
+        time_range_to: str | None = None,
     ) -> str:
         ids = [s.strip() for s in time_series_ids_csv.split(",") if s.strip()]
         if not ids:
             raise ValueError("No time series cache IDs were provided.")
 
-        time_series_info: list[dict[str, str]] = []
+        time_series_info: list[TimeSeriesInfoEntry] = []
         missing: list[str] = []
         for cache_id in ids:
             entry = SeriesCache._get_by_cache_id_sync(cache_id)
             if not entry:
                 missing.append(cache_id)
                 continue
+            raw_metadata = entry.get("metadata")
+            metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
+            observations = (entry.get("observations") or {}).get("observations", [])
+            numeric_values = [
+                float(obs["value"])
+                for obs in observations
+                if obs.get("value") not in (None, ".", "")
+            ]
+            if numeric_values:
+                metadata = {**metadata, "value_range": {"min": min(numeric_values), "max": max(numeric_values)}}
             time_series_info.append(
                 {
                     "native_id": str(entry["native_id"]),
-                    "title": entry.get("title") or "",
-                    "source": entry.get("source") or "",
-                    "external_id": entry.get("external_id") or "",
-                    "frequency": entry.get("frequency") or "",
-                    "metadata": entry.get("metadata") or {},
+                    "title": str(entry.get("title") or ""),
+                    "source": str(entry.get("source") or ""),
+                    "external_id": str(entry.get("external_id") or ""),
+                    "frequency": str(entry.get("frequency") or ""),
+                    "observation_start": str(entry.get("observation_start") or ""),
+                    "observation_end": str(entry.get("observation_end") or ""),
+                    "metadata": metadata,
                 }
             )
 
@@ -128,6 +163,8 @@ class TimeSeriesReportAgent(ReactAgent):
             report_title=report_title,
             report_description=report_description,
             time_series_info=time_series_info,
+            time_range_from=time_range_from,
+            time_range_to=time_range_to,
         )
         logger.debug(f"TimeSeriesReportAgent: created report '{report_title}' → {report_id}")
         detail_lines = "\n".join(
@@ -170,9 +207,15 @@ class TimeSeriesReportAgent(ReactAgent):
                 f"- `{item.get('native_id', '')}` | {item.get('source', '')} | {item.get('title', '')}"
             )
         series_block = "\n".join(lines) if lines else "- (none)"
+        time_range = str(record.get("time_range_from") or "")
+        if record.get("time_range_to"):
+            time_range += f" to {record['time_range_to']}"
+        else:
+            time_range += " to latest"
         return (
             f"## {record['report_title']}\n\n"
             f"{record.get('report_description', '')}\n\n"
+            f"**Time Range:** {time_range}\n\n"
             f"**Time Series Info:**\n{series_block}"
         )
 

@@ -102,6 +102,14 @@ class CreateTimeSeriesReportForm(BaseModel):
         ...,
         description="Comma-separated list of time series cache IDs to include in the report.",
     )
+    time_range_from: str = Field(
+        ...,
+        description="Start date of the report time range in ISO format YYYY-MM-DD.",
+    )
+    time_range_to: str | None = Field(
+        None,
+        description="End date of the report time range in ISO format YYYY-MM-DD. Leave blank for latest available data.",
+    )
 
 
 # Maps the form type discriminator to its model class.

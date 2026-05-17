@@ -28,6 +28,8 @@ def upgrade() -> None:
         sa.Column("report_title", sa.Text(), nullable=False),
         sa.Column("report_description", sa.Text(), nullable=False, server_default=""),
         sa.Column("time_series_info", JSONB(), nullable=False, server_default=sa.text("'[]'::jsonb")),
+        sa.Column("time_range_from", sa.Date(), nullable=False),
+        sa.Column("time_range_to", sa.Date(), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),

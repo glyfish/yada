@@ -50,7 +50,8 @@ class RequestHumanFormInput(BaseModel):
         default=None,
         description=(
             "Optional pre-filled values for form fields extracted from the user's request. "
-            "For create_time_series_report: keys are report_title, report_description, time_series_ids."
+            "For create_time_series_report: keys are report_title, report_description, "
+            "time_series_ids, time_range_from, time_range_to."
         ),
     )
 
@@ -316,7 +317,7 @@ async def delegate_to_fred_data_info_search_agent(request: str, query: Optional[
             """,
         positive_examples=[
             PositiveExample(input="Plot the US GDP time series using FRED data."),
-            PositiveExample(input="Get UNRATE data from FRED since 2000-01-01."),
+            PositiveExample(input="Fetch the UNRATE series from FRED."),
         ],
         requires_context=[
             "A series_id must already be known. Call delegate_to_fred_data_info_search_agent first to find it.",
@@ -572,9 +573,10 @@ Exception: load_all_github_repos requires no form — call delegate_to_document_
 <time_series_reports>
 When the user wants to create a time series report:
 1. Call request_human_form with form_type: create_time_series_report to collect the title,
-   description, and comma-separated list of time series cache IDs from the user.
+   description, comma-separated list of time series cache IDs, and time range from the user.
    If the user's request already contains any of these values, pass them in prefill so the
-   form fields are pre-populated. Keys: report_title, report_description, time_series_ids.
+   form fields are pre-populated. Keys: report_title, report_description, time_series_ids,
+   time_range_from (required, YYYY-MM-DD), time_range_to (optional, YYYY-MM-DD).
 2. After the user submits the form, pass the form data as the request to delegate_to_time_series_report_agent.
 
 When the user wants to list or retrieve an existing report, call delegate_to_time_series_report_agent directly.
