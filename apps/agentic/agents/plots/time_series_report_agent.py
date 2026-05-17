@@ -2,18 +2,24 @@ from __future__ import annotations
 
 from typing import Any, TypedDict
 
+import shortuuid
 from pydantic import BaseModel, Field
 
+from langchain_core.messages import HumanMessage
+from langchain_core.runnables import RunnableConfig
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from apps.agentic.core.tool_spec import PositiveExample, NegativeExample, ToolSpec, tool_spec
 from apps.agentic.core.agents.react_agent import ReactAgent
 from apps.agentic.db.report_cache import ReportCache
 from apps.agentic.db.series_cache import SeriesCache
+from apps.agentic.agents.plots.time_series_report_plot_agent import TimeSeriesReportPlotAgent
 
 from lib.logger import get_logger
 
 logger = get_logger("YADA")
+
+_plot_agent = TimeSeriesReportPlotAgent()
 
 
 class TimeSeriesInfoEntry(TypedDict):
@@ -52,6 +58,63 @@ class ListReportsInput(BaseModel):
     pass
 
 
+class PlotReportInput(BaseModel):
+    request: str = Field(
+        ...,
+        description="The plot request, including the report ID or title and any other instructions.",
+    )
+
+
+@tool_spec(
+    args_schema=PlotReportInput,
+    metadata=ToolSpec(
+        primary_function="""
+            Delegate a plot request to the Time Series Report Plot Agent.
+            Use when the user wants to plot or visualize a time series report.
+            Pass the report ID or title and any other instructions in the request string.
+        """,
+        positive_examples=[
+            PositiveExample(input="Plot the GDP Overview report."),
+            PositiveExample(input="Plot report 24c23e96-5e97-4c3d-bb4a-c85116839d36."),
+        ],
+        negative_examples=[
+            NegativeExample(
+                input="Show me the details of my GDP report.",
+                reason="Use get_time_series_report to retrieve report details.",
+            ),
+        ],
+    ),
+)
+async def plot_time_series_report(request: str) -> str:
+    from langchain_core.messages import ToolMessage
+    state = {"messages": [HumanMessage(content=request)]}
+    config = RunnableConfig(configurable={"thread_id": shortuuid.uuid()})
+    result = await _plot_agent.agent.ainvoke(state, config)
+
+    raw = result["messages"][-1].content
+    if isinstance(raw, str):
+        commentary = raw
+    else:
+        commentary = "\n".join(
+            block.get("text", "")
+            for block in raw
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+
+    logger.debug(f"plot_time_series_report: commentary has_img={'<img' in commentary}")
+
+    extra_html = [
+        msg.content
+        for msg in result["messages"]
+        if isinstance(msg, ToolMessage) and isinstance(msg.content, str) and "<img" in msg.content and msg.content not in commentary
+    ]
+    logger.debug(f"plot_time_series_report: extra_html count={len(extra_html)}")
+
+    if extra_html:
+        return commentary + "\n\n" + "\n\n".join(extra_html)
+    return commentary
+
+
 class TimeSeriesReportAgent(ReactAgent):
 
     @classmethod
@@ -63,13 +126,14 @@ class TimeSeriesReportAgent(ReactAgent):
             TimeSeriesReportAgent.create_time_series_report,
             TimeSeriesReportAgent.get_time_series_report,
             TimeSeriesReportAgent.list_time_series_reports,
+            plot_time_series_report,
         ]
         super().__init__(tools, "time_series_report_tool_node", mcp_tools=mcp_tools)
 
     def create_prompt(self):
         system_prompt = """
             <instructions>
-            You are a time series report agent. You create, retrieve, and list time series reports.
+            You are a time series report agent. You create, retrieve, list, and plot time series reports.
             A report groups a set of time series cache IDs under a title and description for later reference.
 
             Use create_time_series_report when the user wants to save a new report. The time series IDs
@@ -79,9 +143,15 @@ class TimeSeriesReportAgent(ReactAgent):
 
             Use list_time_series_reports when the user wants to see all existing reports.
 
+            Use plot_time_series_report when the user wants to plot or visualize a report.
+
             Always respond in markdown. For created reports, confirm the title and report ID.
             For retrieved reports, format the details clearly including each series native_id, title, and source.
             For listed reports, present a markdown table with report ID and title columns.
+
+            CRITICAL: When plot_time_series_report returns a result that contains HTML (e.g. <div> or <img> tags),
+            you MUST copy that HTML verbatim into your response, exactly as returned. Do not paraphrase,
+            summarize, or omit any HTML tags. Place the HTML on its own line with a blank line before it.
             </instructions>
             """
 
@@ -137,6 +207,8 @@ class TimeSeriesReportAgent(ReactAgent):
                 float(obs["value"])
                 for obs in observations
                 if obs.get("value") not in (None, ".", "")
+                and (not time_range_from or obs.get("date", "") >= time_range_from)
+                and (not time_range_to or obs.get("date", "") <= time_range_to)
             ]
             if numeric_values:
                 metadata = {**metadata, "value_range": {"min": min(numeric_values), "max": max(numeric_values)}}

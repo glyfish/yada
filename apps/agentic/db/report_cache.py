@@ -103,13 +103,24 @@ class ReportCache:
     @classmethod
     def _list_reports_sync(cls) -> list[dict[str, Any]]:
         engine = cls._engine_or_raise()
+        t = cls._table_or_raise()
         stmt = select(
-            cls._table_or_raise().c.report_id,
-            cls._table_or_raise().c.report_title,
-        ).order_by(cls._table_or_raise().c.report_title)
+            t.c.report_id,
+            t.c.report_title,
+            t.c.time_range_from,
+            t.c.time_range_to,
+        ).order_by(t.c.report_title)
         with engine.connect() as conn:
             rows = conn.execute(stmt).mappings().all()
-        return [{"report_id": str(r["report_id"]), "report_title": r["report_title"]} for r in rows]
+        return [
+            {
+                "report_id": str(r["report_id"]),
+                "report_title": r["report_title"],
+                "time_range_from": str(r["time_range_from"] or ""),
+                "time_range_to": str(r["time_range_to"] or ""),
+            }
+            for r in rows
+        ]
 
 
     @classmethod

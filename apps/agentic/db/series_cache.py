@@ -183,6 +183,79 @@ class SeriesCache:
 
 
     @classmethod
+    def _list_series_sync(cls) -> list[dict]:
+        engine = cls._engine_or_raise()
+        t = cls._table_or_raise()
+        stmt = select(
+            t.c.native_id,
+            t.c.title,
+            t.c.external_id,
+            t.c.source,
+            t.c.frequency,
+            t.c.observation_start,
+            t.c.observation_end,
+            t.c.metadata,
+        ).order_by(t.c.source, t.c.title)
+        with engine.connect() as conn:
+            rows = conn.execute(stmt).mappings().all()
+        return [
+            {
+                "native_id": str(r["native_id"]),
+                "title": r["title"],
+                "external_id": r["external_id"],
+                "source": r["source"],
+                "frequency": r["frequency"],
+                "observation_start": str(r["observation_start"] or ""),
+                "observation_end": str(r["observation_end"] or ""),
+                "metadata": r["metadata"],
+            }
+            for r in rows
+        ]
+
+
+    @classmethod
+    def _get_details_by_id_sync(cls, id_str: str) -> list[dict]:
+        engine = cls._engine_or_raise()
+        t = cls._table_or_raise()
+        cols = [
+            t.c.native_id,
+            t.c.source,
+            t.c.external_id,
+            t.c.title,
+            t.c.frequency,
+            t.c.observation_start,
+            t.c.observation_end,
+            t.c.metadata,
+            t.c.created_at,
+            t.c.updated_at,
+            t.c.expires_at,
+        ]
+        try:
+            uid = uuid.UUID(id_str)
+            stmt = select(*cols).where(t.c.native_id == uid)
+        except ValueError:
+            stmt = select(*cols).where(t.c.external_id == id_str)
+        with engine.connect() as conn:
+            rows = conn.execute(stmt).mappings().all()
+        return [
+            {
+                "native_id": str(r["native_id"]),
+                "source": r["source"],
+                "external_id": r["external_id"],
+                "title": r["title"],
+                "frequency": r["frequency"],
+                "observation_start": str(r["observation_start"] or ""),
+                "observation_end": str(r["observation_end"] or ""),
+                "metadata": r["metadata"],
+                "created_at": str(r["created_at"]),
+                "updated_at": str(r["updated_at"]),
+                "expires_at": str(r["expires_at"]),
+            }
+            for r in rows
+        ]
+
+
+    @classmethod
     async def get_by_cache_id(cls, cache_id: str) -> dict | None:
         return await asyncio.to_thread(cls._get_by_cache_id_sync, cache_id)
 

@@ -16,6 +16,9 @@ from apps.agentic.core.document_loaders.document_library_loader import (
     DocumentLibraryLoader,
 )
 
+from apps.agentic.db.series_cache import SeriesCache
+from apps.agentic.db.report_cache import ReportCache
+
 from apps.agentic.agents.document.code_repo_agent import CodeRepoAgent
 from apps.agentic.agents.document.fred_data_info_agent import FredDataInfoAgent
 from apps.agentic.agents.document.research_library_agent import ResearchLibraryAgent
@@ -24,6 +27,28 @@ from apps.agentic.agents.document.pdf_document_library_agent import PDFDocumentL
 from lib.logger import get_logger
 
 logger = get_logger("YADA")
+
+class ListTimeSeriesReportsInput(BaseModel):
+    pass
+
+
+class TimeSeriesReportDetailsInput(BaseModel):
+    report_id_or_title: str = Field(
+        ...,
+        description="report_id UUID or title substring of the report to retrieve details for.",
+    )
+
+
+class ListTimeSeriesInput(BaseModel):
+    pass
+
+
+class TimeSeriesDetailsInput(BaseModel):
+    native_id_or_external_id: str = Field(
+        ...,
+        description="native_id UUID or external_id (e.g. UNRATE) of the cached series.",
+    )
+
 
 class RepositoryFilesInput(BaseModel):
     """Schema for requesting filenames within a repository."""
@@ -126,21 +151,25 @@ def paginate_metadata_rows(rows: list[dict], max_results: int, start_after: str 
     end_index = min(start_index + max_results, len(sorted_rows))
     return sorted_rows[start_index:end_index]
 
-class DocumentStoreInfoAgent(ReactAgent):
+class DataInfoAgent(ReactAgent):
     """
     Handle requests for information about document libraries.
     """
 
     @classmethod
-    async def create(cls) -> "DocumentStoreInfoAgent":
+    async def create(cls) -> "DataInfoAgent":
         return cls()
 
     def __init__(self, mcp_tools: list = []):
         tools = [
-            DocumentStoreInfoAgent.repository_names,
-            DocumentStoreInfoAgent.filenames_for_repository,
-            DocumentStoreInfoAgent.research_library_metadata_summary,
-            DocumentStoreInfoAgent.research_library_titles_by_metadata,
+            DataInfoAgent.list_time_series_reports,
+            DataInfoAgent.list_time_series_report_details,
+            DataInfoAgent.list_time_series,
+            DataInfoAgent.list_time_series_details,
+            DataInfoAgent.repository_names,
+            DataInfoAgent.filenames_for_repository,
+            DataInfoAgent.research_library_metadata_summary,
+            DataInfoAgent.research_library_titles_by_metadata,
         ]
         tool_node_name = "document_info_tool_node"
 
@@ -154,8 +183,12 @@ class DocumentStoreInfoAgent(ReactAgent):
     
         system_prompt = f"""
         <instructions>
-        You are an expert in retrieving information about the contents of documents available in all
-        the document stores. The tools allow you to:
+        You are an expert in retrieving information about the contents of documents and data available
+        in all data stores. The tools allow you to:
+        - List all time series reports (title, report_id, time range).
+        - Show full metadata for a specific report by report_id or title substring, including the series it contains.
+        - List all cached time series (title, native_id, external_id, source, frequency, date range).
+        - Show full metadata for a specific cached time series by native_id or external_id.
         - List repository names and filenames for code repositories.
         - Summarize metadata for research notes, including filename, title, author, topic, and shelf.
         - Filter research note titles using author/topic/shelf metadata.
@@ -304,7 +337,7 @@ class DocumentStoreInfoAgent(ReactAgent):
         max_results: int = 100, start_after: str | None = None
     ) -> list[dict]:
 
-        rows = DocumentStoreInfoAgent._research_library_metadata()
+        rows = DataInfoAgent._research_library_metadata()
         return paginate_metadata_rows(rows, max_results, start_after)
 
 
@@ -337,7 +370,7 @@ class DocumentStoreInfoAgent(ReactAgent):
         limit: int = 25,
     ) -> list[dict]:
 
-        rows = DocumentStoreInfoAgent._research_library_metadata()
+        rows = DataInfoAgent._research_library_metadata()
         if not rows:
             return []
 
@@ -372,3 +405,181 @@ class DocumentStoreInfoAgent(ReactAgent):
             }
             for item in filtered
         ]
+
+
+    @staticmethod
+    @tool_spec(
+        args_schema=ListTimeSeriesReportsInput,
+        metadata=ToolSpec(
+            primary_function="""
+                List all time series reports stored in the report cache.
+                Returns report_id, report_title, time_range_from, and time_range_to for each report.
+            """,
+            positive_examples=[
+                PositiveExample(input="What time series reports do I have?"),
+                PositiveExample(input="List all time series reports."),
+                PositiveExample(input="Show me my reports."),
+            ],
+            suggests_followup=[
+                "list_time_series_report_details to see full metadata for a specific report",
+            ],
+        ),
+    )
+    def list_time_series_reports() -> str:
+        rows = ReportCache._list_reports_sync()
+        if not rows:
+            return "No time series reports found."
+        lines = [
+            "| Title | report_id | Time Range From | Time Range To |",
+            "|-------|-----------|-----------------|---------------|",
+        ]
+        for r in rows:
+            time_to = r["time_range_to"] or "latest"
+            lines.append(
+                f"| {r['report_title']} | `{r['report_id']}` | {r['time_range_from']} | {time_to} |"
+            )
+        return "\n".join(lines)
+
+
+    @staticmethod
+    @tool_spec(
+        args_schema=TimeSeriesReportDetailsInput,
+        metadata=ToolSpec(
+            primary_function="""
+                Return full metadata for a time series report identified by report_id UUID or
+                a title substring. Returns the title, description, time range, and the list of
+                time series entries (native_id, external_id, title, units, value_range, etc.).
+                If multiple reports match the title fragment, a disambiguation list is returned.
+            """,
+            positive_examples=[
+                PositiveExample(input="Show me the details for my unemployment report."),
+                PositiveExample(input="What time series are in the GDP report?"),
+                PositiveExample(input="Show the details of report abc-123."),
+            ],
+            requires_context=[
+                "Call list_time_series_reports first if the report_id or title is not already known.",
+            ],
+        ),
+    )
+    def list_time_series_report_details(report_id_or_title: str) -> str:
+        import uuid as _uuid
+        try:
+            uid = _uuid.UUID(report_id_or_title)
+            rows = [ReportCache._get_by_report_id_sync(str(uid))]
+            rows = [r for r in rows if r is not None]
+        except ValueError:
+            rows = ReportCache._search_by_title_sync(report_id_or_title)
+
+        if not rows:
+            return f"No report found matching `{report_id_or_title}`."
+
+        if len(rows) > 1:
+            lines = [f"Multiple reports match '{report_id_or_title}'. Please specify one:"]
+            for r in rows:
+                lines.append(f"- **{r['report_title']}** (`{r['report_id']}`)")
+            return "\n".join(lines)
+
+        r = rows[0]
+        time_to = str(r.get("time_range_to") or "latest")
+        series_info = r.get("time_series_info") or []
+        lines = [
+            f"**{r['report_title']}**",
+            "",
+            f"| Field | Value |",
+            f"|-------|-------|",
+            f"| report_id | `{r['report_id']}` |",
+            f"| description | {r.get('report_description', '')} |",
+            f"| time_range_from | {r.get('time_range_from', '')} |",
+            f"| time_range_to | {time_to} |",
+            "",
+            "**Time Series:**",
+            "",
+            "| Title | native_id | external_id | Units | Value Range |",
+            "|-------|-----------|-------------|-------|-------------|",
+        ]
+        for s in series_info:
+            vr = s.get("value_range") or {}
+            value_range_str = f"{vr.get('min', '')} – {vr.get('max', '')}" if vr else ""
+            lines.append(
+                f"| {s.get('title', '')} | `{s.get('native_id', '')}` | {s.get('external_id', '')}"
+                f" | {s.get('units', '')} | {value_range_str} |"
+            )
+        return "\n".join(lines)
+
+
+    @staticmethod
+    @tool_spec(
+        args_schema=ListTimeSeriesInput,
+        metadata=ToolSpec(
+            primary_function="""
+                List all time series stored in the cache.
+                Returns title, native_id, external_id, source, frequency,
+                observation_start, and observation_end for each series.
+            """,
+            positive_examples=[
+                PositiveExample(input="What time series do I have cached?"),
+                PositiveExample(input="List all cached time series."),
+                PositiveExample(input="Show me the time series in the cache."),
+            ],
+            suggests_followup=[
+                "list_time_series_details to see full metadata for a specific series",
+            ],
+        ),
+    )
+    def list_time_series() -> str:
+        rows = SeriesCache._list_series_sync()
+        if not rows:
+            return "No time series found in the cache."
+        lines = ["| Title | native_id | external_id | Source | Frequency | Start | End |",
+                 "|-------|-----------|-------------|--------|-----------|-------|-----|"]
+        for r in rows:
+            lines.append(
+                f"| {r['title']} | `{r['native_id']}` | {r['external_id']}"
+                f" | {r['source']} | {r['frequency']}"
+                f" | {r['observation_start']} | {r['observation_end']} |"
+            )
+        return "\n".join(lines)
+
+
+    @staticmethod
+    @tool_spec(
+        args_schema=TimeSeriesDetailsInput,
+        metadata=ToolSpec(
+            primary_function="""
+                Return full metadata for a cached time series identified by native_id UUID
+                or external_id (e.g. UNRATE). Does not return observations.
+                If external_id matches multiple entries all are returned.
+            """,
+            positive_examples=[
+                PositiveExample(input="Show me the details for time series UNRATE."),
+                PositiveExample(input="What are the details of the series with native_id abc-123?"),
+            ],
+            requires_context=[
+                "Call list_time_series first if the native_id or external_id is not already known.",
+            ],
+        ),
+    )
+    def list_time_series_details(native_id_or_external_id: str) -> str:
+        rows = SeriesCache._get_details_by_id_sync(native_id_or_external_id)
+        if not rows:
+            return f"No cached series found matching `{native_id_or_external_id}`."
+        blocks = []
+        for r in rows:
+            units = (r.get("metadata") or {}).get("units", "")
+            obs_count = (r.get("metadata") or {}).get("observation_count", "")
+            blocks.append(
+                f"**{r['title']}**\n\n"
+                f"| Field | Value |\n|-------|-------|\n"
+                f"| native_id | `{r['native_id']}` |\n"
+                f"| external_id | {r['external_id']} |\n"
+                f"| source | {r['source']} |\n"
+                f"| frequency | {r['frequency']} |\n"
+                f"| units | {units} |\n"
+                f"| observation_count | {obs_count} |\n"
+                f"| observation_start | {r['observation_start']} |\n"
+                f"| observation_end | {r['observation_end']} |\n"
+                f"| created_at | {r['created_at']} |\n"
+                f"| updated_at | {r['updated_at']} |\n"
+                f"| expires_at | {r['expires_at']} |"
+            )
+        return "\n\n---\n\n".join(blocks)

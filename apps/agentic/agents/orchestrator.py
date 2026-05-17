@@ -19,11 +19,11 @@ from apps.agentic.agents.plots.bar_chart_agent import BarChartAgent
 from apps.agentic.agents.plots.time_series_plot_agent import TimeSeriesPlotAgent
 from apps.agentic.agents.document.code_repo_agent import CodeRepoAgent
 from apps.agentic.agents.document.research_library_agent import ResearchLibraryAgent
-from apps.agentic.agents.document.document_store_info_agent import DocumentStoreInfoAgent
+from apps.agentic.agents.data.data_info_agent import DataInfoAgent
 from apps.agentic.agents.document.fred_data_info_agent import FredDataInfoAgent
 from apps.agentic.agents.document.document_loader_agent import DocumentLoaderAgent
 from apps.agentic.agents.data.data_fetcher_agent import DataFetcherAgent
-from apps.agentic.agents.time_series_report_agent import TimeSeriesReportAgent
+from apps.agentic.agents.plots.time_series_report_agent import TimeSeriesReportAgent
 
 from lib.logger import get_logger
 
@@ -32,7 +32,7 @@ logger = get_logger("YADA")
 _search_agent = SearchAgent()
 _bar_chart_agent = BarChartAgent()
 _time_series_plot_agent = TimeSeriesPlotAgent()
-_document_store_info_agent = DocumentStoreInfoAgent()
+_data_info_agent = DataInfoAgent()
 _document_loader_agent = DocumentLoaderAgent()
 _time_series_report_agent = TimeSeriesReportAgent()
 
@@ -153,7 +153,17 @@ async def delegate_to_bar_chart_agent(request: str) -> str:
             PositiveExample(input="Plot the population of Tennessee using all available data."),
             PositiveExample(input="Compare the population of Tennessee and Alabama over time in the same plot."),
             PositiveExample(input="Plot the GDP and population of Tennessee over time as stacked charts."),
-  ],
+        ],
+        negative_examples=[
+            NegativeExample(
+                input="Plot the unemployment report.",
+                reason="Report plots must go to delegate_to_time_series_report_agent, not here.",
+            ),
+            NegativeExample(
+                input="Generate a chart for my GDP report.",
+                reason="Report plots must go to delegate_to_time_series_report_agent, not here.",
+            ),
+        ],
     ),
 )
 async def delegate_to_time_series_plot_agent(request: str) -> str:
@@ -163,32 +173,48 @@ async def delegate_to_time_series_plot_agent(request: str) -> str:
     return result["messages"][-1].content
 
 
-# delegate_to_document_store_info_agent
+# delegate_to_data_info_agent
 @tool_spec(
     args_schema=SubagentRequest,
     metadata=ToolSpec(
         primary_function=
             """
-            Delegate a request to the Document Store Info Agent which provides information about
-            the documents in the document stores. Available stores: Research Library (reference docs),
-            Code Repository (source code), FRED Data Information (economic time series).
+            Delegate a request to the Data Info Agent which provides information about
+            all data and document stores. Available stores: time series reports (time_series_reports table),
+            time series cache (previously fetched time series), Research Library (reference docs),
+            Code Repository (source code), FRED Data Information (economic time series metadata).
+            Use for listing or inspecting what is already stored — not for fetching new data.
             Map pronouns: 'my code repositories'/'my code' → code repository vector store;
-            'my research library' → research_library vector store; 'FRED data' → FRED data information store.
+            'my research library' → research_library vector store; 'FRED data' → FRED data information store;
+            'cached time series'/'time series cache' → time_series_cache table;
+            'my reports'/'time series reports' → time_series_reports table.
             If asked for distinct metadata values, return the list when count < 10, otherwise summarize the most common values.
             Metadata fields — code repositories: repository names, file types, programming languages;
             research library: document shelves, authors, tags; FRED: category_name, series_id, series_title, popularity.
             """,
         positive_examples=[
+            PositiveExample(input="List all cached time series."),
+            PositiveExample(input="Show me the details for UNRATE in the cache."),
+            PositiveExample(input="What time series do I have cached?"),
+            PositiveExample(input="List all time series reports."),
+            PositiveExample(input="What reports do I have?"),
+            PositiveExample(input="Show me the details of the unemployment report."),
             PositiveExample(input="List files in troystribling/zgomot."),
             PositiveExample(input="What are the document shelves available in my research library?"),
             PositiveExample(input="What are the titles of the documents in the 'publications' shelf in my research library?"),
         ],
+        negative_examples=[
+            NegativeExample(
+                input="Fetch the UNRATE series from FRED.",
+                reason="Use delegate_to_data_fetcher_agent to fetch new data from external sources.",
+            ),
+        ],
     ),
 )
-async def delegate_to_document_store_info_agent(request: str) -> str:
+async def delegate_to_data_info_agent(request: str) -> str:
     state = {"messages": [HumanMessage(content=request)]}
     config = RunnableConfig(configurable={"thread_id": shortuuid.uuid()})
-    result = await _document_store_info_agent.agent.ainvoke(state, config)
+    result = await _data_info_agent.agent.ainvoke(state, config)
     return result["messages"][-1].content
 
 
@@ -349,14 +375,25 @@ async def delegate_to_data_fetcher_agent(request: str) -> str:
         primary_function=
             """
             Delegate a request to the Time Series Report Agent which creates, retrieves,
-            and lists time series reports. A report groups a set of time series cache IDs
+            lists, and plots time series reports. A report groups a set of time series cache IDs
             under a title and description for later reference.
-            Use after collecting form data for report creation, or directly for list/get requests.
+            Use after collecting form data for report creation, or directly for list/get/plot requests.
+            IMPORTANT: Always use this agent to plot a report — never delegate report plots to
+            delegate_to_time_series_plot_agent.
             """,
         positive_examples=[
             PositiveExample(input="List all my time series reports."),
             PositiveExample(input="Show me the report with ID abc-123."),
             PositiveExample(input="What reports do I have?"),
+            PositiveExample(input="Plot the unemployment report."),
+            PositiveExample(input="Plot the report with ID abc-123."),
+            PositiveExample(input="Generate a chart for my GDP report."),
+        ],
+        negative_examples=[
+            NegativeExample(
+                input="Plot the unemployment report.",
+                reason="Do NOT route report plots to delegate_to_time_series_plot_agent. Use delegate_to_time_series_report_agent instead.",
+            ),
         ],
         requires_context=[
             "For creating a report: call request_human_form with form_type='create_time_series_report' first.",
@@ -364,10 +401,30 @@ async def delegate_to_data_fetcher_agent(request: str) -> str:
     ),
 )
 async def delegate_to_time_series_report_agent(request: str) -> str:
+    from langchain_core.messages import ToolMessage
     state = {"messages": [HumanMessage(content=request)]}
     config = RunnableConfig(configurable={"thread_id": shortuuid.uuid()})
     result = await _time_series_report_agent.agent.ainvoke(state, config)
-    return result["messages"][-1].content
+
+    raw = result["messages"][-1].content
+    if isinstance(raw, str):
+        final = raw
+    else:
+        final = "\n".join(
+            block.get("text", "")
+            for block in raw
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+
+    extra_html = [
+        msg.content
+        for msg in result["messages"]
+        if isinstance(msg, ToolMessage) and isinstance(msg.content, str) and "<img" in msg.content and msg.content not in final
+    ]
+    if extra_html:
+        logger.debug(f"delegate_to_time_series_report_agent: appending {len(extra_html)} HTML fragment(s)")
+        return final + "\n\n" + "\n\n".join(extra_html)
+    return final
 
 
 # request_human_form
@@ -461,7 +518,7 @@ class OrchestratorAgent(ReactAgent):
             delegate_to_time_series_plot_agent,
             delegate_to_time_series_report_agent,
             delegate_to_data_fetcher_agent,
-            delegate_to_document_store_info_agent,
+            delegate_to_data_info_agent,
             delegate_to_document_loader_agent,
             delegate_to_code_repository_search_agent,
             delegate_to_research_library_search_agent,
@@ -579,7 +636,8 @@ When the user wants to create a time series report:
    time_range_from (required, YYYY-MM-DD), time_range_to (optional, YYYY-MM-DD).
 2. After the user submits the form, pass the form data as the request to delegate_to_time_series_report_agent.
 
-When the user wants to list or retrieve an existing report, call delegate_to_time_series_report_agent directly.
+When the user wants to list, retrieve, or PLOT a time series report, call delegate_to_time_series_report_agent directly.
+NEVER route a report plot to delegate_to_time_series_plot_agent — report plotting is handled entirely within delegate_to_time_series_report_agent.
 </time_series_reports>
 
 <examples>
