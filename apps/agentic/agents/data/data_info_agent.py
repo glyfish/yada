@@ -430,13 +430,14 @@ class DataInfoAgent(ReactAgent):
         if not rows:
             return "No time series reports found."
         lines = [
-            "| Title | report_id | Time Range From | Time Range To |",
-            "|-------|-----------|-----------------|---------------|",
+            "| Title | Tags | report_id | Time Range From | Time Range To |",
+            "|-------|------|-----------|-----------------|---------------|",
         ]
         for r in rows:
             time_to = r["time_range_to"] or "latest"
+            tags_str = ", ".join(r.get("tags") or [])
             lines.append(
-                f"| {r['report_title']} | `{r['report_id']}` | {r['time_range_from']} | {time_to} |"
+                f"| {r['report_title']} | {tags_str} | `{r['report_id']}` | {r['time_range_from']} | {time_to} |"
             )
         return "\n".join(lines)
 
@@ -465,44 +466,45 @@ class DataInfoAgent(ReactAgent):
         import uuid as _uuid
         try:
             uid = _uuid.UUID(report_id_or_title)
-            rows = [ReportCache._get_by_report_id_sync(str(uid))]
-            rows = [r for r in rows if r is not None]
+            record = ReportCache._get_by_report_id_sync(str(uid))
         except ValueError:
-            rows = ReportCache._search_by_title_sync(report_id_or_title)
+            matches = ReportCache._search_by_title_sync(report_id_or_title)
+            if not matches:
+                return f"No report found matching `{report_id_or_title}`."
+            if len(matches) > 1:
+                lines = [f"Multiple reports match '{report_id_or_title}'. Please specify one:"]
+                for m in matches:
+                    lines.append(f"- **{m['report_title']}** (`{m['report_id']}`)")
+                return "\n".join(lines)
+            record = ReportCache._get_by_report_id_sync(matches[0]["report_id"])
 
-        if not rows:
+        if record is None:
             return f"No report found matching `{report_id_or_title}`."
 
-        if len(rows) > 1:
-            lines = [f"Multiple reports match '{report_id_or_title}'. Please specify one:"]
-            for r in rows:
-                lines.append(f"- **{r['report_title']}** (`{r['report_id']}`)")
-            return "\n".join(lines)
-
-        r = rows[0]
-        time_to = str(r.get("time_range_to") or "latest")
-        series_info = r.get("time_series_info") or []
+        time_to = str(record.get("time_range_to") or "latest")
+        tags_str = ", ".join(record.get("tags") or [])
+        series_info = record.get("time_series_info") or []
         lines = [
-            f"**{r['report_title']}**",
+            f"**{record['report_title']}**",
             "",
-            f"| Field | Value |",
-            f"|-------|-------|",
-            f"| report_id | `{r['report_id']}` |",
-            f"| description | {r.get('report_description', '')} |",
-            f"| time_range_from | {r.get('time_range_from', '')} |",
+            "| Field | Value |",
+            "|-------|-------|",
+            f"| report_id | `{record['report_id']}` |",
+            f"| description | {record.get('report_description', '')} |",
+            f"| tags | {tags_str} |",
+            f"| time_range_from | {record.get('time_range_from', '')} |",
             f"| time_range_to | {time_to} |",
             "",
             "**Time Series:**",
             "",
-            "| Title | native_id | external_id | Units | Value Range |",
-            "|-------|-----------|-------------|-------|-------------|",
+            "| Title | native_id | external_id | Source | Frequency | Units |",
+            "|-------|-----------|-------------|--------|-----------|-------|",
         ]
         for s in series_info:
-            vr = s.get("value_range") or {}
-            value_range_str = f"{vr.get('min', '')} – {vr.get('max', '')}" if vr else ""
+            units = (s.get("metadata") or {}).get("units", "")
             lines.append(
                 f"| {s.get('title', '')} | `{s.get('native_id', '')}` | {s.get('external_id', '')}"
-                f" | {s.get('units', '')} | {value_range_str} |"
+                f" | {s.get('source', '')} | {s.get('frequency', '')} | {units} |"
             )
         return "\n".join(lines)
 

@@ -59,6 +59,7 @@ class ReportCache:
         time_series_info: Sequence[Mapping[str, Any]],
         time_range_from: str,
         time_range_to: str | None = None,
+        tags: list[str] | None = None,
     ) -> str:
         engine = cls._engine_or_raise()
         report_id = uuid.uuid4()
@@ -75,6 +76,7 @@ class ReportCache:
                 report_title=report_title,
                 report_description=report_description,
                 time_series_info=list(time_series_info),
+                tags=tags or [],
                 time_range_from=_as_date(time_range_from),
                 time_range_to=_as_date(time_range_to),
             )
@@ -107,6 +109,7 @@ class ReportCache:
         stmt = select(
             t.c.report_id,
             t.c.report_title,
+            t.c.tags,
             t.c.time_range_from,
             t.c.time_range_to,
         ).order_by(t.c.report_title)
@@ -116,6 +119,7 @@ class ReportCache:
             {
                 "report_id": str(r["report_id"]),
                 "report_title": r["report_title"],
+                "tags": list(r["tags"] or []),
                 "time_range_from": str(r["time_range_from"] or ""),
                 "time_range_to": str(r["time_range_to"] or ""),
             }
@@ -145,9 +149,10 @@ class ReportCache:
         time_series_info: Sequence[Mapping[str, Any]],
         time_range_from: str,
         time_range_to: str | None = None,
+        tags: list[str] | None = None,
     ) -> str:
         return await asyncio.to_thread(
-            cls._put_sync, report_title, report_description, time_series_info, time_range_from, time_range_to
+            cls._put_sync, report_title, report_description, time_series_info, time_range_from, time_range_to, tags
         )
 
 

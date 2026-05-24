@@ -102,6 +102,10 @@ class CreateTimeSeriesReportForm(BaseModel):
         ...,
         description="Comma-separated list of time series cache IDs to include in the report.",
     )
+    tags: str = Field(
+        "",
+        description="Comma-separated list of tags to categorize the report (e.g. gdp,labor,quarterly).",
+    )
     time_range_from: str = Field(
         ...,
         description="Start date of the report time range in ISO format YYYY-MM-DD.",

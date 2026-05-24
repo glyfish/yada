@@ -7,7 +7,7 @@ Create Date: 2026-05-02
 
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
 
 revision = "0002"
 down_revision = "0001"
@@ -28,6 +28,7 @@ def upgrade() -> None:
         sa.Column("report_title", sa.Text(), nullable=False),
         sa.Column("report_description", sa.Text(), nullable=False, server_default=""),
         sa.Column("time_series_info", JSONB(), nullable=False, server_default=sa.text("'[]'::jsonb")),
+        sa.Column("tags", ARRAY(sa.Text()), nullable=False, server_default=sa.text("'{}'::text[]")),
         sa.Column("time_range_from", sa.Date(), nullable=False),
         sa.Column("time_range_to", sa.Date(), nullable=True),
         sa.Column(
@@ -55,9 +56,16 @@ def upgrade() -> None:
         ["time_series_info"],
         postgresql_using="gin",
     )
+    op.create_index(
+        "idx_tsr_tags_gin",
+        "time_series_reports",
+        ["tags"],
+        postgresql_using="gin",
+    )
 
 
 def downgrade() -> None:
+    op.drop_index("idx_tsr_tags_gin", table_name="time_series_reports")
     op.drop_index("idx_tsr_time_series_info_gin", table_name="time_series_reports")
     op.drop_index("idx_tsr_report_title", table_name="time_series_reports")
     op.drop_table("time_series_reports")

@@ -40,6 +40,10 @@ class CreateReportInput(BaseModel):
         ...,
         description="Comma-separated list of time series cache IDs to include in the report.",
     )
+    tags_csv: str = Field(
+        "",
+        description="Comma-separated list of tags to categorize the report (e.g. gdp,labor,quarterly).",
+    )
     time_range_from: str = Field(
         ...,
         description="Start date of the report time range in ISO format YYYY-MM-DD.",
@@ -186,12 +190,15 @@ class TimeSeriesReportAgent(ReactAgent):
         report_title: str,
         report_description: str,
         time_series_ids_csv: str,
-        time_range_from: str,
+        tags_csv: str = "",
+        time_range_from: str = "",
         time_range_to: str | None = None,
     ) -> str:
         ids = [s.strip() for s in time_series_ids_csv.split(",") if s.strip()]
         if not ids:
             raise ValueError("No time series cache IDs were provided.")
+
+        tags = [t.strip() for t in tags_csv.split(",") if t.strip()]
 
         time_series_info: list[TimeSeriesInfoEntry] = []
         missing: list[str] = []
@@ -202,16 +209,6 @@ class TimeSeriesReportAgent(ReactAgent):
                 continue
             raw_metadata = entry.get("metadata")
             metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
-            observations = (entry.get("observations") or {}).get("observations", [])
-            numeric_values = [
-                float(obs["value"])
-                for obs in observations
-                if obs.get("value") not in (None, ".", "")
-                and (not time_range_from or obs.get("date", "") >= time_range_from)
-                and (not time_range_to or obs.get("date", "") <= time_range_to)
-            ]
-            if numeric_values:
-                metadata = {**metadata, "value_range": {"min": min(numeric_values), "max": max(numeric_values)}}
             time_series_info.append(
                 {
                     "native_id": str(entry["native_id"]),
@@ -237,6 +234,7 @@ class TimeSeriesReportAgent(ReactAgent):
             time_series_info=time_series_info,
             time_range_from=time_range_from,
             time_range_to=time_range_to,
+            tags=tags,
         )
         logger.debug(f"TimeSeriesReportAgent: created report '{report_title}' → {report_id}")
         detail_lines = "\n".join(
@@ -246,6 +244,7 @@ class TimeSeriesReportAgent(ReactAgent):
         return (
             f"Report **{report_title}** created successfully.\n\n"
             f"- **Report ID:** `{report_id}`\n"
+            f"- **Tags:** {', '.join(tags) if tags else '(none)'}\n"
             f"- **Time Series Count:** {len(time_series_info)}\n"
             f"- **Series:**\n{detail_lines}"
         )
@@ -284,9 +283,11 @@ class TimeSeriesReportAgent(ReactAgent):
             time_range += f" to {record['time_range_to']}"
         else:
             time_range += " to latest"
+        tags_str = ", ".join(record.get("tags") or []) or "(none)"
         return (
             f"## {record['report_title']}\n\n"
             f"{record.get('report_description', '')}\n\n"
+            f"**Tags:** {tags_str}\n\n"
             f"**Time Range:** {time_range}\n\n"
             f"**Time Series Info:**\n{series_block}"
         )
@@ -316,11 +317,11 @@ class TimeSeriesReportAgent(ReactAgent):
         if not reports:
             return "No time series reports found."
         rows = "\n".join(
-            f"| `{r['report_id']}` | {r['report_title']} |"
+            f"| `{r['report_id']}` | {r['report_title']} | {', '.join(r.get('tags') or [])} |"
             for r in reports
         )
         return (
-            "| Report ID | Title |\n"
-            "|-----------|-------|\n"
+            "| Report ID | Title | Tags |\n"
+            "|-----------|-------|------|\n"
             f"{rows}"
         )

@@ -160,12 +160,15 @@ class TimeSeriesReportPlotAgent(ReactAgent):
             <plot_type_selection>
             Choose the plot type for each group using these rules in order:
 
-            - 1 series → report_plot_single
-            - 2-5 series, same units, value ranges all within one order of magnitude of each other
-              → report_plot_comparison
-            - Exactly 2 series, different units → report_plot_twinx
-            - 3-5 series, exactly 2 distinct units (assign the majority-unit series to left,
-              the minority-unit series to right) → report_plot_twinx_comparison
+            - 1 series → report_plot_single. If the value range extends over more than one order of magnitude, use YLOG axis.
+              Otherwise, use LINEAR axis.
+            - 2-5 series, same units → report_plot_comparison, if the value ranges are comparable (within one order of magnitude) use a LINEAR axis and
+                if the value ranges are very different (greater than one order of magnitude) use a YLOG axis.
+            - Exactly 2 series, different units → report_plot_twinx if the value range extends over more than one order of magnitude, 
+              use YLOG axis. Otherwise, use LINEAR axis.
+            - 3-5 series, exactly 2 distinct units (assign the majority-unit series to left, 
+              the minority-unit series to right) → report_plot_twinx_comparison.f the value range extends over more than one 
+              order of magnitude, use YLOG axis. Otherwise, use LINEAR axis.
             - 2-5 series, more than 2 distinct units or very different scales
               → report_plot_stack
             </plot_type_selection>
@@ -231,13 +234,40 @@ class TimeSeriesReportPlotAgent(ReactAgent):
         if record is None:
             return json.dumps({"error": f"No report found matching '{report_id_or_title}'."})
 
+        date_from = str(record["time_range_from"]) if record.get("time_range_from") else None
+        date_to = str(record["time_range_to"]) if record.get("time_range_to") else None
+
+        time_series = []
+        for entry in (record.get("time_series_info") or []):
+            native_id = entry.get("native_id", "")
+            value_range = None
+            try:
+                _, values = _load_series_by_cache_id(native_id, date_from, date_to)
+                if values:
+                    value_range = {"min": float(min(values)), "max": float(max(values))}
+            except Exception as exc:
+                logger.warning(f"get_report_info: could not load series {native_id} for value_range: {exc}")
+            metadata = dict(entry.get("metadata") or {})
+            time_series.append({
+                "native_id": native_id,
+                "title": entry.get("title", ""),
+                "source": entry.get("source", ""),
+                "external_id": entry.get("external_id", ""),
+                "frequency": entry.get("frequency", ""),
+                "observation_start": entry.get("observation_start", ""),
+                "observation_end": entry.get("observation_end", ""),
+                "units": metadata.get("units", ""),
+                "value_range": value_range,
+            })
+
         return json.dumps({
             "report_id": str(record["report_id"]),
             "report_title": record["report_title"],
             "report_description": record.get("report_description", ""),
-            "time_range_from": str(record.get("time_range_from") or ""),
-            "time_range_to": str(record["time_range_to"]) if record.get("time_range_to") else None,
-            "time_series": record.get("time_series_info") or [],
+            "tags": list(record.get("tags") or []),
+            "time_range_from": date_from or "",
+            "time_range_to": date_to,
+            "time_series": time_series,
         })
 
 
