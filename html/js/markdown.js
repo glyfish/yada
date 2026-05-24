@@ -14,13 +14,21 @@ marked.setOptions({
 
 // Protect LaTeX so Marked won't touch underscores/dollars.
 // Order matters: $$...$$ first, then $...$, then \( \), then \[ \].
+// Dollar-delimited math is normalized to \(...\) / \[...\] so that bare $
+// characters in data values (prices, units) never trigger MathJax.
 export function protectMathBlocks(md) {
     const blocks = [];
     const token = i => `@@MATH${i}@@`;
-    const re = /(\$\$[\s\S]*?\$\$)|(\$[\s\S]*?\$)|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]/g;
+    const re = /(\$\$[\s\S]*?\$\$)|(\$[^\n$]+\$)|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]/g;
     const text = String(md || "").replace(re, m => {
+        let normalized = m;
+        if (m.startsWith('$$') && m.endsWith('$$')) {
+            normalized = '\\[' + m.slice(2, -2) + '\\]';
+        } else if (m.startsWith('$') && m.endsWith('$') && m.length > 1) {
+            normalized = '\\(' + m.slice(1, -1) + '\\)';
+        }
         const t = token(blocks.length);
-        blocks.push(m);
+        blocks.push(normalized);
         return t;
     });
     return { text, blocks };

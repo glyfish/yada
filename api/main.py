@@ -158,6 +158,16 @@ async def stream_request(req: RequestPayload):
     orchestrator = await OrchestratorAgent.create()
     config = RunnableConfig(configurable={"thread_id": session_id})
 
+    # If the thread has a stale interrupt (user cancelled a form without resuming),
+    # Anthropic will reject the history because a tool_use has no tool_result.
+    # Silently start a fresh thread rather than propagating a 400 error.
+    if req.session_id:
+        state = await orchestrator.agent.aget_state(config)
+        if state.tasks and state.tasks[0].interrupts:
+            session_id = str(uuid.uuid4())
+            config = RunnableConfig(configurable={"thread_id": session_id})
+            logger.debug(f"Stream: stale interrupt on [{req.session_id}], fresh thread [{session_id}]")
+
     async def event_generator():
         final_result = ""
         root_run_id = None
