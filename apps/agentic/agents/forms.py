@@ -116,6 +116,17 @@ class CreateTimeSeriesReportForm(BaseModel):
     )
 
 
+class SelectTimeSeriesReportForm(BaseModel):
+    """Form data for selecting an existing time series report to plot."""
+
+    type: Literal["select_time_series_report"] = "select_time_series_report"
+
+    report_id: str = Field(
+        ...,
+        description="UUID of the selected time series report.",
+    )
+
+
 # Maps the form type discriminator to its model class.
 # Used by HumanInputNode to validate resumed form data.
 FORM_REGISTRY: dict[str, type[BaseModel]] = {
@@ -123,6 +134,7 @@ FORM_REGISTRY: dict[str, type[BaseModel]] = {
     "load_github_repo": LoadGitHubRepoForm,
     "load_pdf_document": LoadPDFDocumentForm,
     "create_time_series_report": CreateTimeSeriesReportForm,
+    "select_time_series_report": SelectTimeSeriesReportForm,
 }
 
 

@@ -1,4 +1,5 @@
 import { handleResumeRequest } from "./api.js";
+import { sessionId as sessionIdState } from "./state.js";
 
 export function showFormDialog(formSchema, sessionId, promptLabel) {
     const formType = formSchema.type;
@@ -48,7 +49,7 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
 
         requestAnimationFrame(() => filenameInput.focus());
 
-        const close = () => { dialog.close(); dialog.remove(); };
+        const close = () => { sessionIdState.val = null; dialog.close(); dialog.remove(); };
         dialog.querySelector("#cancelFormBtn").addEventListener("click", close);
         dialog.addEventListener("cancel", e => { e.preventDefault(); close(); });
 
@@ -95,7 +96,7 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
         if (saved) accInput.value = saved;
         requestAnimationFrame(() => accInput.focus());
 
-        const close = () => { dialog.close(); dialog.remove(); };
+        const close = () => { sessionIdState.val = null; dialog.close(); dialog.remove(); };
         dialog.querySelector("#cancelFormBtn").addEventListener("click", close);
         dialog.addEventListener("cancel", e => { e.preventDefault(); close(); });
 
@@ -153,7 +154,7 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
 
         requestAnimationFrame(() => filenameInput.focus());
 
-        const close = () => { dialog.close(); dialog.remove(); };
+        const close = () => { sessionIdState.val = null; dialog.close(); dialog.remove(); };
         dialog.querySelector("#cancelFormBtn").addEventListener("click", close);
         dialog.addEventListener("cancel", e => { e.preventDefault(); close(); });
 
@@ -221,7 +222,7 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
 
         requestAnimationFrame(() => titleInput.focus());
 
-        const close = () => { dialog.close(); dialog.remove(); };
+        const close = () => { sessionIdState.val = null; dialog.close(); dialog.remove(); };
         dialog.querySelector("#cancelFormBtn").addEventListener("click", close);
         dialog.addEventListener("cancel", e => { e.preventDefault(); close(); });
 
@@ -242,6 +243,91 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
         [titleInput, idsInput].forEach(
             el => el.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); submit(); } })
         );
+
+    } else if (formType === "select_time_series_report") {
+        dialog.classList.add("report-picker");
+        dialog.innerHTML = `
+            <form method="dialog" novalidate autocomplete="off">
+                <h3 style="margin-top:0">Select Report to Plot</h3>
+                <input id="rp-search" type="text" placeholder="Search by title, tag, or description…"
+                    autocomplete="off" autocapitalize="off" spellcheck="false" style="width:100%;box-sizing:border-box;">
+                <div id="rp-table-wrap" class="report-picker-wrap">
+                    <table class="report-picker-table">
+                        <thead>
+                            <tr><th>Title</th><th>Tags</th><th>From</th><th>To</th></tr>
+                        </thead>
+                        <tbody id="rp-tbody"></tbody>
+                    </table>
+                    <p id="rp-empty" style="display:none;color:#888;text-align:center;">No reports found.</p>
+                </div>
+                <menu>
+                    <button type="button" class="btn" id="cancelFormBtn">Cancel</button>
+                    <button type="button" class="btn primary" id="submitFormBtn" disabled>Plot Report</button>
+                </menu>
+            </form>
+        `;
+        document.body.appendChild(dialog);
+        dialog.showModal();
+
+        const searchInput  = dialog.querySelector("#rp-search");
+        const tbody        = dialog.querySelector("#rp-tbody");
+        const emptyMsg     = dialog.querySelector("#rp-empty");
+        const submitBtn    = dialog.querySelector("#submitFormBtn");
+        let selectedId     = null;
+        let debounceTimer  = null;
+
+        const renderRows = (reports) => {
+            tbody.innerHTML = "";
+            emptyMsg.style.display = reports.length === 0 ? "" : "none";
+            for (const r of reports) {
+                const tr = document.createElement("tr");
+                tr.className = "report-picker-row";
+                tr.dataset.reportId = r.report_id;
+                const tags = (r.tags || []).join(", ");
+                const to   = r.time_range_to || "latest";
+                tr.innerHTML = `<td>${r.report_title}</td><td>${tags}</td><td>${r.time_range_from}</td><td>${to}</td>`;
+                tr.addEventListener("click", () => {
+                    tbody.querySelectorAll("tr").forEach(row => row.classList.remove("selected"));
+                    tr.classList.add("selected");
+                    selectedId = r.report_id;
+                    submitBtn.disabled = false;
+                });
+                tbody.appendChild(tr);
+            }
+        };
+
+        const fetchReports = async (q = "") => {
+            const url = q ? `/api/reports?q=${encodeURIComponent(q)}` : "/api/reports";
+            try {
+                const resp = await fetch(url);
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                renderRows(await resp.json());
+            } catch (e) {
+                tbody.innerHTML = `<tr><td colspan="4" style="color:red">Failed to load reports: ${e.message}</td></tr>`;
+            }
+        };
+
+        fetchReports();
+
+        searchInput.addEventListener("input", () => {
+            clearTimeout(debounceTimer);
+            selectedId = null;
+            submitBtn.disabled = true;
+            debounceTimer = setTimeout(() => fetchReports(searchInput.value.trim()), 250);
+        });
+
+        const close = () => { sessionIdState.val = null; dialog.close(); dialog.remove(); };
+        dialog.querySelector("#cancelFormBtn").addEventListener("click", close);
+        dialog.addEventListener("cancel", e => { e.preventDefault(); close(); });
+
+        const submit = async () => {
+            if (!selectedId) return;
+            close();
+            await handleResumeRequest(sessionId, { report_id: selectedId }, promptLabel);
+        };
+        dialog.querySelector("#submitFormBtn").addEventListener("click", submit);
+
+        requestAnimationFrame(() => searchInput.focus());
 
     } else {
         alert(`Unknown form type: ${formType}`);

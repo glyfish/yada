@@ -289,3 +289,51 @@ dialog.modal menu {
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
 }
+
+/* Report picker dialog */
+dialog.modal.report-picker {
+    width: min(780px, 96vw);
+}
+dialog.modal.report-picker form {
+    display: flex;
+    flex-direction: column;
+    gap: .75rem;
+}
+dialog.modal.report-picker menu {
+    width: 100%;
+}
+.report-picker-wrap {
+    width: 100%;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    overflow-y: auto;
+    max-height: 320px;
+}
+.report-picker-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .9rem;
+}
+.report-picker-table thead th {
+    position: sticky;
+    top: 0;
+    background: #f4f4f4;
+    padding: .45rem .6rem;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+    font-weight: 600;
+}
+.report-picker-table tbody td {
+    padding: .4rem .6rem;
+    border-bottom: 1px solid #eee;
+    vertical-align: top;
+}
+.report-picker-row {
+    cursor: pointer;
+}
+.report-picker-row:hover {
+    background: #f0f6ff;
+}
+.report-picker-row.selected {
+    background: #ddeeff;
+}

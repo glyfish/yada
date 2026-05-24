@@ -11,6 +11,7 @@ marked.setOptions({
     breaks: false,
 });
 
+
 // Protect LaTeX so Marked won't touch underscores/dollars.
 // Order matters: $$...$$ first, then $...$, then \( \), then \[ \].
 export function protectMathBlocks(md) {
@@ -58,6 +59,7 @@ export function clampMarkdown(md, max) {
 export async function renderMarkdownInto(container, mdText) {
     const { text, blocks } = protectMathBlocks(mdText || "");
     let html = marked.parse(text);
+    html = html.replace(/<del>([\s\S]*?)<\/del>/g, '$1');
     html = restoreMathTokens(html, blocks);
     container.innerHTML = html;
     if (window.hljs) {

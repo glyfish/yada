@@ -1,5 +1,5 @@
 import { isLoading, statusText, sessionId, inputEl, textValue } from "./state.js";
-import { prependResultCard } from "./feed.js";
+import { prependResultCard, fillLastCardMeta } from "./feed.js";
 
 export const YADA_REQUEST_STREAM = "/api/request/stream";
 export const YADA_REQUEST_RESUME = "/api/request/resume";
@@ -47,6 +47,8 @@ export async function handleResumeRequest(resumeSessionId, formData, promptLabel
                             inputEl.ref.value = "";
                             inputEl.ref.style.height = "auto";
                         }
+                    } else if (currentEvent === "meta") {
+                        fillLastCardMeta(parsed);
                     } else if (currentEvent === "error") {
                         throw new Error(parsed.message || "Unknown resume error");
                     }

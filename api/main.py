@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from typing import Any, Dict, Optional
 
 import langsmith
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
@@ -283,24 +283,88 @@ async def resume_request(req: ResumePayload):
     config = RunnableConfig(configurable={"thread_id": req.session_id})
 
     async def event_generator():
+        final_result = ""
+        root_run_id = None
+
         try:
-            state = await orchestrator.agent.ainvoke(
+            async for event in orchestrator.agent.astream_events(
                 Command(resume=req.form_data),
                 config,
-            )
+                version="v2",
+            ):
+                event_type = event.get("event", "")
+                name = event.get("name", "")
+                run_id = event.get("run_id", "")
 
-            messages = state.get("messages", [])
-            last_msg = next(
-                (m for m in reversed(messages)
-                 if isinstance(m, AIMessage) and not getattr(m, "tool_calls", None)),
-                None,
-            )
-            final_result = _message_content_to_text(last_msg) if last_msg else ""
+                if root_run_id is None:
+                    root_run_id = run_id
+
+                if event_type in ("on_chat_model_stream", "on_chain_stream"):
+                    continue
+
+                label: str | None = None
+                if event_type == "on_tool_start":
+                    label = TOOL_START_LABELS.get(name)
+                elif event_type == "on_tool_end":
+                    label = TOOL_END_LABELS.get(name)
+                elif event_type == "on_chain_start":
+                    label = TOOL_START_LABELS.get(name)
+                elif event_type == "on_chain_end":
+                    label = TOOL_END_LABELS.get(name)
+
+                if label:
+                    yield {
+                        "event": "status",
+                        "data": json.dumps({"text": label}),
+                    }
+
+                if event_type == "on_chain_end" and run_id == root_run_id:
+                    output = event.get("data", {}).get("output", {})
+                    if isinstance(output, dict):
+                        messages = output.get("messages", [])
+                        last_msg = next(
+                            (m for m in reversed(messages)
+                             if isinstance(m, AIMessage) and not getattr(m, "tool_calls", None)),
+                            None,
+                        )
+                        if last_msg:
+                            final_result = _message_content_to_text(last_msg)
 
             yield {
                 "event": "result",
                 "data": json.dumps({"result": final_result, "session_id": req.session_id}),
             }
+
+            logger.debug(f"Resume meta poll: root_run_id={root_run_id}")
+            if root_run_id:
+                client = _get_ls_client()
+                if client:
+                    model = os.getenv("AGENT_LLM_MODEL", "gpt-4.1")
+                    for attempt in range(8):
+                        await asyncio.sleep(1)
+                        try:
+                            run = client.read_run(str(root_run_id))
+                            logger.debug(f"Resume meta poll attempt {attempt}: total_tokens={run.total_tokens}")
+                            if run.total_tokens:
+                                cost = float(run.total_cost) if run.total_cost else estimate_cost(
+                                    model,
+                                    run.prompt_tokens or 0,
+                                    run.completion_tokens or 0,
+                                )
+                                yield {
+                                    "event": "meta",
+                                    "data": json.dumps({
+                                        "input_tokens":  run.prompt_tokens or 0,
+                                        "output_tokens": run.completion_tokens or 0,
+                                        "total_tokens":  run.total_tokens,
+                                        "cost_usd":      cost,
+                                        "trace_url":     get_trace_url(str(root_run_id)),
+                                    }),
+                                }
+                                break
+                        except Exception as e:
+                            logger.debug(f"Resume meta poll attempt {attempt} error: {e}")
+                            continue
 
         except Exception as e:
             logger.error(f"Resume error [{req.session_id}]: {e}")
@@ -310,6 +374,20 @@ async def resume_request(req: ResumePayload):
             }
 
     return EventSourceResponse(event_generator())
+
+
+@app.get("/api/reports")
+async def list_reports(q: str = Query("", description="Filter by title, tags, or description")):
+    reports = await ReportCache.list_reports()
+    if q:
+        q_lower = q.lower()
+        reports = [
+            r for r in reports
+            if q_lower in r["report_title"].lower()
+            or q_lower in r["report_description"].lower()
+            or any(q_lower in tag.lower() for tag in r["tags"])
+        ]
+    return reports
 
 
 # Mount the document API router

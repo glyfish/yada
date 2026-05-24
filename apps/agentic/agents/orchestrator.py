@@ -42,6 +42,7 @@ class RequestHumanFormInput(BaseModel):
         "load_github_repo",
         "load_pdf_document",
         "create_time_series_report",
+        "select_time_series_report",
     ] = Field(
         ...,
         description="The form type to request from the user.",
@@ -397,6 +398,7 @@ async def delegate_to_data_fetcher_agent(request: str) -> str:
         ],
         requires_context=[
             "For creating a report: call request_human_form with form_type='create_time_series_report' first.",
+            "For plotting without a specific report named: call request_human_form with form_type='select_time_series_report' first, then pass the returned report_id.",
         ],
     ),
 )
@@ -636,7 +638,14 @@ When the user wants to create a time series report:
    time_range_from (required, YYYY-MM-DD), time_range_to (optional, YYYY-MM-DD).
 2. After the user submits the form, pass the form data as the request to delegate_to_time_series_report_agent.
 
-When the user wants to list, retrieve, or PLOT a time series report, call delegate_to_time_series_report_agent directly.
+When the user wants to PLOT a time series report but does NOT specify which report:
+1. Call request_human_form with form_type: select_time_series_report. This presents the user
+   with a searchable list of available reports to pick from.
+2. After the user selects a report, the form data will contain a report_id field.
+   Pass "Plot the report with ID <report_id>" to delegate_to_time_series_report_agent.
+
+When the user wants to PLOT a specific report by name or ID, call delegate_to_time_series_report_agent directly.
+When the user wants to list or retrieve a time series report, call delegate_to_time_series_report_agent directly.
 NEVER route a report plot to delegate_to_time_series_plot_agent — report plotting is handled entirely within delegate_to_time_series_report_agent.
 </time_series_reports>
 

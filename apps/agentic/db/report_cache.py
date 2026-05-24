@@ -109,6 +109,7 @@ class ReportCache:
         stmt = select(
             t.c.report_id,
             t.c.report_title,
+            t.c.report_description,
             t.c.tags,
             t.c.time_range_from,
             t.c.time_range_to,
@@ -119,6 +120,7 @@ class ReportCache:
             {
                 "report_id": str(r["report_id"]),
                 "report_title": r["report_title"],
+                "report_description": r["report_description"] or "",
                 "tags": list(r["tags"] or []),
                 "time_range_from": str(r["time_range_from"] or ""),
                 "time_range_to": str(r["time_range_to"] or ""),
