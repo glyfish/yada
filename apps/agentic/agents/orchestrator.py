@@ -383,10 +383,10 @@ async def delegate_to_data_fetcher_agent(request: str) -> str:
             """,
         positive_examples=[
             PositiveExample(input="List all my time series reports."),
-            PositiveExample(input="Show me the report with ID abc-123."),
+            PositiveExample(input="Show me the report with ID 0c9997f3-bbed-46d4-a8bb-570518b3653e."),
             PositiveExample(input="What reports do I have?"),
             PositiveExample(input="Plot the unemployment report."),
-            PositiveExample(input="Plot the report with ID abc-123."),
+            PositiveExample(input="Plot the report with ID 0c9997f3-bbed-46d4-a8bb-570518b3653e."),
             PositiveExample(input="Generate a chart for my GDP report."),
         ],
         negative_examples=[

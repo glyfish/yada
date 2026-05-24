@@ -1,0 +1,291 @@
+body {
+    font-family: Arial, sans-serif;
+    padding: 2rem;
+    max-width: 800px;
+    margin: auto;
+}
+h2 {
+    text-align: left;
+}
+.input-container {
+    margin-top: 1rem;
+}
+.input-container textarea {
+    width: 100%;
+    padding: 0.5rem;
+    font-size: 1rem;
+    box-sizing: border-box;
+    margin-bottom: 0.5rem;
+    overflow: hidden;
+}
+.input-container textarea::placeholder {
+    color: #b7b7b7;
+}
+.bar-chart img {
+    max-width: 100%;
+    display: block;
+    margin: 0 auto;
+}
+.time-series-plot img {
+    max-width: 100%;
+    display: block;
+    margin: 0 auto;
+}
+.input-container .button-wrapper {
+    text-align: right;
+}
+.input-container .button-wrapper button {
+    padding: 0.5rem 1rem;
+    font-size: 1rem;
+    cursor: pointer;
+    position: relative;
+    overflow: visible;
+}
+.markdown-output pre {
+    margin: 12px 0;
+    padding: 12px 16px;
+    background: #f5f5f5;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    max-width: 100%;
+    max-height: 60vh;
+    overflow-x: auto;
+    overflow-y: auto;
+    white-space: pre;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+                "Liberation Mono", "Courier New", monospace;
+    font-size: 13px;
+    line-height: 1.5;
+}
+.markdown-output pre code {
+    white-space: inherit;
+}
+.markdown-output pre code, .markdown-output pre code.hljs {
+    background: #f5f5f5 !important;
+}
+.button-spinner {
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    border: 2px solid #ccc;
+    border-top: 2px solid #333;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    vertical-align: middle;
+    margin-right: 0.5em;
+    position: static;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+dialog.modal {
+    border: none;
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    box-shadow: 0 12px 32px rgba(0,0,0,.25);
+    width: min(640px, 92vw);
+    max-width: 92vw;
+}
+dialog.modal form {
+    display: grid;
+    grid-template-columns: 200px minmax(0, 1fr);
+    gap: 1rem 1rem;
+    align-items: center;
+    width: 100%;
+}
+
+dialog.modal, dialog.modal * { box-sizing: border-box; }
+dialog.modal::backdrop { background: rgba(0,0,0,.45); }
+dialog.modal label { justify-self: end; font-weight: 600; }
+
+dialog.modal input {
+    width: 100%;
+    max-width: 100%;
+    padding: .55rem .7rem;
+    font-size: 1rem;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+}
+dialog.modal textarea {
+    width: 100%;
+    max-width: 100%;
+    padding: .55rem .7rem;
+    font-size: 1rem;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    resize: vertical;
+}
+dialog.modal menu {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: space-between;
+    margin: .5rem 0 0;
+    padding: 0;
+}
+.dialog-input-with-button {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    width: 100%;
+}
+.dialog-input-with-button input[type="text"] {
+    flex: 1 1 auto;
+}
+.btn {
+    padding: .5rem 1rem;
+    font-size: 1rem;
+    border: 1px solid #d0d0d0;
+    border-radius: 12px;
+    background: #f7f7f7;
+    cursor: pointer;
+}
+.btn.primary {
+    background: #111;
+    color: #fff;
+    border-color: #111;
+    border-radius: 12px;
+    transition: background .15s ease, transform .15s ease;
+}
+.btn.primary:hover {
+    background: #000;
+    transform: translateY(-1px);
+}
+.btn.secondary {
+    background: #f6f6f6;
+    border-color: #c8c8c8;
+    border-radius: 12px;
+    transition: background .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+.btn.secondary:hover {
+    background: #ededed;
+    box-shadow: 0 1px 4px rgba(0,0,0,.1);
+    transform: translateY(-1px);
+}
+.btn.secondary:disabled {
+    opacity: .65;
+    box-shadow: none;
+    transform: none;
+}
+.btn:disabled { opacity: .7; cursor: not-allowed; }
+.markdown-output {
+    text-align: left;
+}
+.markdown-output pre,
+.markdown-output code {
+    text-align: left;
+}
+.markdown-output img {
+    display: block;
+    margin: 0.75rem auto;
+    max-width: 100%;
+    height: auto;
+    object-fit: contain;
+}
+.markdown-output table {
+    margin-left: auto;
+    margin-right: auto;
+}
+.markdown-output mjx-container[jax="CHTML"][display="true"] {
+    display: block;
+    text-align: center !important;
+    margin: 1rem auto !important;
+}
+.markdown-feed {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    max-width: 8.5in;
+    margin-left: auto;
+    margin-right: auto;
+}
+.result-card {
+    border: 1px solid #ddd; border-radius: 10px; background: #fff;
+    overflow: hidden;
+}
+.result-head {
+    padding: .5rem .75rem; font-weight: 600; background: #f7f7f7; border-bottom: 1px solid #eee;
+}
+.result-body { padding: .75rem .9rem; }
+.result-meta {
+    display: flex; gap: 1.25rem; align-items: center; flex-wrap: wrap;
+    padding: .35rem .9rem;
+    font-size: .75rem; color: #888;
+    border-top: 1px solid #eee;
+    background: #fafafa;
+    min-height: 1.8rem;
+}
+.result-meta a { color: #666; text-decoration: none; }
+.result-meta a:hover { text-decoration: underline; }
+.dropdown { display: inline-block; position: relative; }
+.dropdown-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    min-width: 260px;
+    padding: .5rem;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    box-shadow: 0 10px 24px rgba(0,0,0,.1);
+    z-index: 1000;
+}
+.dropdown-menu .menu-item {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    width: 100%;
+    text-align: left;
+    background: #fff;
+    border: 1px solid #eee;
+    border-radius: 6px;
+    padding: .45rem .6rem;
+    cursor: pointer;
+}
+.dropdown-menu .menu-item:hover {
+    background: #f7f7f7;
+}
+.user-question {
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    background: #fafafa;
+    padding: .5rem .75rem;
+    margin-bottom: .75rem;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: .9rem;
+    line-height: 1.4;
+}
+.user-question .label {
+    display: block;
+    font-size: .7rem;
+    font-weight: 600;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    margin-bottom: .25rem;
+}
+.user-question .text {
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: #000;
+}
+.status-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0;
+    font-size: 0.85rem;
+    color: #555;
+    min-height: 1.75rem;
+}
+.status-bar .status-spinner {
+    flex-shrink: 0;
+    width: 0.85em;
+    height: 0.85em;
+    border: 2px solid #ccc;
+    border-top-color: #555;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
