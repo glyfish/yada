@@ -22,6 +22,7 @@ import asyncio
 import os
 import sys
 from pathlib import Path
+from dotenv import load_dotenv
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -50,6 +51,13 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def load_env() -> None:
+    """
+    Load environment variables from REPO_ROOT/.env without overriding existing env vars.
+    """
+    load_dotenv(dotenv_path=REPO_ROOT / ".env", override=False)
+
+
 async def run_ingest(filename: str | None, db_path: str | None) -> None:
     loader = FREDChromaDocumentLoader(db_path=db_path or DB_PATH)
     if filename:
@@ -74,6 +82,7 @@ def ensure_openai_api_key() -> None:
 
 
 def main() -> None:
+    load_env()
     args = build_parser().parse_args()
     ensure_openai_api_key()
     asyncio.run(run_ingest(args.filename, args.db_path))

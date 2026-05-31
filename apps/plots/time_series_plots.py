@@ -1,4 +1,3 @@
-from matplotlib.pyplot import ylabel
 from numpy.typing import NDArray
 import shortuuid
 
@@ -155,13 +154,13 @@ def generate_time_series_twinx(time: NDArray, left: NDArray, right: NDArray, tit
         str: Relative file path to the rendered plot image
     """
 
-    logger.debug(f"Calling generate_time_series_plot: title: {title}, xlabel: {xlabel}, "
-                    f"ylabel: {ylabel}, plot_axis_type: {plot_axis_type}")
+    logger.debug(f"Calling generate_time_series_twinx: title: {title}, xlabel: {xlabel}, "
+                    f"left_ylabel: {left_ylabel}, right_ylabel: {right_ylabel}, plot_axis_type: {plot_axis_type}")
 
     uuid = shortuuid.uuid()
-    output_file_name = generate_plot_file_name("time_series_plot", path="./html/plots", uuid=uuid)
+    output_file_name = generate_plot_file_name("time_series_twinx", path="./html/plots", uuid=uuid)
 
-    twinx(left, right, time, xlabel=xlabel, left_ylabel=left_ylabel, right_ylabel=right_ylabel, title=title, 
+    twinx(left, right, time, xlabel=xlabel, left_ylabel=left_ylabel, right_ylabel=right_ylabel, title=title,
           figsize=(10, 6), file_name=output_file_name, plot_axis_type=plot_axis_type)
 
     return generate_plot_file_name("time_series_twinx", path="./plots", uuid=uuid)
@@ -197,13 +196,13 @@ def generate_time_series_twinx_comparison(time: NDArray, left: list[NDArray], ri
         str: Relative file path to the rendered plot image
     """
 
-    logger.debug(f"Calling generate_time_series_plot: title: {title}, xlabel: {xlabel}, "
-                    f"ylabel: {ylabel}, plot_axis_type: {plot_axis_type}")
+    logger.debug(f"Calling generate_time_series_twinx_comparison: title: {title}, xlabel: {xlabel}, "
+                    f"left_ylabel: {left_ylabel}, right_ylabel: {right_ylabel}, plot_axis_type: {plot_axis_type}")
 
     uuid = shortuuid.uuid()
-    output_file_name = generate_plot_file_name("time_series_plot", path="./html/plots", uuid=uuid)
+    output_file_name = generate_plot_file_name("time_series_twinx_comparison", path="./html/plots", uuid=uuid)
 
-    twinx_comparison(left, right, time, xlabel=xlabel, left_ylabel=left_ylabel, right_ylabel=right_ylabel, title=title, 
+    twinx_comparison(left, right, time, xlabel=xlabel, left_ylabel=left_ylabel, right_ylabel=right_ylabel, title=title,
                      figsize=(10, 6), file_name=output_file_name, plot_axis_type=plot_axis_type)
 
-    return generate_plot_file_name("time_series_twinx", path="./plots", uuid=uuid)
+    return generate_plot_file_name("time_series_twinx_comparison", path="./plots", uuid=uuid)

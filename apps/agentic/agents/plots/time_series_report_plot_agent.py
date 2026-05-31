@@ -33,6 +33,17 @@ from lib.logger import get_logger
 logger = get_logger("YADA")
 
 
+def _axis_type_for(groups: list[list[float]]) -> PlotType:
+    """Return YLOG when the global value span exceeds one order of magnitude."""
+    all_vals = [v for g in groups for v in g]
+    if not all_vals:
+        return PlotType.LINEAR
+    lo, hi = min(all_vals), max(all_vals)
+    if lo > 0 and hi / lo > 10:
+        return PlotType.YLOG
+    return PlotType.LINEAR
+
+
 def _load_series_by_cache_id(
     cache_id: str, date_from: str | None, date_to: str | None
 ) -> tuple[list[datetime], list[float]]:
@@ -73,7 +84,6 @@ class ReportSinglePlotInput(BaseModel):
     date_to: str | None = Field(None, description="End date YYYY-MM-DD (from report time_range_to, or None for latest).")
     title: str = Field(default="Time Series", description="Plot title.")
     ylabel: str = Field(default="Value", description="Y-axis label.")
-    plot_axis_type: PlotType = Field(default=PlotType.LINEAR)
 
 
 class ReportComparisonPlotInput(BaseModel):
@@ -83,7 +93,6 @@ class ReportComparisonPlotInput(BaseModel):
     title: str = Field(default="Time Series Comparison", description="Plot title.")
     ylabel: str = Field(default="Value", description="Shared y-axis label.")
     labels: list[str] | None = Field(None, description="Legend label per series.")
-    plot_axis_type: PlotType = Field(default=PlotType.LINEAR)
 
 
 class ReportTwinxPlotInput(BaseModel):
@@ -94,7 +103,6 @@ class ReportTwinxPlotInput(BaseModel):
     title: str = Field(default="Time Series", description="Plot title.")
     left_ylabel: str = Field(default="Value", description="Left y-axis label.")
     right_ylabel: str = Field(default="Value", description="Right y-axis label.")
-    plot_axis_type: PlotType = Field(default=PlotType.LINEAR)
 
 
 class ReportTwinxComparisonPlotInput(BaseModel):
@@ -105,7 +113,6 @@ class ReportTwinxComparisonPlotInput(BaseModel):
     title: str = Field(default="Time Series", description="Plot title.")
     left_ylabel: str = Field(default="Value", description="Left y-axis label.")
     right_ylabel: str = Field(default="Value", description="Right y-axis label.")
-    plot_axis_type: PlotType = Field(default=PlotType.LINEAR)
 
 
 class ReportStackPlotInput(BaseModel):
@@ -115,7 +122,6 @@ class ReportStackPlotInput(BaseModel):
     title: str = Field(default="Time Series Stack", description="Plot title.")
     ylabels: list[str] | None = Field(None, description="Y-axis label per series.")
     labels: list[str] | None = Field(None, description="Annotation label per series.")
-    plot_axis_type: PlotType = Field(default=PlotType.LINEAR)
 
 
 class TimeSeriesReportPlotAgent(ReactAgent):
@@ -160,24 +166,16 @@ class TimeSeriesReportPlotAgent(ReactAgent):
             <plot_type_selection>
             Choose the plot type for each group using these rules in order:
 
-            - 1 series → report_plot_single. If the value range extends over more than one order of magnitude, use YLOG axis.
-              Otherwise, use LINEAR axis.
-            - 2-5 series, same units → report_plot_comparison, if the value ranges are comparable (within one order of magnitude) use a LINEAR axis and
-                if the value ranges are very different (greater than one order of magnitude) use a YLOG axis.
-            - Exactly 2 series, different units → report_plot_twinx if the value range extends over more than one order of magnitude, 
-              use YLOG axis. Otherwise, use LINEAR axis.
-            - 3-5 series, exactly 2 distinct units (assign the majority-unit series to left, 
-              the minority-unit series to right) → report_plot_twinx_comparison.f the value range extends over more than one 
-              order of magnitude, use YLOG axis. Otherwise, use LINEAR axis.
-            - 2-5 series, more than 2 distinct units or very different scales
-              → report_plot_stack
-            </plot_type_selection>
+            - 1 series → report_plot_single
+            - 2-5 series, same units → report_plot_comparison
+            - Exactly 2 series, different units → report_plot_twinx
+            - 3-5 series, exactly 2 distinct units (assign the majority-unit series to left,
+              the minority-unit series to right) → report_plot_twinx_comparison
+            - 2-5 series, more than 2 distinct units → report_plot_stack
 
-            <axis_scale_selection>
-            For each group, inspect all value_range.min and value_range.max values across the series:
-            - If all values are positive and max / min > 10 → use YLOG
-            - Otherwise → use LINEAR
-            </axis_scale_selection>
+            Axis scale (LINEAR vs YLOG) is determined automatically by the plot tool
+            from the loaded data — do not pass a plot_axis_type parameter.
+            </plot_type_selection>
 
             <output_format>
             CRITICAL: You MUST include the exact HTML string returned by each plot tool verbatim
@@ -291,7 +289,6 @@ class TimeSeriesReportPlotAgent(ReactAgent):
         date_to: str | None,
         title: str,
         ylabel: str,
-        plot_axis_type: PlotType,
     ) -> str:
         try:
             times, values = _load_series_by_cache_id(native_id, date_from, date_to)
@@ -301,7 +298,7 @@ class TimeSeriesReportPlotAgent(ReactAgent):
                 title=title,
                 xlabel="Time",
                 ylabel=ylabel,
-                plot_axis_type=plot_axis_type,
+                plot_axis_type=_axis_type_for([values]),
             )
             logger.debug(f"report_plot_single: saved plot → {file}")
             return f'<div class="time-series-plot"><img src="{file}"></div>'
@@ -316,8 +313,7 @@ class TimeSeriesReportPlotAgent(ReactAgent):
         metadata=ToolSpec(
             primary_function="""
                 Plot 2-5 report series overlaid on the same axis.
-                Use when all series share the same units and comparable value ranges
-                (within one order of magnitude of each other).
+                Use when all series share the same units.
             """,
             positive_examples=[
                 PositiveExample(input="Compare multiple GDP series from the report on the same axis."),
@@ -331,19 +327,23 @@ class TimeSeriesReportPlotAgent(ReactAgent):
         title: str,
         ylabel: str,
         labels: list[str] | None,
-        plot_axis_type: PlotType,
     ) -> str:
-        loaded = [_load_series_by_cache_id(nid, date_from, date_to) for nid in native_ids]
-        file = generate_time_series_comparison(
-            time=numpy.array(loaded[0][0]),
-            values=[numpy.array(t[1]) for t in loaded],
-            title=title,
-            xlabel="Time",
-            ylabel=ylabel,
-            labels=labels,
-            plot_axis_type=plot_axis_type,
-        )
-        return f'<div class="time-series-plot"><img src="{file}"></div>'
+        try:
+            loaded = [_load_series_by_cache_id(nid, date_from, date_to) for nid in native_ids]
+            file = generate_time_series_comparison(
+                time=numpy.array(loaded[0][0]),
+                values=[numpy.array(t[1]) for t in loaded],
+                title=title,
+                xlabel="Time",
+                ylabel=ylabel,
+                labels=labels,
+                plot_axis_type=_axis_type_for([t[1] for t in loaded]),
+            )
+            logger.debug(f"report_plot_comparison: saved plot → {file}")
+            return f'<div class="time-series-plot"><img src="{file}"></div>'
+        except Exception as exc:
+            logger.error(f"report_plot_comparison failed for native_ids={native_ids}: {exc}", exc_info=True)
+            raise
 
 
     @staticmethod
@@ -367,21 +367,25 @@ class TimeSeriesReportPlotAgent(ReactAgent):
         title: str,
         left_ylabel: str,
         right_ylabel: str,
-        plot_axis_type: PlotType,
     ) -> str:
-        left_times, left_values = _load_series_by_cache_id(left_native_id, date_from, date_to)
-        _, right_values = _load_series_by_cache_id(right_native_id, date_from, date_to)
-        file = generate_time_series_twinx(
-            time=numpy.array(left_times),
-            left=numpy.array(left_values),
-            right=numpy.array(right_values),
-            title=title,
-            xlabel="Time",
-            left_ylabel=left_ylabel,
-            right_ylabel=right_ylabel,
-            plot_axis_type=plot_axis_type,
-        )
-        return f'<div class="time-series-plot"><img src="{file}"></div>'
+        try:
+            left_times, left_values = _load_series_by_cache_id(left_native_id, date_from, date_to)
+            _, right_values = _load_series_by_cache_id(right_native_id, date_from, date_to)
+            file = generate_time_series_twinx(
+                time=numpy.array(left_times),
+                left=numpy.array(left_values),
+                right=numpy.array(right_values),
+                title=title,
+                xlabel="Time",
+                left_ylabel=left_ylabel,
+                right_ylabel=right_ylabel,
+                plot_axis_type=_axis_type_for([left_values, right_values]),
+            )
+            logger.debug(f"report_plot_twinx: saved plot → {file}")
+            return f'<div class="time-series-plot"><img src="{file}"></div>'
+        except Exception as exc:
+            logger.error(f"report_plot_twinx failed for left={left_native_id}, right={right_native_id}: {exc}", exc_info=True)
+            raise
 
 
     @staticmethod
@@ -406,21 +410,25 @@ class TimeSeriesReportPlotAgent(ReactAgent):
         title: str,
         left_ylabel: str,
         right_ylabel: str,
-        plot_axis_type: PlotType,
     ) -> str:
-        left_loaded = [_load_series_by_cache_id(nid, date_from, date_to) for nid in left_native_ids]
-        right_loaded = [_load_series_by_cache_id(nid, date_from, date_to) for nid in right_native_ids]
-        file = generate_time_series_twinx_comparison(
-            time=numpy.array(left_loaded[0][0]),
-            left=[numpy.array(t[1]) for t in left_loaded],
-            right=[numpy.array(t[1]) for t in right_loaded],
-            title=title,
-            xlabel="Time",
-            left_ylabel=left_ylabel,
-            right_ylabel=right_ylabel,
-            plot_axis_type=plot_axis_type,
-        )
-        return f'<div class="time-series-plot"><img src="{file}"></div>'
+        try:
+            left_loaded = [_load_series_by_cache_id(nid, date_from, date_to) for nid in left_native_ids]
+            right_loaded = [_load_series_by_cache_id(nid, date_from, date_to) for nid in right_native_ids]
+            file = generate_time_series_twinx_comparison(
+                time=numpy.array(left_loaded[0][0]),
+                left=[numpy.array(t[1]) for t in left_loaded],
+                right=[numpy.array(t[1]) for t in right_loaded],
+                title=title,
+                xlabel="Time",
+                left_ylabel=left_ylabel,
+                right_ylabel=right_ylabel,
+                plot_axis_type=_axis_type_for([t[1] for t in left_loaded + right_loaded]),
+            )
+            logger.debug(f"report_plot_twinx_comparison: saved plot → {file}")
+            return f'<div class="time-series-plot"><img src="{file}"></div>'
+        except Exception as exc:
+            logger.error(f"report_plot_twinx_comparison failed for left={left_native_ids}, right={right_native_ids}: {exc}", exc_info=True)
+            raise
 
 
     @staticmethod
@@ -429,7 +437,7 @@ class TimeSeriesReportPlotAgent(ReactAgent):
         metadata=ToolSpec(
             primary_function="""
                 Plot 2-5 report series on vertically stacked axes sharing a common time axis.
-                Use when series have more than 2 distinct units or widely different scales.
+                Use when series have more than 2 distinct units.
             """,
             positive_examples=[
                 PositiveExample(input="Stack GDP, unemployment, and CPI from the report."),
@@ -443,16 +451,20 @@ class TimeSeriesReportPlotAgent(ReactAgent):
         title: str,
         ylabels: list[str] | None,
         labels: list[str] | None,
-        plot_axis_type: PlotType,
     ) -> str:
-        loaded = [_load_series_by_cache_id(nid, date_from, date_to) for nid in native_ids]
-        file = generate_time_series_stack(
-            time=numpy.array(loaded[0][0]),
-            values=[numpy.array(t[1]) for t in loaded],
-            title=title,
-            xlabel="Time",
-            ylabels=ylabels,
-            labels=labels,
-            plot_axis_type=plot_axis_type,
-        )
-        return f'<div class="time-series-plot"><img src="{file}"></div>'
+        try:
+            loaded = [_load_series_by_cache_id(nid, date_from, date_to) for nid in native_ids]
+            file = generate_time_series_stack(
+                time=numpy.array(loaded[0][0]),
+                values=[numpy.array(t[1]) for t in loaded],
+                title=title,
+                xlabel="Time",
+                ylabels=ylabels,
+                labels=labels,
+                plot_axis_type=_axis_type_for([t[1] for t in loaded]),
+            )
+            logger.debug(f"report_plot_stack: saved plot → {file}")
+            return f'<div class="time-series-plot"><img src="{file}"></div>'
+        except Exception as exc:
+            logger.error(f"report_plot_stack failed for native_ids={native_ids}: {exc}", exc_info=True)
+            raise
