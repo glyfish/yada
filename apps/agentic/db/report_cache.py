@@ -6,7 +6,7 @@ import uuid
 from datetime import date
 from typing import Any, Mapping, Sequence
 
-from sqlalchemy import MetaData, Table, create_engine, select, text
+from sqlalchemy import MetaData, Table, create_engine, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import Engine
 
@@ -159,8 +159,63 @@ class ReportCache:
 
 
     @classmethod
+    def _update_report_sync(
+        cls,
+        report_id: str,
+        report_title: str,
+        report_description: str,
+        time_series_info: Sequence[Mapping[str, Any]],
+        time_range_from: str,
+        time_range_to: str | None = None,
+        tags: list[str] | None = None,
+    ) -> dict | None:
+        engine = cls._engine_or_raise()
+
+        def _as_date(v: str | None) -> date | None:
+            if not v:
+                return None
+            return date.fromisoformat(v[:10])
+
+        t = cls._table_or_raise()
+        stmt = (
+            update(t)
+            .where(t.c.report_id == uuid.UUID(report_id))
+            .values(
+                report_title=report_title,
+                report_description=report_description,
+                time_series_info=list(time_series_info),
+                tags=tags or [],
+                time_range_from=_as_date(time_range_from),
+                time_range_to=_as_date(time_range_to),
+            )
+        )
+        with engine.begin() as conn:
+            conn.execute(stmt)
+        logger.debug(f"ReportCache: updated report {report_id} → '{report_title}'")
+        return cls._get_by_report_id_sync(report_id)
+
+
+    @classmethod
     async def get_by_report_id(cls, report_id: str) -> dict | None:
         return await asyncio.to_thread(cls._get_by_report_id_sync, report_id)
+
+
+    @classmethod
+    async def update_report(
+        cls,
+        report_id: str,
+        report_title: str,
+        report_description: str,
+        time_series_info: Sequence[Mapping[str, Any]],
+        time_range_from: str,
+        time_range_to: str | None = None,
+        tags: list[str] | None = None,
+    ) -> dict | None:
+        return await asyncio.to_thread(
+            cls._update_report_sync,
+            report_id, report_title, report_description,
+            time_series_info, time_range_from, time_range_to, tags,
+        )
 
 
     @classmethod

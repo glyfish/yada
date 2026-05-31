@@ -124,8 +124,9 @@ def generate_time_series_comparison(time: NDArray, values: list[NDArray], title:
     return generate_plot_file_name("time_series_comparison", path="./plots", uuid=uuid)
 
 
-def generate_time_series_twinx(time: NDArray, left: NDArray, right: NDArray, title: str, xlabel: str, 
-                               left_ylabel: str, right_ylabel: str, plot_axis_type: PlotType) -> str:
+def generate_time_series_twinx(time: NDArray, left: NDArray, right: NDArray, title: str, xlabel: str,
+                               left_ylabel: str, right_ylabel: str, plot_axis_type: PlotType,
+                               labels: list[str] | None = None) -> str:
     """
     Generate a single time series plot.
 
@@ -161,13 +162,14 @@ def generate_time_series_twinx(time: NDArray, left: NDArray, right: NDArray, tit
     output_file_name = generate_plot_file_name("time_series_twinx", path="./html/plots", uuid=uuid)
 
     twinx(left, right, time, xlabel=xlabel, left_ylabel=left_ylabel, right_ylabel=right_ylabel, title=title,
-          figsize=(10, 6), file_name=output_file_name, plot_axis_type=plot_axis_type)
+          labels=labels, figsize=(10, 6), file_name=output_file_name, plot_axis_type=plot_axis_type)
 
     return generate_plot_file_name("time_series_twinx", path="./plots", uuid=uuid)
 
 
-def generate_time_series_twinx_comparison(time: NDArray, left: list[NDArray], right: list[NDArray], title: str, xlabel: str, 
-                                          left_ylabel: str, right_ylabel: str, plot_axis_type: PlotType) -> str:
+def generate_time_series_twinx_comparison(time: NDArray, left: list[NDArray], right: list[NDArray], title: str, xlabel: str,
+                                          left_ylabel: str, right_ylabel: str, plot_axis_type: PlotType,
+                                          labels: list[str] | None = None) -> str:
     """
     Generate a single time series plot.
 
@@ -203,6 +205,6 @@ def generate_time_series_twinx_comparison(time: NDArray, left: list[NDArray], ri
     output_file_name = generate_plot_file_name("time_series_twinx_comparison", path="./html/plots", uuid=uuid)
 
     twinx_comparison(left, right, time, xlabel=xlabel, left_ylabel=left_ylabel, right_ylabel=right_ylabel, title=title,
-                     figsize=(10, 6), file_name=output_file_name, plot_axis_type=plot_axis_type)
+                     labels=labels, figsize=(10, 6), file_name=output_file_name, plot_axis_type=plot_axis_type)
 
     return generate_plot_file_name("time_series_twinx_comparison", path="./plots", uuid=uuid)

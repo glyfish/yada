@@ -262,7 +262,10 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
                 </div>
                 <menu>
                     <button type="button" class="btn" id="cancelFormBtn">Cancel</button>
-                    <button type="button" class="btn primary" id="submitFormBtn" disabled>Plot Report</button>
+                    <div style="display:flex;gap:.5rem;">
+                        <button type="button" class="btn secondary" id="editFormBtn" disabled>Edit</button>
+                        <button type="button" class="btn primary" id="submitFormBtn" disabled>Plot Report</button>
+                    </div>
                 </menu>
             </form>
         `;
@@ -273,6 +276,7 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
         const tbody        = dialog.querySelector("#rp-tbody");
         const emptyMsg     = dialog.querySelector("#rp-empty");
         const submitBtn    = dialog.querySelector("#submitFormBtn");
+        const editBtn      = dialog.querySelector("#editFormBtn");
         let selectedId     = null;
         let debounceTimer  = null;
 
@@ -291,6 +295,7 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
                     tr.classList.add("selected");
                     selectedId = r.report_id;
                     submitBtn.disabled = false;
+                    editBtn.disabled = false;
                 });
                 tbody.appendChild(tr);
             }
@@ -313,6 +318,7 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
             clearTimeout(debounceTimer);
             selectedId = null;
             submitBtn.disabled = true;
+            editBtn.disabled = true;
             debounceTimer = setTimeout(() => fetchReports(searchInput.value.trim()), 250);
         });
 
@@ -326,6 +332,102 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
             await handleResumeRequest(sessionId, { report_id: selectedId }, promptLabel);
         };
         dialog.querySelector("#submitFormBtn").addEventListener("click", submit);
+
+        const openEditDialog = async (reportId) => {
+            let report;
+            try {
+                const resp = await fetch(`/api/reports/${reportId}`);
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                report = await resp.json();
+            } catch (e) {
+                alert(`Failed to load report: ${e.message}`);
+                return;
+            }
+
+            const editDialog = document.createElement("dialog");
+            editDialog.className = "modal";
+            editDialog.innerHTML = `
+                <form method="dialog" novalidate autocomplete="off">
+                    <label for="ed-title">Title:</label>
+                    <input id="ed-title" name="report_title" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+
+                    <label for="ed-description">Description:</label>
+                    <textarea id="ed-description" name="report_description" rows="3" autocomplete="off" autocapitalize="off" spellcheck="false" required></textarea>
+
+                    <label for="ed-tags">Tags:</label>
+                    <input id="ed-tags" name="tags" type="text" autocomplete="off" autocapitalize="off" spellcheck="false">
+
+                    <label for="ed-ids">Time Series IDs:</label>
+                    <input id="ed-ids" name="time_series_ids" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+
+                    <label for="ed-from">Start Time:</label>
+                    <input id="ed-from" name="time_range_from" type="date" autocomplete="off" required>
+
+                    <label for="ed-to">End Time:</label>
+                    <input id="ed-to" name="time_range_to" type="date" autocomplete="off">
+
+                    <menu>
+                        <button type="button" class="btn" id="cancelEditBtn">Cancel</button>
+                        <button type="button" class="btn primary" id="saveEditBtn">Save</button>
+                    </menu>
+                </form>
+            `;
+            document.body.appendChild(editDialog);
+
+            const titleInput = editDialog.querySelector("input[name='report_title']");
+            const descInput  = editDialog.querySelector("textarea[name='report_description']");
+            const tagsInput  = editDialog.querySelector("input[name='tags']");
+            const idsInput   = editDialog.querySelector("input[name='time_series_ids']");
+            const fromInput  = editDialog.querySelector("input[name='time_range_from']");
+            const toInput    = editDialog.querySelector("input[name='time_range_to']");
+
+            titleInput.value = report.report_title || "";
+            descInput.value  = report.report_description || "";
+            tagsInput.value  = (report.tags || []).join(", ");
+            idsInput.value   = (report.time_series_info || []).map(s => s.native_id).join(", ");
+            fromInput.value  = report.time_range_from || "";
+            toInput.value    = report.time_range_to || "";
+
+            editDialog.showModal();
+            requestAnimationFrame(() => titleInput.focus());
+
+            const closeEdit = () => { editDialog.close(); editDialog.remove(); };
+            editDialog.querySelector("#cancelEditBtn").addEventListener("click", closeEdit);
+            editDialog.addEventListener("cancel", e => { e.preventDefault(); closeEdit(); });
+
+            editDialog.querySelector("#saveEditBtn").addEventListener("click", async () => {
+                if (!editDialog.querySelector("form").reportValidity()) return;
+                const payload = {
+                    report_title:       titleInput.value.trim(),
+                    report_description: descInput.value.trim(),
+                    tags:               tagsInput.value.trim(),
+                    time_series_ids:    idsInput.value.trim(),
+                    time_range_from:    fromInput.value,
+                    time_range_to:      toInput.value || null,
+                };
+                try {
+                    const resp = await fetch(`/api/reports/${reportId}`, {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(payload),
+                    });
+                    if (!resp.ok) {
+                        const err = await resp.json().catch(() => ({}));
+                        throw new Error(err.detail || `HTTP ${resp.status}`);
+                    }
+                } catch (e) {
+                    alert(`Save failed: ${e.message}`);
+                    return;
+                }
+                closeEdit();
+                selectedId = null;
+                submitBtn.disabled = true;
+                editBtn.disabled = true;
+                fetchReports(searchInput.value.trim());
+            });
+        };
+
+        editBtn.addEventListener("click", () => { if (selectedId) openEditDialog(selectedId); });
 
         requestAnimationFrame(() => searchInput.focus());
 

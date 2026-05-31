@@ -103,6 +103,8 @@ class ReportTwinxPlotInput(BaseModel):
     title: str = Field(default="Time Series", description="Plot title.")
     left_ylabel: str = Field(default="Value", description="Left y-axis label.")
     right_ylabel: str = Field(default="Value", description="Right y-axis label.")
+    left_label: str | None = Field(None, description="Legend label for the left series.")
+    right_label: str | None = Field(None, description="Legend label for the right series.")
 
 
 class ReportTwinxComparisonPlotInput(BaseModel):
@@ -113,6 +115,7 @@ class ReportTwinxComparisonPlotInput(BaseModel):
     title: str = Field(default="Time Series", description="Plot title.")
     left_ylabel: str = Field(default="Value", description="Left y-axis label.")
     right_ylabel: str = Field(default="Value", description="Right y-axis label.")
+    labels: list[str] | None = Field(None, description="Legend label per series (left series first, then right).")
 
 
 class ReportStackPlotInput(BaseModel):
@@ -367,10 +370,13 @@ class TimeSeriesReportPlotAgent(ReactAgent):
         title: str,
         left_ylabel: str,
         right_ylabel: str,
+        left_label: str | None,
+        right_label: str | None,
     ) -> str:
         try:
             left_times, left_values = _load_series_by_cache_id(left_native_id, date_from, date_to)
             _, right_values = _load_series_by_cache_id(right_native_id, date_from, date_to)
+            labels = [left_label, right_label] if left_label and right_label else None
             file = generate_time_series_twinx(
                 time=numpy.array(left_times),
                 left=numpy.array(left_values),
@@ -380,6 +386,7 @@ class TimeSeriesReportPlotAgent(ReactAgent):
                 left_ylabel=left_ylabel,
                 right_ylabel=right_ylabel,
                 plot_axis_type=_axis_type_for([left_values, right_values]),
+                labels=labels,
             )
             logger.debug(f"report_plot_twinx: saved plot → {file}")
             return f'<div class="time-series-plot"><img src="{file}"></div>'
@@ -410,6 +417,7 @@ class TimeSeriesReportPlotAgent(ReactAgent):
         title: str,
         left_ylabel: str,
         right_ylabel: str,
+        labels: list[str] | None,
     ) -> str:
         try:
             left_loaded = [_load_series_by_cache_id(nid, date_from, date_to) for nid in left_native_ids]
@@ -423,6 +431,7 @@ class TimeSeriesReportPlotAgent(ReactAgent):
                 left_ylabel=left_ylabel,
                 right_ylabel=right_ylabel,
                 plot_axis_type=_axis_type_for([t[1] for t in left_loaded + right_loaded]),
+                labels=labels,
             )
             logger.debug(f"report_plot_twinx_comparison: saved plot → {file}")
             return f'<div class="time-series-plot"><img src="{file}"></div>'

@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from typing import Any, Dict, Optional
 
 import langsmith
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
@@ -23,6 +23,7 @@ from apps.agentic.core.constants import TOOL_START_LABELS, TOOL_END_LABELS, MCP_
 from apps.agentic.core.mcp_tool_registry import MCPToolRegistry
 from apps.agentic.db.series_cache import SeriesCache
 from apps.agentic.db.report_cache import ReportCache
+from apps.agentic.agents.plots.time_series_report_agent import TimeSeriesInfoEntry
 from apps.agentic.core.pricing import estimate_cost
 from pathlib import Path
 from dotenv import load_dotenv
@@ -122,7 +123,7 @@ async def generate_markdown(req: RequestPayload):
     logger.debug(f"YADA request [{session_id}]: {req.input}")
 
     orchestrator = await OrchestratorAgent.create()
-    config = RunnableConfig(configurable={"thread_id": session_id})
+    config = RunnableConfig(configurable={"thread_id": session_id}, recursion_limit=50)
     state = await orchestrator.agent.ainvoke(
         {"messages": [HumanMessage(content=req.input)]},
         config,
@@ -156,7 +157,7 @@ async def stream_request(req: RequestPayload):
     logger.debug(f"YADA stream request [{session_id}]: {req.input}")
 
     orchestrator = await OrchestratorAgent.create()
-    config = RunnableConfig(configurable={"thread_id": session_id})
+    config = RunnableConfig(configurable={"thread_id": session_id}, recursion_limit=50)
 
     # If the thread has a stale interrupt (user cancelled a form without resuming),
     # Anthropic will reject the history because a tool_use has no tool_result.
@@ -165,7 +166,7 @@ async def stream_request(req: RequestPayload):
         state = await orchestrator.agent.aget_state(config)
         if state.tasks and state.tasks[0].interrupts:
             session_id = str(uuid.uuid4())
-            config = RunnableConfig(configurable={"thread_id": session_id})
+            config = RunnableConfig(configurable={"thread_id": session_id}, recursion_limit=50)
             logger.debug(f"Stream: stale interrupt on [{req.session_id}], fresh thread [{session_id}]")
 
     async def event_generator():
@@ -384,6 +385,81 @@ async def resume_request(req: ResumePayload):
             }
 
     return EventSourceResponse(event_generator())
+
+
+@app.get("/api/reports/{report_id}")
+async def get_report(report_id: str):
+    record = await ReportCache.get_by_report_id(report_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Report not found")
+    return {
+        "report_id": str(record["report_id"]),
+        "report_title": record["report_title"],
+        "report_description": record.get("report_description") or "",
+        "tags": list(record.get("tags") or []),
+        "time_range_from": str(record.get("time_range_from") or ""),
+        "time_range_to": str(record["time_range_to"]) if record.get("time_range_to") else None,
+        "time_series_info": [
+            {
+                "native_id": entry.get("native_id", ""),
+                "external_id": entry.get("external_id", ""),
+                "title": entry.get("title", ""),
+                "source": entry.get("source", ""),
+            }
+            for entry in (record.get("time_series_info") or [])
+        ],
+    }
+
+
+class UpdateReportPayload(BaseModel):
+    report_title: str
+    report_description: str
+    tags: str
+    time_series_ids: str
+    time_range_from: str
+    time_range_to: Optional[str] = None
+
+
+@app.put("/api/reports/{report_id}")
+async def update_report(report_id: str, req: UpdateReportPayload):
+    ids = [s.strip() for s in req.time_series_ids.split(",") if s.strip()]
+    tags = [t.strip() for t in req.tags.split(",") if t.strip()]
+
+    time_series_info: list[TimeSeriesInfoEntry] = []
+    missing: list[str] = []
+    for cache_id in ids:
+        entry = SeriesCache._get_by_cache_id_sync(cache_id)
+        if not entry:
+            missing.append(cache_id)
+            continue
+        raw_metadata = entry.get("metadata")
+        metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
+        time_series_info.append({
+            "native_id": str(entry["native_id"]),
+            "title": str(entry.get("title") or ""),
+            "source": str(entry.get("source") or ""),
+            "external_id": str(entry.get("external_id") or ""),
+            "frequency": str(entry.get("frequency") or ""),
+            "observation_start": str(entry.get("observation_start") or ""),
+            "observation_end": str(entry.get("observation_end") or ""),
+            "metadata": metadata,
+        })
+
+    if missing:
+        raise HTTPException(status_code=400, detail=f"Unknown cache IDs: {', '.join(missing)}")
+
+    updated = await ReportCache.update_report(
+        report_id=report_id,
+        report_title=req.report_title,
+        report_description=req.report_description,
+        time_series_info=time_series_info,
+        time_range_from=req.time_range_from,
+        time_range_to=req.time_range_to or None,
+        tags=tags,
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Report not found")
+    return updated
 
 
 @app.get("/api/reports")

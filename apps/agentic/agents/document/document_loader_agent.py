@@ -54,28 +54,6 @@ class LoadPDFDocumentInput(BaseModel):
     shelf: str = Field(..., description="Library shelf to assign the document to.")
 
 
-def _resolve_research_note_path(filename: str) -> Path:
-    base_dir = Path(RESEARCH_LIBRARY_LOCAL_PATH).resolve()
-    if not base_dir.exists():
-        raise FileNotFoundError(f"Research library directory '{base_dir}' not found.")
-
-    candidate = (base_dir / filename).resolve()
-    try:
-        candidate.relative_to(base_dir)
-    except ValueError:
-        raise ValueError("Filename must be inside the research library directory.")
-
-    if candidate.exists() and candidate.is_file():
-        return candidate
-
-    matches = list(base_dir.rglob(Path(filename).name))
-    for match in matches:
-        if match.is_file():
-            return match
-
-    raise FileNotFoundError(f"Research document '{filename}' not found under {base_dir}.")
-
-
 def _append_research_document_metadata(meta_data: dict) -> None:
     metadata_path = (PROJECT_ROOT / RESEARCH_DOCUMENTS_METADATA_FILE).resolve()
     metadata_path.parent.mkdir(parents=True, exist_ok=True)
