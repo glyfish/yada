@@ -150,7 +150,7 @@ class GitHubChromaDocumentLoader(ChromaDocumentLoader):
                 parts = line.split()
                 current_sha = parts[1][:12]
                 current_ts_unix = int(parts[2])
-            elif line.strip() and current_sha is not None:
+            elif line.strip() and current_sha is not None and current_ts_unix is not None:
                 rel = line.strip()
                 if rel not in commit_map:
                     ts_iso = datetime.fromtimestamp(current_ts_unix, tz=timezone.utc).isoformat()

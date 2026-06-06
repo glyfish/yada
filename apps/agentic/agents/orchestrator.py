@@ -1,6 +1,6 @@
 import shortuuid
 from pydantic import BaseModel, Field
-from typing import Literal, Tuple, Dict, Any, Optional
+from typing import Literal, Dict, Any, Optional
 
 from apps.agentic.core.tool_spec import PositiveExample, NegativeExample, ToolSpec, tool_spec
 from langchain_core.messages import HumanMessage
@@ -9,7 +9,6 @@ from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import tools_condition, ToolNode
 
-from apps.agentic.core.agents.query_filters import build_filter_and_query
 from apps.agentic.core.agents.react_agent import ReactAgent
 from apps.agentic.core.agents.messages import WorkerState
 from apps.agentic.core.agents.human_input_node import HumanInputNode
@@ -17,11 +16,8 @@ from apps.agentic.core.checkpointer import checkpointer
 from apps.agentic.agents.search_agent import SearchAgent
 from apps.agentic.agents.plots.bar_chart_agent import BarChartAgent
 from apps.agentic.agents.plots.time_series_plot_agent import TimeSeriesPlotAgent
-from apps.agentic.agents.document.code_repo_agent import CodeRepoAgent
-from apps.agentic.agents.document.research_library_agent import ResearchLibraryAgent
 from apps.agentic.agents.data.data_info_agent import DataInfoAgent
-from apps.agentic.agents.document.fred_data_info_agent import FredDataInfoAgent
-from apps.agentic.agents.document.document_loader_agent import DocumentLoaderAgent
+from apps.agentic.agents.document.document_agent import DocumentAgent
 from apps.agentic.agents.data.data_fetcher_agent import DataFetcherAgent
 from apps.agentic.agents.plots.time_series_report_agent import TimeSeriesReportAgent
 
@@ -33,7 +29,7 @@ _search_agent = SearchAgent()
 _bar_chart_agent = BarChartAgent()
 _time_series_plot_agent = TimeSeriesPlotAgent()
 _data_info_agent = DataInfoAgent()
-_document_loader_agent = DocumentLoaderAgent()
+_document_agent = DocumentAgent()
 _time_series_report_agent = TimeSeriesReportAgent()
 
 class RequestHumanFormInput(BaseModel):
@@ -56,23 +52,6 @@ class RequestHumanFormInput(BaseModel):
         ),
     )
 
-
-class DocumentSubagentSearchInput(BaseModel):
-    """
-    Input schema for the document search agents.
-    """
-
-    request: str = Field(..., description="Request to send to the document search agent")      
-    query: Optional[Dict[str, Any]] = Field(
-        default=None,
-        description=
-        """
-        ChromaDB where-filter returned by extract_document_query_from_request. 
-        Do NOT construct this dict manually. Always call extract_document_query_from_request 
-        first and pass its returned filter dict here unchanged.
-        """
-        ,
-    )
 
 class SubagentRequest(BaseModel):
     """
@@ -219,119 +198,6 @@ async def delegate_to_data_info_agent(request: str) -> str:
     return result["messages"][-1].content
 
 
-# delegate_to_code_repository_search_agent
-@tool_spec(
-    args_schema=DocumentSubagentSearchInput,
-    metadata=ToolSpec(
-        primary_function=
-            """
-            Delegate a request to the Code Repository Search Agent which searches and retrieves code
-            from indexed GitHub repositories. Use this when the user wants to search for specific
-            code or files in Troy Stribling's GitHub repositories. The following metadata fields are 
-            available for filtering and retrieval,
-                account: Github account name (e.g. account:troystribling)
-                repo: Repository name (e.g. repo:BlueCap)
-                ext: File extension (e.g. ext:rb)
-                before: Date before which to search (e.g. before:2023-01-01)
-                after: Date after which to search (e.g. after:2022-01-01)
-            Requests should contain explicit reference to 'my code' or 'code database' to ensure they are routed
-            to the Code Repository Search Agent.
-            """,
-        positive_examples=[
-            PositiveExample(input="account:troystribling repo:zgomot ext:rb Where is MIDI output handled in my code?"),
-            PositiveExample(input="Find the latest commit message for the file that handles MIDI output in my code."),
-            PositiveExample(input="What programming languages do I use in my code?"),
-        ],
-        requires_context=[
-            "Call extract_document_query_from_request first to extract query filters and the cleaned query string. "
-            "Then pass the cleaned query string as 'request' and extracted filters as 'query'. ",
-            "Request should contain reference to 'my code' / 'code database' → requester's indexed repositories in the code repository vector store",
-        ],
-    ),
-)
-async def delegate_to_code_repository_search_agent(request: str, query: Optional[Dict[str, Any]] = None) -> str:
-    state = {"messages": [HumanMessage(content=request)]}
-    config = RunnableConfig(configurable={"thread_id": shortuuid.uuid()})
-    code_repo_agent = CodeRepoAgent(query=query)
-    result = await code_repo_agent.agent.ainvoke(state, config)
-    return result["messages"][-1].content
-
-# delegate_to_research_library_search_agent
-@tool_spec(
-    args_schema=DocumentSubagentSearchInput,
-    metadata=ToolSpec(
-        primary_function=
-            """
-            Delegate a request to the Research Library Search Agent which searches and retrieves documents
-            from the research library. The following metadata fields are available for filtering and retrieval: 
-            shelf, author and topic. Requests should contain explicit reference to 'my research' or 
-            'research library' to ensure they are routed here.
-            """,
-        positive_examples=[
-            PositiveExample(input="title:Thermodynamics Look in my research library for the definition of a Carnot Cycle."),
-            PositiveExample(input="shelf:publications Look in my research library for constraints on kinetic and magnetic energy in MHD relevant to magnetic dynamos?"),
-            PositiveExample(input="Look in my research library for the definition of a Carnot Cycle"),
-        ],
-        requires_context=[
-            "Call extract_document_query_from_request first to extract query filters and the cleaned query string. "
-            "Then pass the cleaned query string as 'request' and extracted filters as 'query'. ",
-            "Request should contain reference to 'my research' → requester's indexed research library in the research_library vector store",
-        ],
-    ),
-)
-async def delegate_to_research_library_search_agent(request: str, query: Optional[Dict[str, Any]] = None) -> str:
-    state = {"messages": [HumanMessage(content=request)]}
-    config = RunnableConfig(configurable={"thread_id": shortuuid.uuid()})
-    research_library_agent = ResearchLibraryAgent(query=query)
-    result = await research_library_agent.agent.ainvoke(state, config)
-    return result["messages"][-1].content
-
-# delegate_to_fred_data_info_search_agent
-@tool_spec(
-    args_schema=DocumentSubagentSearchInput,
-    metadata=ToolSpec(
-        primary_function=
-            """
-            Delegate a request to the FRED Data Info Search Agent which searches and retrieves documents
-            from the FRED data information store. FRED (Federal Reserve Economic Data) is a database of
-            economic data time series. Use this tool to find FRED time series identifiers for specific
-            economic indicators. The following metadata fields are available for filtering and retrieval: 
-            category_name, series_id, series_title, popularity, category_id, popularity, 
-            popularity:> | >= | < | <=, last_updated, last_updated:after, last_updated:before.
-            Requests should contain explicit reference to FRED data or FRED time series to ensure 
-            they are routed here. 
-            """,
-        positive_examples=[
-            PositiveExample(input="popularity:>40 What time series are available for Commodities in the FRED data?"),
-            PositiveExample(input="popularity:>40 What price indexes are in FRED for Farm Products?"),
-            PositiveExample(input="category_name:'Farm Products' What price indexes are in FRED?"),
-        ],
-        requires_context=[
-            """
-            Call extract_document_query_from_request first to extract query filters and the cleaned query string.
-            Then pass the cleaned query string as 'request' and extracted filters as 'query'.,
-            All requests should contain an explicit reference to FRED, FRED data, or 
-            FRED time series to ensure they are routed here first.
-            """
-        ],
-        negative_examples=[
-            NegativeExample(input="Plot a time series for the population of Tennessee.", 
-                            reason="Use the FRED Data Info Agent to look up FRED time series only if the request explicitly references FRED data."
-            ),
-        ],
-        suggests_followup=[
-            "delegate_to_time_series_plot_agent once a FRED series_id is known to visualize the time series and if a plot is requested",
-        ],
-    ),
-)
-async def delegate_to_fred_data_info_search_agent(request: str, query: Optional[Dict[str, Any]] = None) -> str:
-    state = {"messages": [HumanMessage(content=request)]}
-    config = RunnableConfig(configurable={"thread_id": shortuuid.uuid()})
-    fred_data_info_agent = FredDataInfoAgent(query=query)
-    result = await fred_data_info_agent.agent.ainvoke(state, config)
-    return result["messages"][-1].content
-
-
 # delegate_to_data_fetcher_agent
 @tool_spec(
     args_schema=SubagentRequest,
@@ -453,18 +319,22 @@ def request_human_form(form_type: str) -> str:
     return f"Requesting form: {form_type}"
 
 
-# delegate_to_document_loader_agent
+# delegate_to_document_agent
 @tool_spec(
     args_schema=SubagentRequest,
     metadata=ToolSpec(
-        primary_function=
-            """
-            Delegate a document loading request to the Document Loader Agent
-            after form data has been collected from the user. Pass the full
-            form data JSON as the request string.
-            """,
+        primary_function="""
+            Delegate all document-related requests to the Document Agent, which handles
+            both document loading and document search operations.
+            Use for: loading research documents, GitHub repos, or PDFs; searching code,
+            research library, or FRED metadata.
+        """,
         positive_examples=[
+            PositiveExample(input="Load a research document into the library."),
             PositiveExample(input="Load all GitHub repositories."),
+            PositiveExample(input="Search my research library for the definition of the Carnot Cycle."),
+            PositiveExample(input="What time series are available for GDP in the FRED data?"),
+            PositiveExample(input="Find MIDI output handling in my code."),
         ],
         requires_context=[
             "For load_research_document, load_github_repo, and load_pdf_document: "
@@ -473,38 +343,11 @@ def request_human_form(form_type: str) -> str:
         ],
     ),
 )
-async def delegate_to_document_loader_agent(request: str) -> str:
+async def delegate_to_document_agent(request: str) -> str:
     state = {"messages": [HumanMessage(content=request)]}
-    config = RunnableConfig(configurable={"thread_id": shortuuid.uuid()})
-    result = await _document_loader_agent.agent.ainvoke(state, config)
+    config = RunnableConfig(configurable={"thread_id": shortuuid.uuid()}, recursion_limit=50)
+    result = await _document_agent.agent.ainvoke(state, config)
     return result["messages"][-1].content
-
-
-# extract_document_query_from_request
-@tool_spec(
-    args_schema=SubagentRequest,
-    metadata=ToolSpec(
-        primary_function=
-            """
-            Extract a document query and any filter prefixes from a user request before passing it to a document search agent.
-            Always call this first when the request may contain filter prefixes (e.g. title:, shelf:, popularity:).
-            Returns a cleaned query string and an optional filters dictionary.
-            """,
-        positive_examples=[
-            PositiveExample(input="popularity:>40 What time series are available for Commodities in the FRED data?"),
-            PositiveExample(input="title:Thermodynamics Look in my research library for the definition of a Carnot Cycle."),
-            PositiveExample(input="shelf:publications Look in my research library for constraints on kinetic and magnetic " \
-                                  "energy in MHD relevant to magnetic dynamos?"),
-        ],
-        suggests_followup=[
-            "delegate_to_fred_data_info_search_agent to find information about FRED time series using the extracted query and filters.",
-            "delegate_to_research_library_search_agent to find documents in the research library using the extracted query and filters.",
-            "delegate_to_code_repository_search_agent to find code in the code repository using the extracted query and filters.",
-        ],
-    ),
-)
-async def extract_document_query_from_request(request: str) -> Tuple[str, Optional[Dict[str, Any]]]:
-    return build_filter_and_query(request)
 
 class OrchestratorAgent(ReactAgent):
 
@@ -521,11 +364,7 @@ class OrchestratorAgent(ReactAgent):
             delegate_to_time_series_report_agent,
             delegate_to_data_fetcher_agent,
             delegate_to_data_info_agent,
-            delegate_to_document_loader_agent,
-            delegate_to_code_repository_search_agent,
-            delegate_to_research_library_search_agent,
-            delegate_to_fred_data_info_search_agent,
-            extract_document_query_from_request,
+            delegate_to_document_agent,
         ]
         tool_node_name = "orchestrator_tool_node"
         super().__init__(tools, tool_node_name, mcp_tools=mcp_tools)
@@ -619,15 +458,19 @@ that must be preserved exactly. Any modification breaks downstream rendering.
 </output_rule>
 
 
-<document_loading>
-When the user wants to load a document into a document store:
-1. Call request_human_form with the appropriate form_type to collect required fields:
+<documents>
+Delegate all document loading and search requests to delegate_to_document_agent.
+
+Document loading — call request_human_form first to collect required fields, then pass the
+form data as the request to delegate_to_document_agent:
    - Loading a research note → form_type: load_research_document
    - Loading a GitHub repository → form_type: load_github_repo
    - Loading a PDF document → form_type: load_pdf_document
-2. After the user submits the form, call delegate_to_document_loader_agent with the form data.
-Exception: load_all_github_repos requires no form — call delegate_to_document_loader_agent directly.
-</document_loading>
+Exception: load_all_github_repos requires no form — pass the request directly to delegate_to_document_agent.
+
+Document search (code, research library, FRED) — pass the raw user request directly to
+delegate_to_document_agent without any pre-processing.
+</documents>
 
 <time_series_reports>
 When the user wants to create a time series report:
@@ -658,8 +501,7 @@ subagent function is indicated.
 Search my research library for the definition of the Carnot Cycle.
 </input>
 <output>
-1. Call extract_document_query_from_request to extract the query and any filters from the request.
-2. Perform a document search over the appropriate reference document database.
+1. Call delegate_to_document_agent with the user's request.
 </output>
 </example>
 
@@ -679,10 +521,9 @@ Compare the populations of the 10 largest European cities in a bar chart.
 Plot the US GDP in a time series using FRED data.
 </input>
 <output>
-1. Call extract_document_query_from_request to extract the query and any filters from the request.
-2. Search for the time series documentation in the appropriate document store.
-3. Using the data from step 1 construct an API request for the data.
-4. Pass the data to the appropriate visualization tool.
+1. Call delegate_to_document_agent to search for the FRED series identifier.
+2. Using the series identifier, construct an API request for the data.
+3. Pass the data to the appropriate visualization tool.
 </output>
 </example>
 
