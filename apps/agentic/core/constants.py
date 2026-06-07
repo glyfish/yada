@@ -77,13 +77,14 @@ PROGRAMMING_LANGUAGE_MAP = {
 TOOL_START_LABELS: dict[str, str] = {
     # Orchestrator delegation tools
     "delegate_to_search_agent":                  "Searching the web...",
+    "delegate_to_plot_agent":                    "Building plot...",
     "delegate_to_bar_chart_agent":               "Building bar chart...",
     "delegate_to_time_series_plot_agent":        "Building time series plot...",
     "delegate_to_data_info_agent":     "Querying document store info...",
     "delegate_to_code_repository_search_agent":  "Searching code repositories...",
     "delegate_to_research_library_search_agent": "Searching research library...",
     "delegate_to_fred_data_info_search_agent":   "Searching FRED data...",
-    "delegate_to_data_fetcher_agent":            "Fetching data...",
+    "delegate_to_time_series_agent":             "Fetching time series...",
     "extract_document_query_from_request":       "Extracting query filters...",
     # Plot tools
     "bar_chart_tool":                            "Rendering bar chart...",
@@ -97,13 +98,14 @@ TOOL_START_LABELS: dict[str, str] = {
 
 TOOL_END_LABELS: dict[str, str] = {
     "delegate_to_search_agent":                  "Web search complete",
+    "delegate_to_plot_agent":                    "Plot ready",
     "delegate_to_bar_chart_agent":               "Bar chart ready",
     "delegate_to_time_series_plot_agent":        "Time series plot ready",
     "delegate_to_data_info_agent":     "Document store query complete",
     "delegate_to_code_repository_search_agent":  "Code repository search complete",
     "delegate_to_research_library_search_agent": "Research library search complete",
     "delegate_to_fred_data_info_search_agent":   "FRED data search complete",
-    "delegate_to_data_fetcher_agent":            "Data fetch complete",
+    "delegate_to_time_series_agent":             "Time series fetch complete",
     "bar_chart_tool":                            "Bar chart rendered",
     "time_series_plot_tool":                     "Time series plot rendered",
     "retrieve":                                  "Documents retrieved",

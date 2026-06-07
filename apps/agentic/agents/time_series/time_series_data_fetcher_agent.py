@@ -9,7 +9,7 @@ from lib.logger import get_logger
 logger = get_logger("YADA")
 
 
-class DataFetcherAgent(LinearAgent):
+class TimeSeriesDataFetcherAgent(LinearAgent):
     """
     Fetches time series data from external data sources via MCP tools.
     MCP tools are wrapped with caching so only a compact SeriesRef JSON
@@ -20,12 +20,12 @@ class DataFetcherAgent(LinearAgent):
 
 
     def __init__(self, mcp_tools: list):
-        tool_node_name = "data_fetcher_tool_node"
+        tool_node_name = "time_series_data_fetcher_tool_node"
         super().__init__([], tool_node_name, mcp_tools=mcp_tools)
 
 
     @classmethod
-    async def create(cls) -> "DataFetcherAgent":
+    async def create(cls) -> "TimeSeriesDataFetcherAgent":
         mcp_tools = cls._discover_mcp_tools()
         by_name = {t.name: t for t in mcp_tools}
         wrapped = [
@@ -40,7 +40,7 @@ class DataFetcherAgent(LinearAgent):
     def create_prompt(self):
         system_prompt = """
             <instructions>
-            You are a data fetcher agent. Use the available MCP tools to retrieve time series
+            You are a time series data fetcher agent. Use the available MCP tools to retrieve time series
             data from external data sources.
 
             The tools return a SeriesRef JSON object — pass it back unmodified as your response.
@@ -51,7 +51,7 @@ class DataFetcherAgent(LinearAgent):
             </instructions>
             """
 
-        logger.debug(f"DataFetcherAgent prompt: {system_prompt}")
+        logger.debug(f"TimeSeriesDataFetcherAgent prompt: {system_prompt}")
 
         return ChatPromptTemplate.from_messages([
             ("system", system_prompt),

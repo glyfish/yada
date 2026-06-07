@@ -14,23 +14,20 @@ from apps.agentic.core.agents.messages import WorkerState
 from apps.agentic.core.agents.human_input_node import HumanInputNode
 from apps.agentic.core.checkpointer import checkpointer
 from apps.agentic.agents.search_agent import SearchAgent
-from apps.agentic.agents.plots.bar_chart_agent import BarChartAgent
-from apps.agentic.agents.plots.time_series_plot_agent import TimeSeriesPlotAgent
+from apps.agentic.agents.plots.plot_agent import PlotAgent
 from apps.agentic.agents.data.data_info_agent import DataInfoAgent
 from apps.agentic.agents.document.document_agent import DocumentAgent
-from apps.agentic.agents.data.data_fetcher_agent import DataFetcherAgent
-from apps.agentic.agents.plots.time_series_report_agent import TimeSeriesReportAgent
+from apps.agentic.agents.time_series.time_series_agent import TimeSeriesAgent
 
 from lib.logger import get_logger
 
 logger = get_logger("YADA")
 
 _search_agent = SearchAgent()
-_bar_chart_agent = BarChartAgent()
-_time_series_plot_agent = TimeSeriesPlotAgent()
+_plot_agent = PlotAgent()
 _data_info_agent = DataInfoAgent()
 _document_agent = DocumentAgent()
-_time_series_report_agent = TimeSeriesReportAgent()
+_time_series_agent = TimeSeriesAgent()
 
 class RequestHumanFormInput(BaseModel):
     form_type: Literal[
@@ -78,8 +75,7 @@ class SubagentRequest(BaseModel):
             PositiveExample(input="Plot a timeseries of the population of Tennessee"),
         ],
         suggests_followup=[
-            "delegate_to_bar_chart_agent if the result contains categorical data to visualize",
-            "delegate_to_time_series_plot_agent if the result contains temporal data to visualize",
+            "delegate_to_plot_agent if the result contains data to visualize",
         ],
     ),
 )
@@ -90,66 +86,32 @@ async def delegate_to_search_agent(request: str) -> str:
     return result["messages"][-1].content
 
 
-# delegate_to_bar_chart_agent
+# delegate_to_plot_agent
 @tool_spec(
     args_schema=SubagentRequest,
     metadata=ToolSpec(
-        primary_function=
-            """
-            Delegate a request to the Bar Chart Agent which creates bar charts from categorical data.
-            Use this when the user wants to visualize data as a bar chart.
-            Returns the generated bar chart as an HTML image tag string with a summary of results
-            displayed above the chart. The HTML string should be rendered verbatim in the frontend.
-            """,
+        primary_function="""
+            Delegate all chart and visualization requests to the Plot Agent, which routes
+            to either the Bar Chart Agent (categorical data) or the Time Series Plot Agent
+            (temporal data). Returns the generated chart as an HTML image tag string.
+        """,
         positive_examples=[
-            PositiveExample(input="Compare the populations of the 10 largest cities in the world in a bar chart"),
-        ],
-        negative_examples=[
-            NegativeExample(input="Plot the US GDP in a time series using FRED data", 
-                            reason="Use the FRED Data Info Agent to look up FRED time series information first")
-        ],
-    ),
-)
-async def delegate_to_bar_chart_agent(request: str) -> str:
-    state = {"messages": [HumanMessage(content=request)]}
-    config = RunnableConfig(configurable={"thread_id": shortuuid.uuid()})
-    result = await _bar_chart_agent.agent.ainvoke(state, config)
-    return result["messages"][-1].content
-
-
-# delegate_to_time_series_plot_agent
-@tool_spec(
-    args_schema=SubagentRequest,
-    metadata=ToolSpec(
-        primary_function=
-            """
-            Delegate a request to the Time Series Plot Agent which creates time series plots from temporal data.
-            Use this when the user wants to visualize data over time.
-            Returns the generated time series plot as an HTML image tag string with a summary of results
-            displayed above the chart. The HTML string should be rendered verbatim in the frontend.
-            """,
-        positive_examples=[
+            PositiveExample(input="Compare the populations of the 10 largest cities in the world in a bar chart."),
             PositiveExample(input="Plot a time series for the population of Tennessee."),
-            PositiveExample(input="Plot the population of Tennessee using all available data."),
-            PositiveExample(input="Compare the population of Tennessee and Alabama over time in the same plot."),
-            PositiveExample(input="Plot the GDP and population of Tennessee over time as stacked charts."),
+            PositiveExample(input="Compare the population of Tennessee and Alabama over time."),
         ],
         negative_examples=[
             NegativeExample(
                 input="Plot the unemployment report.",
-                reason="Report plots must go to delegate_to_time_series_report_agent, not here.",
-            ),
-            NegativeExample(
-                input="Generate a chart for my GDP report.",
-                reason="Report plots must go to delegate_to_time_series_report_agent, not here.",
+                reason="Report plots must go to delegate_to_time_series_agent, not here.",
             ),
         ],
     ),
 )
-async def delegate_to_time_series_plot_agent(request: str) -> str:
+async def delegate_to_plot_agent(request: str) -> str:
     state = {"messages": [HumanMessage(content=request)]}
-    config = RunnableConfig(configurable={"thread_id": shortuuid.uuid()})
-    result = await _time_series_plot_agent.agent.ainvoke(state, config)
+    config = RunnableConfig(configurable={"thread_id": shortuuid.uuid()}, recursion_limit=50)
+    result = await _plot_agent.agent.ainvoke(state, config)
     return result["messages"][-1].content
 
 
@@ -186,7 +148,7 @@ async def delegate_to_time_series_plot_agent(request: str) -> str:
         negative_examples=[
             NegativeExample(
                 input="Fetch the UNRATE series from FRED.",
-                reason="Use delegate_to_data_fetcher_agent to fetch new data from external sources.",
+                reason="Use delegate_to_time_series_agent to fetch new data from external sources.",
             ),
         ],
     ),
@@ -198,101 +160,42 @@ async def delegate_to_data_info_agent(request: str) -> str:
     return result["messages"][-1].content
 
 
-# delegate_to_data_fetcher_agent
+# delegate_to_time_series_agent
 @tool_spec(
     args_schema=SubagentRequest,
     metadata=ToolSpec(
-        primary_function=
-            """
-            Delegate a request to the Data Fetcher Agent which retrieves data from
-            external data sources via MCP. The agent discovers available MCP tools automatically on launch.
-            Pass the series_id, source, and any date range in the request string.
-            """,
+        primary_function="""
+            Delegate all time series requests to the Time Series Agent, which handles
+            data fetching from external sources and all report operations (create, list,
+            get, plot). Pass the full request including any series IDs, report IDs, or
+            form data already collected.
+        """,
         positive_examples=[
-            PositiveExample(input="Plot the US GDP time series using FRED data."),
             PositiveExample(input="Fetch the UNRATE series from FRED."),
+            PositiveExample(input="List all my time series reports."),
+            PositiveExample(input="Plot the unemployment report."),
+            PositiveExample(input="Create a report from time series IDs abc123, def456."),
         ],
         requires_context=[
-            "A series_id must already be known. Call delegate_to_fred_data_info_search_agent first to find it.",
-        ],
-        negative_examples=[
-            NegativeExample(input="Search for GDP time series in FRED.",
-                            reason="Use delegate_to_fred_data_info_search_agent to find series IDs first."),
-        ],
-        suggests_followup=[
-            "delegate_to_time_series_plot_agent to visualize the returned data.",
-        ],
-    ),
-)
-
-async def delegate_to_data_fetcher_agent(request: str) -> str:
-    state = {"messages": [HumanMessage(content=request)]}
-    config = RunnableConfig(configurable={"thread_id": shortuuid.uuid()})
-    data_fetcher_agent = await DataFetcherAgent.create()
-    result = await data_fetcher_agent.agent.ainvoke(state, config)
-    content = result["messages"][-1].content
-    logger.debug(f"Data Fetcher Agent returned content: {content}")
-    return content
-
-
-# delegate_to_time_series_report_agent
-@tool_spec(
-    args_schema=SubagentRequest,
-    metadata=ToolSpec(
-        primary_function=
-            """
-            Delegate a request to the Time Series Report Agent which creates, retrieves,
-            lists, and plots time series reports. A report groups a set of time series cache IDs
-            under a title and description for later reference.
-            Use after collecting form data for report creation, or directly for list/get/plot requests.
-            IMPORTANT: Always use this agent to plot a report — never delegate report plots to
-            delegate_to_time_series_plot_agent.
-            """,
-        positive_examples=[
-            PositiveExample(input="List all my time series reports."),
-            PositiveExample(input="Show me the report with ID 0c9997f3-bbed-46d4-a8bb-570518b3653e."),
-            PositiveExample(input="What reports do I have?"),
-            PositiveExample(input="Plot the unemployment report."),
-            PositiveExample(input="Plot the report with ID 0c9997f3-bbed-46d4-a8bb-570518b3653e."),
-            PositiveExample(input="Generate a chart for my GDP report."),
+            "For fetching data: a series_id must already be known — search FRED via "
+            "delegate_to_document_agent first if needed.",
+            "For creating a report: call request_human_form with form_type='create_time_series_report' first.",
+            "For plotting without a specific report named: call request_human_form with "
+            "form_type='select_time_series_report' first, then pass the returned report_id.",
         ],
         negative_examples=[
             NegativeExample(
-                input="Plot the unemployment report.",
-                reason="Do NOT route report plots to delegate_to_time_series_plot_agent. Use delegate_to_time_series_report_agent instead.",
+                input="Search for GDP time series in FRED.",
+                reason="Use delegate_to_document_agent to search FRED metadata for series IDs.",
             ),
-        ],
-        requires_context=[
-            "For creating a report: call request_human_form with form_type='create_time_series_report' first.",
-            "For plotting without a specific report named: call request_human_form with form_type='select_time_series_report' first, then pass the returned report_id.",
         ],
     ),
 )
-async def delegate_to_time_series_report_agent(request: str) -> str:
-    from langchain_core.messages import ToolMessage
+async def delegate_to_time_series_agent(request: str) -> str:
     state = {"messages": [HumanMessage(content=request)]}
-    config = RunnableConfig(configurable={"thread_id": shortuuid.uuid()})
-    result = await _time_series_report_agent.agent.ainvoke(state, config)
-
-    raw = result["messages"][-1].content
-    if isinstance(raw, str):
-        final = raw
-    else:
-        final = "\n".join(
-            block.get("text", "")
-            for block in raw
-            if isinstance(block, dict) and block.get("type") == "text"
-        )
-
-    extra_html = [
-        msg.content
-        for msg in result["messages"]
-        if isinstance(msg, ToolMessage) and isinstance(msg.content, str) and "<img" in msg.content and msg.content not in final
-    ]
-    if extra_html:
-        logger.debug(f"delegate_to_time_series_report_agent: appending {len(extra_html)} HTML fragment(s)")
-        return final + "\n\n" + "\n\n".join(extra_html)
-    return final
+    config = RunnableConfig(configurable={"thread_id": shortuuid.uuid()}, recursion_limit=50)
+    result = await _time_series_agent.agent.ainvoke(state, config)
+    return result["messages"][-1].content
 
 
 # request_human_form
@@ -359,10 +262,8 @@ class OrchestratorAgent(ReactAgent):
         tools = [
             request_human_form,
             delegate_to_search_agent,
-            delegate_to_bar_chart_agent,
-            delegate_to_time_series_plot_agent,
-            delegate_to_time_series_report_agent,
-            delegate_to_data_fetcher_agent,
+            delegate_to_plot_agent,
+            delegate_to_time_series_agent,
             delegate_to_data_info_agent,
             delegate_to_document_agent,
         ]
@@ -472,25 +373,27 @@ Document search (code, research library, FRED) — pass the raw user request dir
 delegate_to_document_agent without any pre-processing.
 </documents>
 
-<time_series_reports>
+<time_series>
+Delegate all time series data fetching and report operations to delegate_to_time_series_agent.
+
 When the user wants to create a time series report:
 1. Call request_human_form with form_type: create_time_series_report to collect the title,
    description, comma-separated list of time series cache IDs, and time range from the user.
    If the user's request already contains any of these values, pass them in prefill so the
    form fields are pre-populated. Keys: report_title, report_description, time_series_ids,
    time_range_from (required, YYYY-MM-DD), time_range_to (optional, YYYY-MM-DD).
-2. After the user submits the form, pass the form data as the request to delegate_to_time_series_report_agent.
+2. After the user submits the form, pass the form data as the request to delegate_to_time_series_agent.
 
 When the user wants to PLOT a time series report but does NOT specify which report:
 1. Call request_human_form with form_type: select_time_series_report. This presents the user
    with a searchable list of available reports to pick from.
 2. After the user selects a report, the form data will contain a report_id field.
-   Pass "Plot the report with ID <report_id>" to delegate_to_time_series_report_agent.
+   Pass "Plot the report with ID <report_id>" to delegate_to_time_series_agent.
 
-When the user wants to PLOT a specific report by name or ID, call delegate_to_time_series_report_agent directly.
-When the user wants to list or retrieve a time series report, call delegate_to_time_series_report_agent directly.
-NEVER route a report plot to delegate_to_time_series_plot_agent — report plotting is handled entirely within delegate_to_time_series_report_agent.
-</time_series_reports>
+When the user wants to PLOT a specific report by name or ID, call delegate_to_time_series_agent directly.
+When the user wants to list, retrieve, or fetch time series data, call delegate_to_time_series_agent directly.
+NEVER route a report plot to delegate_to_plot_agent — report plotting is handled within delegate_to_time_series_agent.
+</time_series>
 
 <examples>
 In the following request examples the expected routing to subagent tools by
@@ -510,9 +413,8 @@ Search my research library for the definition of the Carnot Cycle.
 Compare the populations of the 10 largest European cities in a bar chart.
 </input>
 <output>
-1. Retrieve requested data using the appropriate data source tool. If no data source tool is available
-   do a web search for the data.
-2. Pass the data to the appropriate visualization tool.
+1. Retrieve requested data using delegate_to_search_agent if no other data source is available.
+2. Pass the data to delegate_to_plot_agent.
 </output>
 </example>
 
@@ -521,9 +423,10 @@ Compare the populations of the 10 largest European cities in a bar chart.
 Plot the US GDP in a time series using FRED data.
 </input>
 <output>
-1. Call delegate_to_document_agent to search for the FRED series identifier.
-2. Using the series identifier, construct an API request for the data.
-3. Pass the data to the appropriate visualization tool.
+1. Call extract_document_query_from_request to extract the query and any filters from the request.
+2. Search for the time series documentation in the appropriate document store.
+3. Using the data from step 1 construct an API request for the data.
+4. Pass the data to the appropriate visualization tool.
 </output>
 </example>
 
