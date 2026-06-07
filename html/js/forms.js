@@ -263,6 +263,7 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
                 <menu>
                     <button type="button" class="btn" id="cancelFormBtn">Cancel</button>
                     <div style="display:flex;gap:.5rem;">
+                        <button type="button" class="btn danger" id="deleteFormBtn" disabled>Delete</button>
                         <button type="button" class="btn secondary" id="editFormBtn" disabled>Edit</button>
                         <button type="button" class="btn primary" id="submitFormBtn" disabled>Plot Report</button>
                     </div>
@@ -277,6 +278,7 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
         const emptyMsg     = dialog.querySelector("#rp-empty");
         const submitBtn    = dialog.querySelector("#submitFormBtn");
         const editBtn      = dialog.querySelector("#editFormBtn");
+        const deleteBtn    = dialog.querySelector("#deleteFormBtn");
         let selectedId     = null;
         let debounceTimer  = null;
 
@@ -296,6 +298,7 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
                     selectedId = r.report_id;
                     submitBtn.disabled = false;
                     editBtn.disabled = false;
+                    deleteBtn.disabled = false;
                 });
                 tbody.appendChild(tr);
             }
@@ -319,6 +322,7 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
             selectedId = null;
             submitBtn.disabled = true;
             editBtn.disabled = true;
+            deleteBtn.disabled = true;
             debounceTimer = setTimeout(() => fetchReports(searchInput.value.trim()), 250);
         });
 
@@ -428,6 +432,23 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
         };
 
         editBtn.addEventListener("click", () => { if (selectedId) openEditDialog(selectedId); });
+
+        deleteBtn.addEventListener("click", async () => {
+            if (!selectedId) return;
+            if (!confirm("Delete this report? This cannot be undone.")) return;
+            try {
+                const resp = await fetch(`/api/reports/${selectedId}`, { method: "DELETE" });
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            } catch (e) {
+                alert(`Failed to delete report: ${e.message}`);
+                return;
+            }
+            selectedId = null;
+            submitBtn.disabled = true;
+            editBtn.disabled = true;
+            deleteBtn.disabled = true;
+            fetchReports(searchInput.value.trim());
+        });
 
         requestAnimationFrame(() => searchInput.focus());
 

@@ -33,6 +33,7 @@ class ChromaDocumentLoader(ABC):
         self._db_name = db_name
         self._collection_name = collection_name
         self._db_path = os.path.join(db_path, db_name)
+        os.makedirs(self._db_path, exist_ok=True)
         self._embedding_function = OpenAIEmbeddings(
             embedding_ctx_length=2000,
             chunk_size=100

@@ -130,6 +130,7 @@ class TimeSeriesReportAgent(ReactAgent):
             TimeSeriesReportAgent.create_time_series_report,
             TimeSeriesReportAgent.get_time_series_report,
             TimeSeriesReportAgent.list_time_series_reports,
+            TimeSeriesReportAgent.delete_time_series_report,
             plot_time_series_report,
         ]
         super().__init__(tools, "time_series_report_tool_node", mcp_tools=mcp_tools)
@@ -148,6 +149,9 @@ class TimeSeriesReportAgent(ReactAgent):
             Use list_time_series_reports when the user wants to see all existing reports.
 
             Use plot_time_series_report when the user wants to plot or visualize a report.
+
+            Use delete_time_series_report when the user wants to delete a report. A report_id must
+            be known — call list_time_series_reports first if the user only provides a title.
 
             Always respond in markdown. For created reports, confirm the title and report ID.
             For retrieved reports, format the details clearly including each series native_id, title, and source.
@@ -325,3 +329,26 @@ class TimeSeriesReportAgent(ReactAgent):
             "|-----------|-------|------|\n"
             f"{rows}"
         )
+
+
+    @staticmethod
+    @tool_spec(
+        args_schema=GetReportInput,
+        metadata=ToolSpec(
+            primary_function="""
+                Delete a time series report by its UUID.
+                Returns a confirmation message on success or an error if the report is not found.
+                If the user provides a title rather than an ID, call list_time_series_reports first
+                to find the matching report_id.
+            """,
+            positive_examples=[
+                PositiveExample(input="Delete report 24c23e96-5e97-4c3d-bb4a-c85116839d36."),
+                PositiveExample(input="Delete the GDP Overview report."),
+            ],
+        ),
+    )
+    def delete_time_series_report(report_id: str) -> str:
+        deleted = ReportCache._delete_report_sync(report_id)
+        if deleted:
+            return f"Report `{report_id}` deleted successfully."
+        return f"No report found with ID `{report_id}`."

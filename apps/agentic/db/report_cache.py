@@ -6,7 +6,7 @@ import uuid
 from datetime import date
 from typing import Any, Mapping, Sequence
 
-from sqlalchemy import MetaData, Table, create_engine, select, text, update
+from sqlalchemy import MetaData, Table, create_engine, delete, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import Engine
 
@@ -216,6 +216,24 @@ class ReportCache:
             report_id, report_title, report_description,
             time_series_info, time_range_from, time_range_to, tags,
         )
+
+
+    @classmethod
+    def _delete_report_sync(cls, report_id: str) -> bool:
+        engine = cls._engine_or_raise()
+        t = cls._table_or_raise()
+        stmt = delete(t).where(t.c.report_id == uuid.UUID(report_id))
+        with engine.begin() as conn:
+            result = conn.execute(stmt)
+        deleted = result.rowcount > 0
+        if deleted:
+            logger.debug(f"ReportCache: deleted report {report_id}")
+        return deleted
+
+
+    @classmethod
+    async def delete_report(cls, report_id: str) -> bool:
+        return await asyncio.to_thread(cls._delete_report_sync, report_id)
 
 
     @classmethod

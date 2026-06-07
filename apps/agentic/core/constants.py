@@ -28,6 +28,11 @@ FRED_DB_NAME = "fred"
 FRED_COLLECTION_NAME = "fred"
 FRED_LOCAL_PATH = "./clients/fred"
 
+# ETF document store constants
+ETF_DB_NAME = "etf"
+ETF_COLLECTION_NAME = "etf-info"
+ETF_LOCAL_PATH = "./market_data/ETFs"
+
 # MCP server
 MCP_URL = "http://localhost:8080/sse"
 

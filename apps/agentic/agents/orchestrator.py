@@ -393,6 +393,12 @@ When the user wants to PLOT a time series report but does NOT specify which repo
 When the user wants to PLOT a specific report by name or ID, call delegate_to_time_series_agent directly.
 When the user wants to list, retrieve, or fetch time series data, call delegate_to_time_series_agent directly.
 NEVER route a report plot to delegate_to_plot_agent — report plotting is handled within delegate_to_time_series_agent.
+
+When the user wants to DELETE a time series report but does NOT specify which report:
+1. Call request_human_form with form_type: select_time_series_report to let the user pick.
+2. After the user selects a report, pass "Delete the report with ID <report_id>" to delegate_to_time_series_agent.
+
+When the user wants to DELETE a specific report by name or ID, call delegate_to_time_series_agent directly.
 </time_series>
 
 <examples>

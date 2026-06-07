@@ -462,6 +462,13 @@ async def update_report(report_id: str, req: UpdateReportPayload):
     return updated
 
 
+@app.delete("/api/reports/{report_id}", status_code=204)
+async def delete_report(report_id: str):
+    deleted = await ReportCache.delete_report(report_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+
 @app.get("/api/reports")
 async def list_reports(q: str = Query("", description="Filter by title, tags, or description")):
     reports = await ReportCache.list_reports()
