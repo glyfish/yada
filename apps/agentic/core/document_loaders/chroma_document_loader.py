@@ -120,9 +120,10 @@ class ChromaDocumentLoader(ABC):
 
 
     @abstractmethod
-    async def load_all_documents(self, base_path: str, **kwargs):
+    async def load_all_documents(self, **kwargs):
         """
-        load all of the documents from the base path.
+        Load all documents into the ChromaDB collection.
+        Subclasses declare whatever parameters their loading strategy requires.
         """
 
         raise NotImplementedError("Subclasses must implement the load_all_documents method to read files.")

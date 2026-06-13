@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 from typing import Literal, Dict, Any, Optional
 
 from apps.agentic.core.tool_spec import PositiveExample, NegativeExample, ToolSpec, tool_spec
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.graph import StateGraph, START, END
@@ -229,8 +229,8 @@ def request_human_form(form_type: str) -> str:
         primary_function="""
             Delegate all document-related requests to the Document Agent, which handles
             both document loading and document search operations.
-            Use for: loading research documents, GitHub repos, or PDFs; searching code,
-            research library, or FRED metadata.
+            Use for: loading research documents, GitHub repos, PDFs, or ETF data;
+            searching code, research library, FRED metadata, or ETF/fund information.
         """,
         positive_examples=[
             PositiveExample(input="Load a research document into the library."),
@@ -238,6 +238,9 @@ def request_human_form(form_type: str) -> str:
             PositiveExample(input="Search my research library for the definition of the Carnot Cycle."),
             PositiveExample(input="What time series are available for GDP in the FRED data?"),
             PositiveExample(input="Find MIDI output handling in my code."),
+            PositiveExample(input="Load ETF data for VanEck into the database."),
+            PositiveExample(input="Update the ETF database."),
+            PositiveExample(input="What VanEck fixed income ETFs are available?"),
         ],
         requires_context=[
             "For load_research_document, load_github_repo, and load_pdf_document: "
@@ -273,13 +276,18 @@ class OrchestratorAgent(ReactAgent):
 
     def _create_agent(self):
         """
-        Override the default ReAct graph to inject the human_input node.
+        Override the default ReAct graph to inject the human_input node and
+        a passthrough node.
 
         When the LLM calls request_human_form the conditional edge routes
         to human_input instead of the tool node. After the user submits the
         form and the graph resumes, human_input injects the validated form
         data as a HumanMessage and routes back to the model node, which then
         calls delegate_to_document_loader_agent to complete the action.
+
+        When the model produces no further tool calls, the passthrough node
+        returns the last ToolMessage content verbatim as the final AIMessage,
+        preventing the LLM from reformatting or wrapping delegate output.
         """
         all_tools = self._node.tools
 
@@ -293,23 +301,31 @@ class OrchestratorAgent(ReactAgent):
             last = state["messages"][-1]
             tool_calls = getattr(last, "tool_calls", None)
             if not tool_calls:
-                return END
+                return "passthrough"
             if any(tc["name"] == "request_human_form" for tc in tool_calls):
                 return "human_input"
             return "tools"
+
+        def passthrough(state: WorkerState):
+            for msg in reversed(state["messages"]):
+                if isinstance(msg, ToolMessage):
+                    return {"messages": [AIMessage(content=msg.content)]}
+            return {}
 
         graph = (
             StateGraph(WorkerState)
             .add_node("model", self._node.model_runner)
             .add_node("tools", tool_node)
             .add_node("human_input", HumanInputNode())
+            .add_node("passthrough", passthrough)
             .add_edge(START, "model")
             .add_edge("tools", "model")
             .add_edge("human_input", "model")
+            .add_edge("passthrough", END)
             .add_conditional_edges(
                 "model",
                 route_model,
-                {"tools": "tools", "human_input": "human_input", END: END},
+                {"tools": "tools", "human_input": "human_input", "passthrough": "passthrough"},
             )
         )
         return graph.compile(checkpointer=checkpointer)
@@ -367,9 +383,12 @@ form data as the request to delegate_to_document_agent:
    - Loading a research note → form_type: load_research_document
    - Loading a GitHub repository → form_type: load_github_repo
    - Loading a PDF document → form_type: load_pdf_document
-Exception: load_all_github_repos requires no form — pass the request directly to delegate_to_document_agent.
+No form required — pass request directly to delegate_to_document_agent:
+   - load_all_github_repos
+   - load_etf_data (load ETF data into the store)
+   - reload_etf_data (wipe and reload the ETF store — agent will ask for confirmation)
 
-Document search (code, research library, FRED) — pass the raw user request directly to
+Document search (code, research library, FRED, ETF/funds) — pass the raw user request directly to
 delegate_to_document_agent without any pre-processing.
 </documents>
 

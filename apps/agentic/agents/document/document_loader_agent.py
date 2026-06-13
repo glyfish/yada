@@ -4,6 +4,7 @@ import os
 import requests
 import yaml
 from pathlib import Path
+from typing import Optional
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field
@@ -14,6 +15,7 @@ from apps.agentic.core.tool_spec import PositiveExample, ToolSpec, tool_spec
 from apps.agentic.core.document_loaders.github_document_loader import GitHubChromaDocumentLoader
 from apps.agentic.core.document_loaders.research_library_document_loader import ResearchLibraryChromaDocumentLoader
 from apps.agentic.core.document_loaders.document_library_loader import DocumentLibraryLoader
+from apps.agentic.core.document_loaders.etf.finance_database_loader import FinanceDatabaseLoader
 from apps.agentic.core.constants import (
     GITHUB_API,
     GITHUB_ACCOUNTS,
@@ -52,6 +54,13 @@ class LoadPDFDocumentInput(BaseModel):
     published_date: str = Field(..., description="Publication date.")
     topic: str = Field(..., description="Topic or subject area.")
     shelf: str = Field(..., description="Library shelf to assign the document to.")
+
+
+class LoadETFDataInput(BaseModel):
+    family: Optional[str] = Field(default=None, description="Fund family to load (e.g. 'VanEck Asset Management'). Omit to load all families.")
+    category_group: Optional[str] = Field(default=None, description="Asset class to load (e.g. 'Equities'). Omit to load all asset classes.")
+    category: Optional[str] = Field(default=None, description="Category to load (e.g. 'High Yield Bonds'). Omit to load all categories.")
+    exchange: Optional[str] = Field(default=None, description="Exchange code to load (e.g. 'PCX'). Omit to load all exchanges.")
 
 
 def _append_research_document_metadata(meta_data: dict) -> None:
@@ -115,6 +124,8 @@ class DocumentLoaderAgent(ReactAgent):
             DocumentLoaderAgent.load_github_repo,
             DocumentLoaderAgent.load_all_github_repos,
             DocumentLoaderAgent.load_pdf_document,
+            DocumentLoaderAgent.load_etf_data,
+            DocumentLoaderAgent.reload_etf_data,
         ]
         super().__init__(tools, "document_loader_tool_node", mcp_tools=mcp_tools)
 
@@ -130,6 +141,14 @@ class DocumentLoaderAgent(ReactAgent):
             - Use load_github_repo to index a single GitHub repository.
             - Use load_all_github_repos to index all configured GitHub repositories.
             - Use load_pdf_document for PDF documents.
+            - Use load_etf_data to add ETF data from FinanceDatabase into the ETF store.
+              Optional filters: family, category_group, category, exchange.
+              Omitting all filters loads the full universe (~36K funds, ~10 min).
+            - Use reload_etf_data to wipe the ETF collection and reload from FinanceDatabase.
+              CRITICAL: Before calling reload_etf_data you MUST ask the user to confirm.
+              Say exactly: "This will wipe the entire ETF collection and reload from
+              FinanceDatabase. Reply yes to proceed." Do not call reload_etf_data until
+              the user has replied with an explicit "yes".
             </instructions>
             """
 
@@ -301,3 +320,64 @@ class DocumentLoaderAgent(ReactAgent):
         await doc_loader.load_document(pdf_path, meta_data=meta_data)
 
         return f"Loaded PDF document: {title}."
+
+
+    @staticmethod
+    @tool_spec(
+        args_schema=LoadETFDataInput,
+        metadata=ToolSpec(
+            primary_function="""
+            Load ETF data from FinanceDatabase into the ETF ChromaDB store.
+            All filter arguments are optional; omitting them loads the full universe (~36K funds).
+            """,
+            positive_examples=[
+                PositiveExample(input="Load ETF data for VanEck Asset Management."),
+                PositiveExample(input="Load all ETF data into the store."),
+                PositiveExample(input="Load Fixed Income ETFs on the PCX exchange."),
+            ],
+        ),
+    )
+    async def load_etf_data(
+        family: Optional[str] = None,
+        category_group: Optional[str] = None,
+        category: Optional[str] = None,
+        exchange: Optional[str] = None,
+    ) -> str:
+        loader = FinanceDatabaseLoader()
+        await loader.load_all_documents(
+            family=family,
+            category_group=category_group,
+            category=category,
+            exchange=exchange,
+        )
+        return "ETF data loaded successfully."
+
+
+    @staticmethod
+    @tool_spec(
+        args_schema=LoadETFDataInput,
+        metadata=ToolSpec(
+            primary_function="""
+            Wipe the existing ETF ChromaDB collection and reload from FinanceDatabase.
+            IMPORTANT: only call this tool after the user has explicitly confirmed with "yes".
+            """,
+            positive_examples=[
+                PositiveExample(input="Reload all ETF data. yes"),
+                PositiveExample(input="Wipe and reload the ETF store for VanEck. yes"),
+            ],
+        ),
+    )
+    async def reload_etf_data(
+        family: Optional[str] = None,
+        category_group: Optional[str] = None,
+        category: Optional[str] = None,
+        exchange: Optional[str] = None,
+    ) -> str:
+        loader = FinanceDatabaseLoader()
+        await loader.reload_all_documents(
+            family=family,
+            category_group=category_group,
+            category=category,
+            exchange=exchange,
+        )
+        return "ETF collection wiped and reloaded successfully."

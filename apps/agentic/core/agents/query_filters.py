@@ -72,6 +72,12 @@ QUAL_SERIES_ID     = re.compile(r'\bseries_id:\s*(?:"([^"]+)"|([^\s]+))', re.I)
 QUAL_POPULARITY    = re.compile(r"\bpopularity:\s*([<>]=?)?\s*(\d+)\b", re.I)
 QUAL_LAST_UPDATED  = re.compile(r"\blast_updated:\s*(after|before)?\s*(\d{4}-\d{2}-\d{2})\b", re.I)
 
+# ETF qualifiers
+QUAL_FAMILY         = re.compile(r'\bfamily:\s*(?:"([^"]+)"|([^\s]+))', re.I)
+QUAL_CATEGORY_GROUP = re.compile(r'\bcategory_group:\s*(?:"([^"]+)"|([^\s]+))', re.I)
+QUAL_ETF_CATEGORY   = re.compile(r'\bcategory:\s*(?:"([^"]+)"|([^\s]+))', re.I)
+QUAL_EXCHANGE       = re.compile(r'\bexchange:\s*(?:"([^"]+)"|([^\s]+))', re.I)
+
 
 # ---------- Helpers ----------
 
@@ -232,6 +238,27 @@ def build_filter_and_query(q: str) -> Tuple[str, Optional[Dict[str, Any]]]:
         else:
             conditions.append({"last_updated": date_val})
         q = QUAL_LAST_UPDATED.sub("", q).strip()
+
+    # --- ETF qualifiers ---
+    m = QUAL_FAMILY.search(q)
+    if m:
+        conditions.append({"family": _pick(m)})
+        q = QUAL_FAMILY.sub("", q).strip()
+
+    m = QUAL_CATEGORY_GROUP.search(q)
+    if m:
+        conditions.append({"category_group": _pick(m)})
+        q = QUAL_CATEGORY_GROUP.sub("", q).strip()
+
+    m = QUAL_ETF_CATEGORY.search(q)
+    if m:
+        conditions.append({"category": _pick(m)})
+        q = QUAL_ETF_CATEGORY.sub("", q).strip()
+
+    m = QUAL_EXCHANGE.search(q)
+    if m:
+        conditions.append({"exchange": _pick(m)})
+        q = QUAL_EXCHANGE.sub("", q).strip()
 
     if not conditions:
         where = None

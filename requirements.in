@@ -35,3 +35,5 @@ mcp
 langchain-mcp-adapters
 pip-tools
 psycopg2
+financedatabase
+lxml
