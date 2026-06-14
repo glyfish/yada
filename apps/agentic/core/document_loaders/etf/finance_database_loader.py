@@ -35,12 +35,23 @@ class FinanceDatabaseLoader(ChromaDocumentLoader):
         collection = getattr(self._vectorstore, "_collection", None)
         if collection is None:
             return 0
-        result = collection.get(include=[])
-        ids = result.get("ids") or []
-        if ids:
-            collection.delete(ids=ids)
-            logger.info(f"FinanceDatabaseLoader: deleted {len(ids)} documents from '{self.collection_name}'")
-        return len(ids)
+        total = collection.count()
+        if total == 0:
+            return 0
+        BATCH = 5000
+        all_ids: list[str] = []
+        offset = 0
+        while offset < total:
+            result = collection.get(limit=BATCH, offset=offset, include=[])
+            batch_ids: list[str] = result.get("ids") or []
+            if not batch_ids:
+                break
+            all_ids.extend(batch_ids)
+            offset += len(batch_ids)
+        if all_ids:
+            collection.delete(ids=all_ids)
+        logger.info(f"FinanceDatabaseLoader: deleted {len(all_ids)} documents from '{self.collection_name}'")
+        return len(all_ids)
 
     @staticmethod
     def _str(val) -> str:
@@ -122,15 +133,21 @@ class FinanceDatabaseLoader(ChromaDocumentLoader):
         logger.info(f"FinanceDatabaseLoader: {len(df)} ETFs downloaded, building documents...")
 
         documents = self._build_documents(df)
-        logger.info(f"FinanceDatabaseLoader: writing {len(documents)} documents to ChromaDB...")
+        total = len(documents)
+        logger.info(f"FinanceDatabaseLoader: {total} documents built ({len(df) - total} skipped), writing to ChromaDB...")
 
         BATCH = 128
-        for i in range(0, len(documents), BATCH):
+        LOG_EVERY = 2000
+        written = 0
+        for i in range(0, total, BATCH):
             self.vectorstore.add_documents(documents[i : i + BATCH])
+            written += len(documents[i : i + BATCH])
+            if written % LOG_EVERY < BATCH or written == total:
+                logger.info(f"FinanceDatabaseLoader: {written}/{total} documents written...")
 
         logger.info(
-            f"FinanceDatabaseLoader: loaded {len(documents)} ETF documents "
-            f"into collection '{self.collection_name}'."
+            f"FinanceDatabaseLoader: done — {total} ETF documents "
+            f"in collection '{self.collection_name}'."
         )
 
     async def reload_all_documents(
@@ -142,8 +159,9 @@ class FinanceDatabaseLoader(ChromaDocumentLoader):
         **kwargs,
     ):
         """Wipe the collection then reload from FinanceDatabase."""
+        logger.info("FinanceDatabaseLoader: starting reload — deleting existing documents...")
         deleted = self.delete_all()
-        logger.info(f"FinanceDatabaseLoader: cleared {deleted} existing documents")
+        logger.info(f"FinanceDatabaseLoader: {deleted} documents deleted, starting ingest...")
         await self.load_all_documents(
             family=family,
             category_group=category_group,
@@ -151,6 +169,7 @@ class FinanceDatabaseLoader(ChromaDocumentLoader):
             exchange=exchange,
             **kwargs,
         )
+        logger.info("FinanceDatabaseLoader: reload complete.")
 
     async def load_document(self, path: str, **kwargs):
         raise NotImplementedError(

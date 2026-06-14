@@ -77,6 +77,16 @@ class SubagentRequest(BaseModel):
         suggests_followup=[
             "delegate_to_plot_agent if the result contains data to visualize",
         ],
+        negative_examples=[
+            NegativeExample(
+                input="What VanEck ETFs focus on dividend growth?",
+                reason="ETF and mutual fund queries go to delegate_to_document_agent, not web search.",
+            ),
+            NegativeExample(
+                input="What bond ETFs are available from iShares?",
+                reason="ETF queries go to delegate_to_document_agent which has a local ETF store.",
+            ),
+        ],
     ),
 )
 async def delegate_to_search_agent(request: str) -> str:
@@ -448,10 +458,27 @@ Compare the populations of the 10 largest European cities in a bar chart.
 Plot the US GDP in a time series using FRED data.
 </input>
 <output>
-1. Call extract_document_query_from_request to extract the query and any filters from the request.
-2. Search for the time series documentation in the appropriate document store.
-3. Using the data from step 1 construct an API request for the data.
-4. Pass the data to the appropriate visualization tool.
+1. Call delegate_to_document_agent to search for the GDP series ID in the FRED document store.
+2. Call delegate_to_time_series_agent with the series ID to fetch the data.
+3. Pass the data to delegate_to_plot_agent.
+</output>
+</example>
+
+<example>
+<input>
+What VanEck ETFs focus on dividend growth?
+</input>
+<output>
+1. Call delegate_to_document_agent with the user's request. The ETF store is local — do NOT use web search.
+</output>
+</example>
+
+<example>
+<input>
+What bond ETFs are available from iShares?
+</input>
+<output>
+1. Call delegate_to_document_agent with the user's request. ETF/mutual fund queries always go to the document agent.
 </output>
 </example>
 

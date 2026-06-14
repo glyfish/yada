@@ -7,30 +7,33 @@ from apps.agentic.core.agents.chroma_rag_agent import ChromaRAGAgent
 from apps.agentic.core.agents.messages import WorkerState
 from apps.agentic.core.checkpointer import checkpointer
 from apps.agentic.core.document_loaders.etf.finance_database_loader import FinanceDatabaseLoader
+from apps.agentic.core.document_loaders.etf.exchange_metadata import EXCHANGES, CURRENCIES
 from lib.logger import get_logger
 
 logger = get_logger("YADA")
+
+def _fmt_exchange(code: str) -> str:
+    if code == "N/A":
+        return code
+    info = EXCHANGES.get(code)
+    if info:
+        return f"{code} — {info['name']} ({info['location']})"
+    return code
+
+
+def _fmt_currency(code: str) -> str:
+    if code == "N/A":
+        return code
+    info = CURRENCIES.get(code)
+    if info:
+        return f"{code} — {info['name']} ({info['country']})"
+    return code
 
 
 class ETFDataInfoAgent(ChromaRAGAgent):
     """
     Agent for searching ETF and mutual fund information stored in ChromaDB.
     Data is sourced from the FinanceDatabase package (~36K ETFs).
-    """
-
-    QUERY_FILTERS = """
-        **etf_data_info Query Filters**
-        The agent supports the following query filters to refine searches:
-        - family:"..."                 Fund family name (use quotes for multi-word values)
-        - category_group:"..."         Broad asset class (e.g. Equities, Fixed Income)
-        - category:"..."               Specific category (e.g. "High Yield Bonds")
-        - exchange:<code>              Exchange code (e.g. PCX, NMS, ASX)
-
-        **Example Queries Using Filters**
-        - family:"VanEck Asset Management" What international equity ETFs are available?
-        - category_group:"Fixed Income" What bond ETFs focus on high yield?
-        - category:"Frontier Markets" Show ETFs in frontier markets.
-        - exchange:PCX What ETFs trade on the PCX exchange?
     """
 
     @classmethod
@@ -114,8 +117,8 @@ class ETFDataInfoAgent(ChromaRAGAgent):
                 out.append(f"- **{row['ticker']}** — {row['name']}")
                 out.append(f"  - Asset Class: {row['category_group']}")
                 out.append(f"  - Category: {row['category']}")
-                out.append(f"  - Exchange: {row['exchange']}")
-                out.append(f"  - Currency: {row['currency']}")
+                out.append(f"  - Exchange: {_fmt_exchange(row['exchange'])}")
+                out.append(f"  - Currency: {_fmt_currency(row['currency'])}")
                 out.append(f"  - ISIN: {row['isin']}")
 
         return {"messages": [AIMessage(content="\n".join(out))]}

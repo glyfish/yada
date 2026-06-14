@@ -9,6 +9,8 @@ from pathlib import Path
 
 from apps.agentic.core.agents.react_agent import ReactAgent
 from apps.agentic.core.constants import GITHUB_LOCAL_PATH, DB_PATH
+from apps.agentic.core.document_loaders.etf.finance_database_loader import FinanceDatabaseLoader
+from apps.agentic.core.document_loaders.etf.exchange_metadata import EXCHANGES, CURRENCIES
 from apps.agentic.core.document_loaders.research_library_document_loader import (
     ResearchLibraryChromaDocumentLoader,
 )
@@ -80,6 +82,20 @@ class ResearchLibraryMetadataListInput(BaseModel):
         default=None,
         description="Filename or path after which to start the listing (exclusive).",
     )
+
+class ETFMetadataFieldInput(BaseModel):
+    field: str = Field(
+        ...,
+        description="""
+ETF metadata field to list distinct values for. Must be one of:
+'exchange' — exchange codes with full name and country,
+'currency' — currency codes with full name and country,
+'family' — fund family names,
+'category_group' — broad asset classes,
+'category' — specific fund categories.
+""",
+    )
+
 
 class ResearchLibraryTitleQueryInput(BaseModel):
     """Schema for filtering research library titles by metadata."""
@@ -170,6 +186,7 @@ class DataInfoAgent(ReactAgent):
             DataInfoAgent.filenames_for_repository,
             DataInfoAgent.research_library_metadata_summary,
             DataInfoAgent.research_library_titles_by_metadata,
+            DataInfoAgent.etf_metadata_values,
         ]
         tool_node_name = "document_info_tool_node"
 
@@ -181,7 +198,7 @@ class DataInfoAgent(ReactAgent):
         Create the prompt template for the document library agent.
         """
     
-        system_prompt = f"""
+        system_prompt = """
         <instructions>
         You are an expert in retrieving information about the contents of documents and data available
         in all data stores. The tools allow you to:
@@ -194,23 +211,9 @@ class DataInfoAgent(ReactAgent):
         - Filter research note titles using author/topic/shelf metadata.
         - Summarize metadata for PDF documents, including filename, title, authors, published date, topic, and shelf.
         - Filter PDF document titles using author/topic/shelf metadata.
+        - List distinct ETF metadata values for exchange, currency, family, category_group, or category fields.
         Call the appropriate tool when the user asks about any of these data sources.
-
-        You also have access to descriptions of the query filters that can be used to
-        refine searches in the document stores. If the user asks for information about
-        the query filters use the following descriptions to answer their question. Only respond
-        with information about the query filters, usage examples for the filters
-        and which agents they apply to. Do not make a request to the document agents for a response.
         </instructions>
-    
-
-        {CodeRepoAgent.QUERY_FILTERS}   
-
-        {FredDataInfoAgent.QUERY_FILTERS}
-
-        {ResearchLibraryAgent.QUERY_FILTERS}
-
-        {PDFDocumentLibraryAgent.QUERY_FILTERS}
         """
 
         return ChatPromptTemplate.from_messages([
@@ -405,6 +408,69 @@ class DataInfoAgent(ReactAgent):
             }
             for item in filtered
         ]
+
+
+    @staticmethod
+    def _etf_distinct_values(field: str, db_path: str = DB_PATH) -> list[str]:
+        loader = FinanceDatabaseLoader(db_path=db_path)
+        collection = getattr(loader.vectorstore, "_collection", None)
+        if collection is None:
+            return []
+        total = collection.count()
+        if total == 0:
+            return []
+        distinct: set[str] = set()
+        BATCH = 5000
+        for offset in range(0, total, BATCH):
+            result = collection.get(limit=BATCH, offset=offset, include=["metadatas"])
+            for meta in result.get("metadatas") or []:
+                val = (meta or {}).get(field)
+                if val:
+                    distinct.add(val)
+        return sorted(distinct)
+
+
+    @staticmethod
+    @tool_spec(
+        args_schema=ETFMetadataFieldInput,
+        metadata=ToolSpec(
+            primary_function=
+            """
+            Return distinct metadata values for a single ETF field.
+            Supports: 'exchange' (with full name and country), 'currency' (with full name and country),
+            'family' (fund family names), 'category_group' (broad asset classes), 'category' (fund categories).
+            """,
+            positive_examples=[
+                PositiveExample(input="What exchanges are available in the ETF store?"),
+                PositiveExample(input="What currencies are used in the ETF database?"),
+                PositiveExample(input="List all fund families in the ETF store."),
+                PositiveExample(input="What category groups are available for ETFs?"),
+                PositiveExample(input="What ETF categories are in the database?"),
+            ],
+        ),
+    )
+    def etf_metadata_values(field: str) -> str:
+        VALID = {"exchange", "currency", "family", "category_group", "category"}
+        if field not in VALID:
+            return f"Invalid field '{field}'. Must be one of: {', '.join(sorted(VALID))}."
+
+        values = DataInfoAgent._etf_distinct_values(field)
+        if not values:
+            return f"No values found for field '{field}'."
+
+        lines = [f"**ETF {field} values ({len(values)} distinct):**", ""]
+        for code in values:
+            if field == "exchange":
+                info = EXCHANGES.get(code)
+                label = f"{info['name']} ({info['location']})" if info else ""
+                lines.append(f"- {code}" + (f" — {label}" if label else ""))
+            elif field == "currency":
+                info = CURRENCIES.get(code)
+                label = f"{info['name']} ({info['country']})" if info else ""
+                lines.append(f"- {code}" + (f" — {label}" if label else ""))
+            else:
+                lines.append(f"- {code}")
+        return "\n".join(lines)
 
 
     @staticmethod

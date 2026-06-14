@@ -23,15 +23,14 @@ from lib.logger import get_logger
 logger = get_logger("YADA")
 
 
-def _normalize_chroma_filter(query: Dict[str, Any]) -> Dict[str, Any]:
+def _normalize_chroma_filter(query: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     """
-    Ensure a ChromaDB where-filter is valid. A flat dict with multiple keys
-    is not accepted by ChromaDB — it requires a logical operator ($and/$or).
-    This wraps any such flat dict in $and so the filter works regardless of
-    how the caller constructed it.
+    Ensure a ChromaDB where-filter is valid. Returns None when query is empty
+    so the caller can omit the filter entirely (ChromaDB rejects an empty where dict).
+    Wraps flat multi-key dicts in $and (ChromaDB 1.0.x requires exactly one top-level operator).
     """
     if not query:
-        return query
+        return None
     if any(k.startswith("$") for k in query):
         return query
     if len(query) > 1:
@@ -47,7 +46,7 @@ class DocumentGrade(BaseModel):
 class ChromaRAGAgent(ABC):
 
     def __init__(self, retriever_tool_name: str, retriever_tool_description: str, document_prompt: PromptTemplate,
-                 doc_loader: ChromaDocumentLoader, query: Dict[str, Any]={}, retriever_k=8, retriever_fetch_k=40,
+                 doc_loader: ChromaDocumentLoader, query: Optional[Dict[str, Any]] = None, retriever_k=8, retriever_fetch_k=40,
                  score_threshold: Optional[float]=RAG_SCORE_THRESHOLD):
         self.retriever_tool_name = retriever_tool_name
         self.retriever_tool_description = retriever_tool_description
@@ -57,7 +56,9 @@ class ChromaRAGAgent(ABC):
         self._doc_loader = doc_loader
 
         normalized_query = _normalize_chroma_filter(query)
-        search_kwargs = {"k": retriever_k, "fetch_k": retriever_fetch_k, "filter": normalized_query}
+        search_kwargs: dict = {"k": retriever_k, "fetch_k": retriever_fetch_k}
+        if normalized_query is not None:
+            search_kwargs["filter"] = normalized_query
         if score_threshold is not None:
             search_kwargs["score_threshold"] = score_threshold
 

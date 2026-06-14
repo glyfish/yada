@@ -18,28 +18,6 @@ class FredDataInfoAgent(ChromaRAGAgent):
     website.    
     """
 
-    QUERY_FILTERS =  """
-        **fred_data_info Query Filters**
-        The agent supports the following query filters to refine searches:
-        - category_id:<n>                  Exact category ID match
-        - category_name:"..."              Category name (use quotes for multi-word)
-        - series_id:<id>                   Exact series ID match
-        - popularity:<n>                   Exact popularity score
-        - popularity:>n | >=n | <n | <=n   Popularity comparison
-        - last_updated:YYYY-MM-DD          Exact date match
-        - last_updated:after YYYY-MM-DD    Updated after date
-        - last_updated:before YYYY-MM-DD   Updated before date
-
-        **Example Queries Using Filter**
-        - popularity:>40 What time series are available for Commodities in the FRED data?
-        - category_name:"Farm Products" What price indexes are in FRED?
-        - series_id:WPU01 What are the FRED series details?
-        - category_id:33528 What are the FRED series details?
-        - popularity:<50 last_updated:after 2025-01-01 What time series are available for 
-            Commodities in the FRED data??
-        - category_name:"Final Demand" popularity:>10 What FRED PPI series are available?
-    """
-
     @classmethod
     async def create(cls, query=None) -> "FredDataInfoAgent":
         return cls(query)

@@ -113,4 +113,10 @@ def agent_llm_model(**kwargs):
 def scoring_llm_model(**kwargs):
     provider = os.getenv("LLM_MODEL_PROVIDER", "openai")
     model = os.getenv("SCORING_LLM_MODEL", "gpt-4.1-mini")
-    return build_llm(provider=provider, model=model, **kwargs)  
+    return build_llm(provider=provider, model=model, **kwargs)
+
+
+def filter_llm_model(**kwargs):
+    provider = os.getenv("LLM_MODEL_PROVIDER", "openai")
+    model = os.getenv("FILTER_LLM_MODEL", os.getenv("SCORING_LLM_MODEL", "gpt-4.1-mini"))
+    return build_llm(provider=provider, model=model, **kwargs)
