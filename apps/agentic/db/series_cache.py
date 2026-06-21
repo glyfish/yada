@@ -17,6 +17,7 @@ _DEFAULT_CACHE_TTL_DAYS = 30
 _SOURCE_TTL_DAYS: dict[str, int] = {
     "fred": 30,
     "alpaca": 1,
+    "tiingo": 1,
 }
 _SOURCE_FREQUENCY_TTL_DAYS: dict[tuple[str, str], int] = {
     ("alpaca", "1Min"): 1,
