@@ -38,20 +38,10 @@ class FinanceDatabaseLoader(ChromaDocumentLoader):
         total = collection.count()
         if total == 0:
             return 0
-        BATCH = 5000
-        all_ids: list[str] = []
-        offset = 0
-        while offset < total:
-            result = collection.get(limit=BATCH, offset=offset, include=[])
-            batch_ids: list[str] = result.get("ids") or []
-            if not batch_ids:
-                break
-            all_ids.extend(batch_ids)
-            offset += len(batch_ids)
-        if all_ids:
-            collection.delete(ids=all_ids)
-        logger.info(f"FinanceDatabaseLoader: deleted {len(all_ids)} documents from '{self.collection_name}'")
-        return len(all_ids)
+        self._vectorstore.reset_collection()
+        logger.info(f"FinanceDatabaseLoader: deleted {total} documents from '{self.collection_name}'")
+        return total
+
 
     @staticmethod
     def _str(val) -> str:
@@ -60,6 +50,7 @@ class FinanceDatabaseLoader(ChromaDocumentLoader):
             return ""
         s = str(val).strip()
         return "" if s == "nan" else s
+
 
     def _build_documents(self, df) -> list[Document]:
         documents: list[Document] = []
@@ -104,6 +95,7 @@ class FinanceDatabaseLoader(ChromaDocumentLoader):
                 },
             ))
         return documents
+
 
     async def load_all_documents(
         self,
@@ -150,6 +142,7 @@ class FinanceDatabaseLoader(ChromaDocumentLoader):
             f"in collection '{self.collection_name}'."
         )
 
+    
     async def reload_all_documents(
         self,
         family: str | list | None = None,

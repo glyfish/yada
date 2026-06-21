@@ -69,7 +69,7 @@ class ETFDataInfoAgent(ChromaRAGAgent):
         document_prompt = PromptTemplate.from_template(template=document_prompt_template)
 
         super().__init__(tool_name, tool_description, document_prompt, FinanceDatabaseLoader(), query,
-                         retriever_k=10, retriever_fetch_k=40)
+                         retriever_k=100, retriever_fetch_k=200)
 
         self._generate_prompt = ChatPromptTemplate.from_messages([  # type: ignore[assignment]
             ("system", """
