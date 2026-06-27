@@ -7,9 +7,9 @@ analysis, and generate plots and reports.
 
 ## Dependency on `navi`
 
-> **YADA requires the [`navi`](../navi) library and does not run without it.**
+> **YADA requires the [`navi`](https://github.com/glyfish/navi) library and does not run without it.**
 
-YADA is the agent/application layer; **[`navi`](../navi) is the underlying quantitative-finance
+YADA is the agent/application layer; **[`navi`](https://github.com/glyfish/navi) is the underlying quantitative-finance
 library** it is built on. `navi` provides the `lib` package that YADA imports throughout
 (`from lib.logger import get_logger`, API clients, statistical models, plots, DB helpers, and the
 MCP client).
@@ -37,7 +37,7 @@ This means:
 - The data API clients (FRED, Tiingo, BLS) and the SSE **MCP client** live in `navi`; YADA calls
   them through the agents and the MCP tool registry.
 
-See [`../navi/README.md`](../navi/README.md) for the library's own setup and feature list.
+See [navi's README](https://github.com/glyfish/navi) for the library's own setup and feature list.
 
 ## Architecture
 
@@ -57,7 +57,7 @@ Supporting pieces:
 - **LLMs** via LangChain — OpenAI or Anthropic, selectable through env vars.
 - **Vector stores** — ChromaDB collections persisted under `.db/` (FRED, ETF, GitHub, research, PDF).
 - **Relational cache** — PostgreSQL (SQLAlchemy + Alembic) holding the time-series cache and saved reports.
-- **MCP** — the agents fetch live data through the [`meida`](../meida) MCP server (FastMCP, FRED/Tiingo tools over SSE).
+- **MCP** — the agents fetch live data through the [`meida`](https://github.com/glyfish/meida) MCP server (FastMCP, FRED/Tiingo tools over SSE).
 - **Web UI** — a static frontend in `html/`, served at `/`.
 - **Tracing** — optional LangSmith integration.
 
@@ -78,9 +78,9 @@ requirements.in      Top-level deps (includes `-e ../navi`); compiled to require
 ## Prerequisites
 
 - **Python 3.11** (this repo pins `3.11.11`)
-- **[`navi`](../navi)** cloned as a sibling directory (see above)
+- **[`navi`](https://github.com/glyfish/navi)** cloned as a sibling directory (see above)
 - **PostgreSQL** for the time-series / report cache
-- The **[`meida`](../meida)** MCP server running — exposes FRED/Tiingo tools at `MCP_URL` (default `http://localhost:8080/sse`); also a sibling repo built on `navi`
+- The **[`meida`](https://github.com/glyfish/meida)** MCP server running — exposes FRED/Tiingo tools at `MCP_URL` (default `http://localhost:8080/sse`); also a sibling repo built on `navi`
 - API keys (see [Configuration](#configuration))
 
 ## Setup
@@ -107,7 +107,7 @@ alembic upgrade head
 # 1. Start the meida MCP server (sibling repo) so the FRED/Tiingo tools are
 #    reachable at MCP_URL. From the meida checkout:
 #        python mcp_server/server.py        # serves SSE on http://localhost:8080
-#    See ../meida/README.md for its setup.
+#    See https://github.com/glyfish/meida for its setup.
 
 # 2. Start the API + UI
 uvicorn api.main:app --reload --port 8000
@@ -128,7 +128,7 @@ Then open <http://localhost:8000/> — the web UI is served from `html/` at the 
 ## Configuration
 
 Environment variables are loaded from `.env` at startup. The data-source keys (`FRED_API_KEY`,
-`BLS_API_KEY`, Tiingo) are shared with `navi` — see [`../navi/.env.example`](../navi/.env.example).
+`BLS_API_KEY`, Tiingo) are shared with `navi` — see [navi's .env.example](https://github.com/glyfish/navi/blob/main/.env.example).
 
 | Variable | Required | Description |
 | --- | --- | --- |
