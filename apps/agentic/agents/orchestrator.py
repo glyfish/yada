@@ -72,7 +72,7 @@ class SubagentRequest(BaseModel):
         positive_examples=[
             PositiveExample(input="What is the history of Tullahoma TN"),
             PositiveExample(input="Compare the populations of the 10 largest cities in the world."),
-            PositiveExample(input="Plot a timeseries of the population of Tennessee"),
+            PositiveExample(input="Plot a time series of the population of Tennessee"),
         ],
         suggests_followup=[
             "delegate_to_plot_agent if the result contains data to visualize",
