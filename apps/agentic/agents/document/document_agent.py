@@ -42,14 +42,13 @@ class SubagentRequest(BaseModel):
     metadata=ToolSpec(
         primary_function="""
             Delegate a document loading request to the Document Loader Agent.
-            Use for loading research documents (Markdown), GitHub repositories, PDF documents,
+            Use for loading research documents (Markdown), GitHub repositories,
             or ETF data (load_etf_data / reload_etf_data). Pass the full request string.
         """,
         positive_examples=[
             PositiveExample(input="Load the research document into the library."),
             PositiveExample(input="Load the GitHub repository troystribling/yada."),
             PositiveExample(input="Load all GitHub repositories."),
-            PositiveExample(input="Load the PDF document jaynes_prob_theory.pdf."),
             PositiveExample(input="Load ETF data for VanEck Asset Management."),
             PositiveExample(input="Update the ETF database."),
             PositiveExample(input="Reload all ETF data."),
@@ -224,7 +223,6 @@ When the user wants to load or update a document store, call delegate_to_documen
 and pass the full request string. Applies to:
 - Research documents (Markdown notes)
 - GitHub repositories
-- PDF documents
 - ETF data (load or reload the ETF ChromaDB store)
 </document_loading>
 

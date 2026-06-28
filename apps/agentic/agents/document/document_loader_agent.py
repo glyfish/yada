@@ -14,7 +14,6 @@ from apps.agentic.core.agents.react_agent import ReactAgent
 from apps.agentic.core.tool_spec import PositiveExample, ToolSpec, tool_spec
 from apps.agentic.core.document_loaders.github_document_loader import GitHubChromaDocumentLoader
 from apps.agentic.core.document_loaders.research_library_document_loader import ResearchLibraryChromaDocumentLoader
-from apps.agentic.core.document_loaders.document_library_loader import DocumentLibraryLoader
 from apps.agentic.core.document_loaders.etf.finance_database_loader import FinanceDatabaseLoader
 from apps.agentic.core.constants import (
     GITHUB_API,
@@ -22,7 +21,6 @@ from apps.agentic.core.constants import (
     GITHUB_LOCAL_PATH,
     RESEARCH_LIBRARY_LOCAL_PATH,
     RESEARCH_DOCUMENTS_METADATA_FILE,
-    PDF_DOCUMENT_LIBRARY_LOCAL_PATH,
 )
 
 from lib.logger import get_logger
@@ -45,15 +43,6 @@ class LoadResearchDocumentInput(BaseModel):
 class LoadGitHubRepoInput(BaseModel):
     account: str = Field(..., description="GitHub account or organization name.")
     repo: str = Field(..., description="Repository name.")
-
-
-class LoadPDFDocumentInput(BaseModel):
-    filename: str = Field(..., description="Filename of the PDF document to load.")
-    title: str = Field(..., description="Document title.")
-    authors: str = Field(..., description="Document authors.")
-    published_date: str = Field(..., description="Publication date.")
-    topic: str = Field(..., description="Topic or subject area.")
-    shelf: str = Field(..., description="Library shelf to assign the document to.")
 
 
 class LoadETFDataInput(BaseModel):
@@ -111,7 +100,6 @@ class DocumentLoaderAgent(ReactAgent):
         - load_research_document: Load a Markdown research note into the research library.
         - load_github_repo: Clone or pull a GitHub repository and index it.
         - load_all_github_repos: Clone or pull all configured GitHub repos and index them.
-        - load_pdf_document: Load a PDF into the document library.
     """
 
     @classmethod
@@ -123,7 +111,6 @@ class DocumentLoaderAgent(ReactAgent):
             DocumentLoaderAgent.load_research_document,
             DocumentLoaderAgent.load_github_repo,
             DocumentLoaderAgent.load_all_github_repos,
-            DocumentLoaderAgent.load_pdf_document,
             DocumentLoaderAgent.load_etf_data,
             DocumentLoaderAgent.reload_etf_data,
         ]
@@ -140,7 +127,6 @@ class DocumentLoaderAgent(ReactAgent):
             - Use load_research_document for Markdown research notes.
             - Use load_github_repo to index a single GitHub repository.
             - Use load_all_github_repos to index all configured GitHub repositories.
-            - Use load_pdf_document for PDF documents.
             - Use load_etf_data to add ETF data from FinanceDatabase into the ETF store.
               Optional filters: family, category_group, category, exchange.
               Omitting all filters loads the full universe (~36K funds, ~10 min).
@@ -283,43 +269,6 @@ class DocumentLoaderAgent(ReactAgent):
         await doc_loader.load_all_documents()
 
         return "All GitHub repositories cloned or updated and indexed successfully."
-
-
-    @staticmethod
-    @tool_spec(
-        args_schema=LoadPDFDocumentInput,
-        metadata=ToolSpec(
-            primary_function="""
-            Load a PDF document into the PDF document library store.
-            """,
-            positive_examples=[
-                PositiveExample(input="Load the PDF document jaynes_prob_theory.pdf into the document library."),
-            ],
-        ),
-    )
-    async def load_pdf_document(
-        filename: str,
-        title: str,
-        authors: str,
-        published_date: str,
-        topic: str,
-        shelf: str,
-    ) -> str:
-        pdf_path = os.path.join(PDF_DOCUMENT_LIBRARY_LOCAL_PATH, filename)
-        meta_data = {
-            "filename": filename,
-            "path": pdf_path,
-            "title": title,
-            "authors": authors,
-            "published_date": published_date,
-            "topic": topic,
-            "shelf": shelf,
-        }
-
-        doc_loader = DocumentLibraryLoader()
-        await doc_loader.load_document(pdf_path, meta_data=meta_data)
-
-        return f"Loaded PDF document: {title}."
 
 
     @staticmethod

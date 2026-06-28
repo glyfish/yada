@@ -54,37 +54,6 @@ class LoadGitHubRepoForm(BaseModel):
     )
 
 
-class LoadPDFDocumentForm(BaseModel):
-    """Form data for loading a PDF document into the document library."""
-
-    type: Literal["load_pdf_document"] = "load_pdf_document"
-
-    filename: str = Field(
-        ...,
-        description="Filename of the PDF document to load.",
-    )
-    title: str = Field(
-        ...,
-        description="Document title.",
-    )
-    authors: str = Field(
-        ...,
-        description="Document authors.",
-    )
-    published_date: str = Field(
-        ...,
-        description="Publication date.",
-    )
-    topic: str = Field(
-        ...,
-        description="Topic or subject area.",
-    )
-    shelf: str = Field(
-        ...,
-        description="Library shelf to assign the document to.",
-    )
-
-
 class CreateTimeSeriesReportForm(BaseModel):
     """Form data for creating a time series report."""
 
@@ -132,7 +101,6 @@ class SelectTimeSeriesReportForm(BaseModel):
 FORM_REGISTRY: dict[str, type[BaseModel]] = {
     "load_research_document": LoadResearchDocumentForm,
     "load_github_repo": LoadGitHubRepoForm,
-    "load_pdf_document": LoadPDFDocumentForm,
     "create_time_series_report": CreateTimeSeriesReportForm,
     "select_time_series_report": SelectTimeSeriesReportForm,
 }

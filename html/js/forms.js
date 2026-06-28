@@ -115,66 +115,6 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
             el => el.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); submit(); } })
         );
 
-    } else if (formType === "load_pdf_document") {
-        dialog.innerHTML = `
-            <form method="dialog" novalidate autocomplete="off">
-                <label for="pdf-filename">Filename:</label>
-                <input id="pdf-filename" name="filename" type="text" placeholder="document.pdf" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
-
-                <label for="pdf-title">Title:</label>
-                <input id="pdf-title" name="title" type="text" placeholder="Document title" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
-
-                <label for="pdf-authors">Authors:</label>
-                <input id="pdf-authors" name="authors" type="text" placeholder="Author Name" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
-
-                <label for="pdf-published-date">Published Date:</label>
-                <input id="pdf-published-date" name="published_date" type="date" autocomplete="off" required>
-
-                <label for="pdf-topic">Topic:</label>
-                <textarea id="pdf-topic" name="topic" rows="3" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="e.g., Machine Learning" required></textarea>
-
-                <label for="pdf-shelf">Shelf:</label>
-                <input id="pdf-shelf" name="shelf" type="text" placeholder="e.g., reading_list" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
-
-                <menu>
-                    <button type="button" class="btn" id="cancelFormBtn">Cancel</button>
-                    <button type="button" class="btn primary" id="submitFormBtn">Load PDF Document</button>
-                </menu>
-            </form>
-        `;
-        document.body.appendChild(dialog);
-        dialog.showModal();
-
-        const filenameInput = dialog.querySelector("input[name='filename']");
-        const titleInput    = dialog.querySelector("input[name='title']");
-        const authorsInput  = dialog.querySelector("input[name='authors']");
-        const dateInput     = dialog.querySelector("input[name='published_date']");
-        const topicInput    = dialog.querySelector("textarea[name='topic']");
-        const shelfInput    = dialog.querySelector("input[name='shelf']");
-
-        requestAnimationFrame(() => filenameInput.focus());
-
-        const close = () => { sessionIdState.val = null; dialog.close(); dialog.remove(); };
-        dialog.querySelector("#cancelFormBtn").addEventListener("click", close);
-        dialog.addEventListener("cancel", e => { e.preventDefault(); close(); });
-
-        const submit = async () => {
-            if (!dialog.querySelector("form").reportValidity()) return;
-            close();
-            await handleResumeRequest(sessionId, {
-                filename:       filenameInput.value.trim(),
-                title:          titleInput.value.trim(),
-                authors:        authorsInput.value.trim(),
-                published_date: dateInput.value,
-                topic:          topicInput.value.trim(),
-                shelf:          shelfInput.value.trim(),
-            }, promptLabel);
-        };
-        dialog.querySelector("#submitFormBtn").addEventListener("click", submit);
-        [filenameInput, titleInput, authorsInput, dateInput, shelfInput].forEach(
-            el => el.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); submit(); } })
-        );
-
     } else if (formType === "create_time_series_report") {
         dialog.innerHTML = `
             <form method="dialog" novalidate autocomplete="off">

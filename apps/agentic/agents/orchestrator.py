@@ -33,7 +33,6 @@ class RequestHumanFormInput(BaseModel):
     form_type: Literal[
         "load_research_document",
         "load_github_repo",
-        "load_pdf_document",
         "create_time_series_report",
         "select_time_series_report",
     ] = Field(
@@ -221,7 +220,6 @@ async def delegate_to_time_series_agent(request: str) -> str:
         positive_examples=[
             PositiveExample(input="Load a research document into the library."),
             PositiveExample(input="Add the yada repo to my code store."),
-            PositiveExample(input="Load a PDF into the document library."),
         ],
     ),
 )
@@ -239,7 +237,7 @@ def request_human_form(form_type: str) -> str:
         primary_function="""
             Delegate all document-related requests to the Document Agent, which handles
             both document loading and document search operations.
-            Use for: loading research documents, GitHub repos, PDFs, or ETF data;
+            Use for: loading research documents, GitHub repos, or ETF data;
             searching code, research library, FRED metadata, or ETF/fund information.
         """,
         positive_examples=[
@@ -253,7 +251,7 @@ def request_human_form(form_type: str) -> str:
             PositiveExample(input="What VanEck fixed income ETFs are available?"),
         ],
         requires_context=[
-            "For load_research_document, load_github_repo, and load_pdf_document: "
+            "For load_research_document and load_github_repo: "
             "call request_human_form first to collect required fields from the user. "
             "For load_all_github_repos: call directly without a form.",
         ],
@@ -392,7 +390,6 @@ Document loading — call request_human_form first to collect required fields, t
 form data as the request to delegate_to_document_agent:
    - Loading a research note → form_type: load_research_document
    - Loading a GitHub repository → form_type: load_github_repo
-   - Loading a PDF document → form_type: load_pdf_document
 No form required — pass request directly to delegate_to_document_agent:
    - load_all_github_repos
    - load_etf_data (load ETF data into the store)
