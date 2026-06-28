@@ -6,6 +6,9 @@
 
 html/plots
 
+# FRED YAML data exports (load locally via clients/bin/fred.py)
+clients/fred/
+
 __pycache__/
 *.py[cod]
 *$py.class
