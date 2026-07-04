@@ -9,6 +9,9 @@ html/plots
 # FRED YAML data exports (load locally via clients/bin/fred.py)
 clients/fred/
 
+# Research library — personal notes/documents loaded locally into the research RAG store
+research_library/
+
 __pycache__/
 *.py[cod]
 *$py.class
