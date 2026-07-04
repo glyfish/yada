@@ -14,7 +14,8 @@
       "args": [
         "api.main:app",
         "--reload",
-        "--reload-exclude", ".repos",
+        "--reload-dir", "api",
+        "--reload-dir", "apps",
         "--host", "0.0.0.0",
         "--port", "8000"
       ],

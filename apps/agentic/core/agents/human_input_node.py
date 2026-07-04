@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from langchain_core.messages import HumanMessage, ToolMessage
 from langgraph.types import interrupt
 
@@ -8,6 +10,16 @@ from apps.agentic.core.agents.messages import WorkerState
 from lib.logger import get_logger
 
 logger = get_logger("YADA")
+
+# A GitHub URL (https or ssh), capturing owner + repo, e.g.
+# https://github.com/glyfish/meida(.git) or git@github.com:glyfish/meida.git
+_GITHUB_URL_RE = re.compile(
+    r"github\.com[/:]([A-Za-z0-9][\w.-]*?)/([A-Za-z0-9][\w.-]*?)(?:\.git)?(?:[\s/#?]|$)"
+)
+# The "owner/repo" shorthand a user types directly, e.g. "glyfish/meida".
+_GITHUB_SLUG_RE = re.compile(
+    r"\b([A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)/([A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)\b"
+)
 
 
 class HumanInputNode:
@@ -62,6 +74,8 @@ class HumanInputNode:
 
         model_cls = FORM_REGISTRY[form_type]
         prefill = self._find_prefill(state)
+        if form_type == "load_github_repo":
+            prefill = self._augment_github_prefill(state, prefill)
         schema = {
             "type": form_type,
             "fields": {
@@ -186,3 +200,31 @@ class HumanInputNode:
                             return (block.get("input") or {}).get("prefill")
 
         return None
+
+    def _augment_github_prefill(self, state: WorkerState, prefill: dict | None) -> dict | None:
+        """
+        Deterministic fallback for the load_github_repo form: fill any missing
+        account/repo by parsing an ``owner/repo`` slug (or GitHub URL) out of the
+        user's most recent request. Runs only for fields the model left blank, so
+        an explicit LLM-supplied prefill always wins.
+        """
+        prefill = dict(prefill or {})
+        if prefill.get("account") and prefill.get("repo"):
+            return prefill
+
+        for msg in reversed(state["messages"]):
+            if not isinstance(msg, HumanMessage):
+                continue
+            # Skip validated-form messages we injected on a prior resume.
+            if (getattr(msg, "additional_kwargs", None) or {}).get("form_type"):
+                continue
+            content = msg.content
+            if not isinstance(content, str):
+                continue
+            match = _GITHUB_URL_RE.search(content) or _GITHUB_SLUG_RE.search(content)
+            if match:
+                prefill.setdefault("account", match.group(1))
+                prefill.setdefault("repo", match.group(2))
+            break  # only inspect the latest genuine user message
+
+        return prefill or None

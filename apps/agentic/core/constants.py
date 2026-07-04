@@ -6,7 +6,7 @@ _raw_threshold = os.environ.get("RAG_SCORE_THRESHOLD")
 RAG_SCORE_THRESHOLD = float(_raw_threshold) if _raw_threshold is not None else None
 DB_PATH = ".db"
 
-GITHUB_ACCOUNTS = ["troystribling"]
+GITHUB_ACCOUNTS = ["troystribling", "glyfish"]
 GITHUB_EXCLUDED_REPOS = ["3dmodels"]
 
 GITHUB_API = "https://api.github.com"

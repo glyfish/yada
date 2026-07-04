@@ -74,14 +74,30 @@ def _append_research_document_metadata(meta_data: dict) -> None:
         handle.write("\n" + entry_yaml)
 
 
+def _remote_default_branch(repo) -> str:
+    """Resolve the remote's default branch, e.g. 'main'."""
+    try:
+        return repo.remotes.origin.refs.HEAD.reference.name.split("/")[-1]
+    except Exception:
+        # Fall back to the locally checked-out branch.
+        return repo.active_branch.name
+
+
 def _clone_or_pull(repo_name: str, repo_url: str, local_path: str) -> None:
     from git import Repo
 
     if os.path.exists(local_path):
         try:
+            # .repos is a read-only indexing mirror — we never commit here, so a
+            # fetch + hard reset to the remote's default branch is the correct,
+            # idempotent update. Unlike `git pull` it survives force-pushes and
+            # history rewrites (which otherwise fail with "Need to specify how to
+            # reconcile divergent branches").
             repo = Repo(local_path)
-            repo.remotes.origin.pull()
-            logger.info(f"Pulled {local_path}")
+            repo.remotes.origin.fetch(prune=True)
+            branch = _remote_default_branch(repo)
+            repo.git.reset("--hard", f"origin/{branch}")
+            logger.info(f"Updated {local_path} to origin/{branch}")
         except Exception as e:
             logger.error(f"Failed to update {local_path}: {e}")
     else:

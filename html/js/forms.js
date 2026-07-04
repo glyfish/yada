@@ -92,9 +92,13 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
         const accInput  = dialog.querySelector("input[name='account']");
         const repoInput = dialog.querySelector("input[name='repo']");
 
-        const saved = localStorage.getItem("gh_account");
-        if (saved) accInput.value = saved;
-        requestAnimationFrame(() => accInput.focus());
+        // Prefer values extracted from the request; fall back to the last-used
+        // account from localStorage when the request didn't name one.
+        const prefill = formSchema.prefill || {};
+        accInput.value  = prefill.account || localStorage.getItem("gh_account") || "";
+        repoInput.value = prefill.repo || "";
+        // Focus the first empty field so a fully-prefilled form is ready to submit.
+        requestAnimationFrame(() => (repoInput.value ? repoInput : accInput).focus());
 
         const close = () => { sessionIdState.val = null; dialog.close(); dialog.remove(); };
         dialog.querySelector("#cancelFormBtn").addEventListener("click", close);

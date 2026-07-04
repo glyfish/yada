@@ -44,7 +44,8 @@ class RequestHumanFormInput(BaseModel):
         description=(
             "Optional pre-filled values for form fields extracted from the user's request. "
             "For create_time_series_report: keys are report_title, report_description, "
-            "time_series_ids, time_range_from, time_range_to."
+            "time_series_ids, time_range_from, time_range_to. "
+            "For load_github_repo: keys are account, repo."
         ),
     )
 
@@ -389,7 +390,10 @@ Delegate all document loading and search requests to delegate_to_document_agent.
 Document loading — call request_human_form first to collect required fields, then pass the
 form data as the request to delegate_to_document_agent:
    - Loading a research note → form_type: load_research_document
-   - Loading a GitHub repository → form_type: load_github_repo
+   - Loading a GitHub repository → form_type: load_github_repo.
+     If the user's request already names the account and/or repository (e.g.
+     "update the glyfish/meida repository" or "load the yada repo from glyfish"),
+     pass them in prefill so the form is pre-populated. Keys: account, repo.
 No form required — pass request directly to delegate_to_document_agent:
    - load_all_github_repos
    - load_etf_data (load ETF data into the store)

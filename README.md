@@ -110,7 +110,9 @@ alembic upgrade head
 #    See https://github.com/glyfish/meida for its setup.
 
 # 2. Start the API + UI
-uvicorn api.main:app --reload --port 8000
+#    --reload-dir limits the watcher to source dirs so indexing into .repos
+#    (load_github_repo) doesn't trigger spurious restarts.
+uvicorn api.main:app --reload --reload-dir api --reload-dir apps --port 8000
 ```
 
 Then open <http://localhost:8000/> — the web UI is served from `html/` at the API root.
@@ -154,3 +156,33 @@ Environment variables are loaded from `.env` at startup. The data-source keys (`
 `notebooks/` contains Jupyter notebooks for loading the document stores (e.g.
 `notebooks/documents/etf_document_loader.ipynb`) and exploring data. They import the same
 `apps.agentic` and `navi` code as the application, so the editable `navi` install must be in place.
+
+## FRED metadata store
+
+The FRED document store is built from YAML exports under `clients/fred/`:
+
+- `categories/<name>.yaml` — leaf FRED categories, each with its full path (breadcrumb) from the
+  root category.
+- `series/<name>.yaml` — the series metadata (id, title, observation range, frequency, units,
+  notes) for every series in each leaf category.
+
+These files are **not** generated in `yada`, and they are **not committed** (the directory is
+gitignored) — they are produced offline in the [`meida`](https://github.com/glyfish/meida) repo
+and copied in. The exporter (`meida/notebooks/fred/utils.py`) crawls the FRED category tree through
+the meida MCP server — which wraps `navi`'s `FredClient` → the FRED API — in two stages:
+
+1. **`find_leaf_categories()`** — breadth-first walks the category tree via the
+   `fred_category_children` tool, recording every leaf category and its breadcrumb path, then writes
+   `categories/<name>.yaml`. One driver notebook per top-level category lives under
+   `meida/notebooks/fred/categories/` (`finance.ipynb`, `population.ipynb`, `international.ipynb`, …).
+2. **`export_finance_category_series()`** — reads a categories file and, for each leaf, calls the
+   `fred_category_series` tool to pull the series metadata, then writes `series/<name>.yaml` (driven
+   by `meida/notebooks/fred/series/series_info.ipynb`).
+
+Both stages rate-limit at ~2 s/call to stay polite to the FRED API. Once the exports are in place,
+load them into the FRED Chroma collection with [`clients/bin/fred.py`](clients/bin/fred.py):
+
+```bash
+python clients/bin/fred.py                                     # ingest every export
+python clients/bin/fred.py --filename fred_finance_32991.yaml  # ingest a single export
+```
