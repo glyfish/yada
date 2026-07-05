@@ -1,6 +1,5 @@
 from langchain_core.messages import AIMessage, SystemMessage
 from langchain.prompts import PromptTemplate
-from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import StateGraph, START, END
 
 from apps.agentic.core.agents.chroma_rag_agent import ChromaRAGAgent
@@ -71,34 +70,13 @@ class ETFDataInfoAgent(ChromaRAGAgent):
         super().__init__(tool_name, tool_description, document_prompt, FinanceDatabaseLoader(), query,
                          retriever_k=100, retriever_fetch_k=200)
 
-        self._generate_prompt = ChatPromptTemplate.from_messages([  # type: ignore[assignment]
-            ("system", """
-            You are an expert assistant answering questions about ETFs and mutual funds.
-
-            CRITICAL — output rules you must never deviate from:
-            - Group results by fund family. Show the family name as a header for each group.
-            - Never render a table. Never use markdown table syntax (pipes and dashes). Bullet lists only.
-            - For every fund output a block exactly in this format, with no fields omitted:
-
-              **<ticker>** — <name>
-              - Asset Class: <category_group>
-              - Category: <category>
-              - Exchange: <exchange>
-              - Currency: <currency>
-              - ISIN: <isin>
-
-            - If a field value is missing write "N/A". Never skip or omit a field.
-            - Never summarize or condense the list. Show every returned fund in full.
-            """),
-            ("human", """
-            Question: {question}
-            Context: {context}
-            Answer:
-            """),
-        ])
-
 
     def _generate(self, state):
+        """
+        Build the answer deterministically from the retrieved rows — no LLM
+        generation step. The output format lives here (not in a prompt); keep it
+        in sync with the fields emitted by _retrieve.
+        """
         docs = state["messages"][-1].content
         rows = self._parse_rows(docs)
         if not rows:
