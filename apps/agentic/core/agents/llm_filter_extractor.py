@@ -401,10 +401,12 @@ def fred_filters_to_where(f: FredFilters) -> Optional[dict]:
         conditions["seasonal_adjustment"] = f.seasonal_adjustment
     if f.popularity_op and f.popularity_value is not None:
         conditions["popularity"] = {f.popularity_op: f.popularity_value}
-    if f.observation_end and f.observation_end_op:
+    if f.observation_end:
+        # Recency phrases are overwhelmingly "$gte"; default a missing operator to it
+        # (matching last_updated below) so a rare op-drop still yields a filter.
         end_int = _iso_to_yyyymmdd(f.observation_end)
         if end_int is not None:
-            conditions["observation_end_int"] = {f.observation_end_op: end_int}
+            conditions["observation_end_int"] = {f.observation_end_op or "$gte": end_int}
     if f.last_updated:
         # Range comparisons in Chroma require the numeric YYYYMMDD field, not the
         # raw string (a string operand raises ValueError at query time).

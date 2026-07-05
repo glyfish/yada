@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import shortuuid
-from typing import Any, Dict, Optional
+from typing import Annotated, Any, Dict, Optional
 
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph, START, END
-from langgraph.prebuilt import tools_condition
+from langgraph.prebuilt import tools_condition, InjectedState
 from pydantic import BaseModel, Field
 
 from apps.agentic.core.agents.react_agent import ReactAgent
@@ -38,6 +38,24 @@ class SubagentRequest(BaseModel):
     request: str = Field(..., description="Request to send to the subagent")
 
 
+def _original_request(state: dict, fallback: str) -> str:
+    """
+    Return the user's original request from the agent's first message, falling back
+    to the model-supplied argument. Filter extraction must run on the verbatim user
+    text: the routing model tends to paraphrase (e.g. rewriting a recency filter
+    'series that have an end date within a year of today' into a display request
+    'include their end dates so I can identify which...'), which silently drops the
+    where-clause. The original message is injected via InjectedState, so it is never
+    exposed to — or rewritten by — the model.
+    """
+    messages = state.get("messages") if isinstance(state, dict) else None
+    if messages:
+        content = getattr(messages[0], "content", None)
+        if isinstance(content, str) and content.strip():
+            return content
+    return fallback
+
+
 @tool_spec(
     args_schema=SubagentRequest,
     metadata=ToolSpec(
@@ -64,7 +82,7 @@ async def delegate_to_document_loader_agent(request: str) -> str:
 
 
 @tool_spec(
-    args_schema=SubagentRequest,
+    args_schema=None,  # inferred schema so InjectedState (state) is honored
     metadata=ToolSpec(
         primary_function="""
             Delegate a request to the Code Repository Search Agent which searches and retrieves code
@@ -79,17 +97,19 @@ async def delegate_to_document_loader_agent(request: str) -> str:
         ],
     ),
 )
-async def delegate_to_code_repository_search_agent(request: str) -> str:
-    where, cleaned_query = await extract_code_repo_filters(request)
-    state = {"messages": [HumanMessage(content=cleaned_query)]}
+async def delegate_to_code_repository_search_agent(
+    request: str, state: Annotated[dict, InjectedState],
+) -> str:
+    where, cleaned_query = await extract_code_repo_filters(_original_request(state, request))
+    sub_state = {"messages": [HumanMessage(content=cleaned_query)]}
     config = RunnableConfig(configurable={"thread_id": shortuuid.uuid()}, recursion_limit=50)
     code_repo_agent = CodeRepoAgent(query=where)
-    result = await code_repo_agent.agent.ainvoke(state, config)
+    result = await code_repo_agent.agent.ainvoke(sub_state, config)
     return result["messages"][-1].content
 
 
 @tool_spec(
-    args_schema=SubagentRequest,
+    args_schema=None,  # inferred schema so InjectedState (state) is honored
     metadata=ToolSpec(
         primary_function="""
             Delegate a request to the Research Library Search Agent which searches and retrieves
@@ -102,17 +122,19 @@ async def delegate_to_code_repository_search_agent(request: str) -> str:
         ],
     ),
 )
-async def delegate_to_research_library_search_agent(request: str) -> str:
-    where, cleaned_query = await extract_research_library_filters(request)
-    state = {"messages": [HumanMessage(content=cleaned_query)]}
+async def delegate_to_research_library_search_agent(
+    request: str, state: Annotated[dict, InjectedState],
+) -> str:
+    where, cleaned_query = await extract_research_library_filters(_original_request(state, request))
+    sub_state = {"messages": [HumanMessage(content=cleaned_query)]}
     config = RunnableConfig(configurable={"thread_id": shortuuid.uuid()}, recursion_limit=50)
     research_library_agent = ResearchLibraryAgent(query=where)
-    result = await research_library_agent.agent.ainvoke(state, config)
+    result = await research_library_agent.agent.ainvoke(sub_state, config)
     return result["messages"][-1].content
 
 
 @tool_spec(
-    args_schema=SubagentRequest,
+    args_schema=None,  # inferred schema so InjectedState (state) is honored
     metadata=ToolSpec(
         primary_function="""
             Delegate a request to the FRED Data Info Search Agent which searches and retrieves
@@ -135,17 +157,19 @@ async def delegate_to_research_library_search_agent(request: str) -> str:
         ],
     ),
 )
-async def delegate_to_fred_data_info_search_agent(request: str) -> str:
-    where, cleaned_query = await extract_fred_filters(request)
-    state = {"messages": [HumanMessage(content=cleaned_query)]}
+async def delegate_to_fred_data_info_search_agent(
+    request: str, state: Annotated[dict, InjectedState],
+) -> str:
+    where, cleaned_query = await extract_fred_filters(_original_request(state, request))
+    sub_state = {"messages": [HumanMessage(content=cleaned_query)]}
     config = RunnableConfig(configurable={"thread_id": shortuuid.uuid()}, recursion_limit=50)
     fred_data_info_agent = FredDataInfoAgent(query=where)
-    result = await fred_data_info_agent.agent.ainvoke(state, config)
+    result = await fred_data_info_agent.agent.ainvoke(sub_state, config)
     return result["messages"][-1].content
 
 
 @tool_spec(
-    args_schema=SubagentRequest,
+    args_schema=None,  # inferred schema so InjectedState (state) is honored
     metadata=ToolSpec(
         primary_function="""
             Delegate a request to the ETF Data Info Search Agent which searches and retrieves
@@ -161,12 +185,14 @@ async def delegate_to_fred_data_info_search_agent(request: str) -> str:
         ],
     ),
 )
-async def delegate_to_etf_data_info_search_agent(request: str) -> str:
-    where, cleaned_query = await extract_etf_filters(request)
-    state = {"messages": [HumanMessage(content=cleaned_query)]}
+async def delegate_to_etf_data_info_search_agent(
+    request: str, state: Annotated[dict, InjectedState],
+) -> str:
+    where, cleaned_query = await extract_etf_filters(_original_request(state, request))
+    sub_state = {"messages": [HumanMessage(content=cleaned_query)]}
     config = RunnableConfig(configurable={"thread_id": shortuuid.uuid()}, recursion_limit=50)
     etf_data_info_agent = ETFDataInfoAgent(query=where)
-    result = await etf_data_info_agent.agent.ainvoke(state, config)
+    result = await etf_data_info_agent.agent.ainvoke(sub_state, config)
     return result["messages"][-1].content
 
 

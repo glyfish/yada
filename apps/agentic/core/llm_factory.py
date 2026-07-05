@@ -227,10 +227,13 @@ def scoring_llm_model(**kwargs):
 def filter_llm_model(**kwargs):
     provider = os.getenv("LLM_MODEL_PROVIDER", "openai")
     model = os.getenv("FILTER_LLM_MODEL", os.getenv("SCORING_LLM_MODEL", "gpt-4.1-mini"))
+    # Filter extraction is deterministic classification, not generation — run it at
+    # temperature 0 so the same query yields the same where-filter every time. At the
+    # shared 0.7 default the model intermittently dropped fields (e.g. observation_end).
     return build_llm(
         provider=provider,
         model=model,
-        temperature=_env_float("LLM_TEMPERATURE", 0.7),
+        temperature=_env_float("FILTER_LLM_TEMPERATURE", 0.0),
         max_tokens=_env_int("LLM_MAX_TOKENS"),
         **kwargs,
     )

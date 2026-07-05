@@ -45,8 +45,18 @@ def build_tool_description(metadata: ToolSpec) -> str:
     return "\n\n".join(parts)
 
 
-def tool_spec(args_schema, metadata: ToolSpec):
+def tool_spec(args_schema=None, metadata: ToolSpec = None):
+    """
+    Decorate a function as a LangChain tool with a description built from ToolSpec.
+
+    Pass args_schema=None to let LangChain infer the schema from the function
+    signature. That path is required when the tool declares an InjectedState (or
+    other injected) parameter, since an explicit args_schema prevents LangGraph's
+    ToolNode from recognizing and filling the injected argument.
+    """
     def decorator(func):
         description = build_tool_description(metadata)
+        if args_schema is None:
+            return tool(description=description)(func)
         return tool(args_schema=args_schema, description=description)(func)
     return decorator

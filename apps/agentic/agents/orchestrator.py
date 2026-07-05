@@ -247,7 +247,7 @@ def request_human_form(form_type: str) -> str:
             PositiveExample(input="Load a research document into the library."),
             PositiveExample(input="Load all GitHub repositories."),
             PositiveExample(input="Search my research library for the definition of the Carnot Cycle."),
-            PositiveExample(input="What time series are available for GDP in the FRED data?"),
+            PositiveExample(input="What time series are available for GDP in the FRED data that have an end date within a year of today?"),
             PositiveExample(input="Find MIDI output handling in troystribling/zgomot my code."),
             PositiveExample(input="Load ETF data for VanEck into the database."),
             PositiveExample(input="Update the ETF database."),
