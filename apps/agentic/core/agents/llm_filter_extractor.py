@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+from datetime import date
 from typing import Optional, cast
 
 from langchain_core.prompts import ChatPromptTemplate
@@ -11,6 +13,20 @@ from apps.agentic.core.llm_factory import filter_llm_model
 from lib.logger import get_logger
 
 logger = get_logger("YADA")
+
+
+def _iso_to_yyyymmdd(value: Optional[str]) -> Optional[int]:
+    """
+    ISO date/datetime string -> YYYYMMDD integer, matching the numeric date fields
+    written by the FRED loader. Chroma range operators ($gte/$lte) require int/float,
+    not strings. Returns None when the value is missing or unparseable.
+    """
+    if not isinstance(value, str):
+        return None
+    m = re.match(r"\s*(\d{4})-(\d{2})-(\d{2})", value)
+    if not m:
+        return None
+    return int(m.group(1) + m.group(2) + m.group(3))
 
 
 # ---------- Pydantic filter models ----------
@@ -214,6 +230,25 @@ class FredFilters(BaseModel):
         None,
         description="'$gte' for 'after', '$lte' for 'before'. Paired with last_updated.",
     )
+    observation_end: Optional[str] = Field(
+        None,
+        description="""
+        Absolute ISO date (YYYY-MM-DD) for filtering series by how recent their latest
+        observation is. Set this when the user constrains data recency — e.g. 'observations
+        within 1 year from today', 'series still being updated', 'data ending after 2020'.
+        Resolve relative phrases against the current date given in the system prompt (e.g.
+        'within 1 year from today' -> today minus one year). Return None when the user does
+        not constrain observation recency.
+        """,
+    )
+    observation_end_op: Optional[str] = Field(
+        None,
+        description="""
+        Operator paired with observation_end: '$gte' for 'within / after / since / still
+        updated' (latest observation on or after the date), '$lte' for 'ended before'.
+        Default to '$gte' for recency phrases. Return None when observation_end is None.
+        """,
+    )
     cleaned_query: str = Field(
         ...,
         description="User question with FRED entity mentions removed.",
@@ -366,11 +401,16 @@ def fred_filters_to_where(f: FredFilters) -> Optional[dict]:
         conditions["seasonal_adjustment"] = f.seasonal_adjustment
     if f.popularity_op and f.popularity_value is not None:
         conditions["popularity"] = {f.popularity_op: f.popularity_value}
+    if f.observation_end and f.observation_end_op:
+        end_int = _iso_to_yyyymmdd(f.observation_end)
+        if end_int is not None:
+            conditions["observation_end_int"] = {f.observation_end_op: end_int}
     if f.last_updated:
-        if f.last_updated_op:
-            conditions["last_updated"] = {f.last_updated_op: f.last_updated}
-        else:
-            conditions["last_updated"] = f.last_updated
+        # Range comparisons in Chroma require the numeric YYYYMMDD field, not the
+        # raw string (a string operand raises ValueError at query time).
+        updated_int = _iso_to_yyyymmdd(f.last_updated)
+        if updated_int is not None:
+            conditions["last_updated_int"] = {f.last_updated_op or "$gte": updated_int}
     return conditions or None
 
 
@@ -426,8 +466,30 @@ Rules:
 - Only extract frequency when the user explicitly mentions a release frequency (daily, monthly, etc.).
 - Only extract seasonal_adjustment when the user mentions SA/NSA or seasonal adjustment status.
 - For popularity, only extract when the user explicitly mentions a threshold number (max 87).
+- Only extract observation_end / observation_end_op when the user constrains data recency
+  (e.g. 'observations within 1 year from today', 'series still being updated', 'data ending
+  after 2020'). observation_end is an absolute ISO date (YYYY-MM-DD); resolve relative phrases
+  against today's date, provided below. Use '$gte' for 'within / after / since / still updated'
+  and '$lte' for 'ended before'.
 - If uncertain about any value, return null and let the vector search handle it.
 - cleaned_query must retain enough content for a meaningful vector search.
+
+Examples (resolve relative dates against today's date, provided below):
+- "US GDP series with observations within 1 year from today"
+    → observation_end = (today − 1 year), observation_end_op = "$gte",
+      cleaned_query = "US GDP series"
+- "unemployment data that is still being updated"
+    → observation_end = (today − 1 year), observation_end_op = "$gte",
+      cleaned_query = "unemployment data"
+- "inflation series with data ending after 2020"
+    → observation_end = "2020-01-01", observation_end_op = "$gte",
+      cleaned_query = "inflation series"
+- "discontinued indicators that ended before 1990"
+    → observation_end = "1990-01-01", observation_end_op = "$lte",
+      cleaned_query = "discontinued indicators"
+- "monthly CPI for all urban consumers"
+    → no observation_end (no recency constraint), frequency = "Monthly",
+      cleaned_query = "CPI for all urban consumers"
 """
 
 _CODE_SYSTEM = """
@@ -490,7 +552,8 @@ async def extract_fred_filters(request: str) -> tuple[Optional[dict], str]:
 
     try:
         llm = filter_llm_model().with_structured_output(FredFilters)
-        prompt = _make_prompt(_FRED_SYSTEM)
+        system = f"{_FRED_SYSTEM}\nToday's date is {date.today().isoformat()}."
+        prompt = _make_prompt(system)
         result = cast(FredFilters, await (prompt | llm).ainvoke({"request": request}))
         where = fred_filters_to_where(result)
         logger.info(f"FRED filters (llm): where={where} query={result.cleaned_query!r}")

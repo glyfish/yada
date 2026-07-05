@@ -19,6 +19,22 @@ from lib.utils import get_param_throw_if_missing
 logger = get_logger("YADA")
 
 
+def _date_to_int(value) -> int | None:
+    """
+    Convert an ISO date/datetime string to a YYYYMMDD integer so it can be range
+    filtered in Chroma, which rejects string operands for $gte/$lte. Handles plain
+    dates ('1937-08-12') and datetimes ('2020-07-03T16:29:23-05:00'), including
+    historic pre-1970 dates (the result stays positive and monotonic). Returns
+    None when the value is missing or unparseable.
+    """
+    if not isinstance(value, str):
+        return None
+    m = re.match(r"\s*(\d{4})-(\d{2})-(\d{2})", value)
+    if not m:
+        return None
+    return int(m.group(1) + m.group(2) + m.group(3))
+
+
 class FREDChromaDocumentLoader(ChromaDocumentLoader):
     """
     Document loader for FRED API metadata files stored as YAML files. The documents will be small
@@ -154,6 +170,18 @@ class FREDChromaDocumentLoader(ChromaDocumentLoader):
                     "last_updated": last_updated,
                     "popularity": popularity,
                 }
+
+                # Numeric YYYYMMDD copies of the date fields for range filtering
+                # (Chroma $gte/$lte require int/float, not strings). Omitted when
+                # the source date is missing or unparseable.
+                for _key, _raw in (
+                    ("observation_start_int", series.get("observation_start")),
+                    ("observation_end_int", series.get("observation_end")),
+                    ("last_updated_int", last_updated),
+                ):
+                    _int = _date_to_int(_raw)
+                    if _int is not None:
+                        doc_metadata[_key] = _int
 
                 documents.append(
                     Document(page_content="\n".join(markdown), metadata=doc_metadata)
