@@ -67,7 +67,7 @@ class SeriesCache:
     def _get_by_cache_id_sync(cls, cache_id: str) -> dict | None:
         engine = cls._engine_or_raise()
         stmt = select(cls._table_or_raise()).where(
-            cls._table_or_raise().c.native_id == uuid.UUID(cache_id)
+            cls._table_or_raise().c.cache_id == uuid.UUID(cache_id)
         )
         with engine.connect() as conn:
             row = conn.execute(stmt).mappings().first()
@@ -81,11 +81,11 @@ class SeriesCache:
 
 
     @classmethod
-    def _get_by_native_id_sync(cls, source: str, external_id: str) -> dict | None:
+    def _get_by_native_id_sync(cls, source: str, native_id: str) -> dict | None:
         engine = cls._engine_or_raise()
         stmt = select(cls._table_or_raise()).where(
             cls._table_or_raise().c.source == source,
-            cls._table_or_raise().c.external_id == external_id,
+            cls._table_or_raise().c.native_id == native_id,
         )
         with engine.connect() as conn:
             row = conn.execute(stmt).mappings().first()
@@ -93,16 +93,43 @@ class SeriesCache:
             return None
         entry = dict(row)
         if entry["expires_at"] < datetime.now(tz=timezone.utc):
-            logger.debug(f"SeriesCache: {source}:{external_id} expired")
+            logger.debug(f"SeriesCache: {source}:{native_id} expired")
             return None
         return entry
+
+
+    @classmethod
+    def _get_obs_ranges_by_source_sync(cls, source: str, native_ids: list[str]) -> dict[str, dict]:
+        """
+        Bulk lookup of (observation_start, observation_end) for a set of native_ids
+        under one source, for cache entries that have not expired. Returns a dict
+        keyed by native_id. Used to backfill obs-date columns in search results for
+        series that have already been fetched into the cache.
+        """
+        if not native_ids:
+            return {}
+        t = cls._table_or_raise()
+        stmt = select(
+            t.c.native_id, t.c.observation_start, t.c.observation_end, t.c.expires_at
+        ).where(t.c.source == source, t.c.native_id.in_(native_ids))
+        now = datetime.now(tz=timezone.utc)
+        result: dict[str, dict] = {}
+        with cls._engine_or_raise().connect() as conn:
+            for row in conn.execute(stmt).mappings():
+                if row["expires_at"] < now:
+                    continue
+                result[row["native_id"]] = {
+                    "observation_start": row["observation_start"],
+                    "observation_end": row["observation_end"],
+                }
+        return result
 
 
     @classmethod
     def _put_sync(
         cls,
         source: str,
-        external_id: str,
+        native_id: str,
         data: Any,
         observation_start: str,
         observation_end: str,
@@ -115,7 +142,7 @@ class SeriesCache:
         engine = cls._engine_or_raise()
         now = datetime.now(tz=timezone.utc)
         row_frequency = frequency or "unknown"
-        row_title = title or external_id
+        row_title = title or native_id
         effective_ttl_days = cls._effective_ttl_days(source, row_frequency, ttl_days)
         expires_at = now + timedelta(days=effective_ttl_days)
 
@@ -131,9 +158,9 @@ class SeriesCache:
         stmt = (
             insert(cls._table_or_raise())
             .values(
-                native_id=uuid.uuid4(),
+                cache_id=uuid.uuid4(),
                 source=source,
-                external_id=external_id,
+                native_id=native_id,
                 title=row_title,
                 frequency=row_frequency,
                 metadata=metadata,
@@ -145,7 +172,7 @@ class SeriesCache:
                 expires_at=expires_at,
             )
             .on_conflict_do_update(
-                constraint="uq_tsc_source_external_frequency",
+                constraint="uq_tsc_source_native_frequency",
                 set_=dict(
                     title=row_title,
                     metadata=metadata,
@@ -156,14 +183,14 @@ class SeriesCache:
                     expires_at=expires_at,
                 ),
             )
-            .returning(cls._table_or_raise().c.native_id)
+            .returning(cls._table_or_raise().c.cache_id)
         )
 
         with engine.begin() as conn:
             result = conn.execute(stmt)
             cache_id = str(result.scalar())
 
-        logger.debug(f"SeriesCache: stored {source}:{external_id} → {cache_id}")
+        logger.debug(f"SeriesCache: stored {source}:{native_id} → {cache_id}")
         return cache_id
 
 
@@ -188,9 +215,9 @@ class SeriesCache:
         engine = cls._engine_or_raise()
         t = cls._table_or_raise()
         stmt = select(
-            t.c.native_id,
+            t.c.cache_id,
             t.c.title,
-            t.c.external_id,
+            t.c.native_id,
             t.c.source,
             t.c.frequency,
             t.c.observation_start,
@@ -201,9 +228,9 @@ class SeriesCache:
             rows = conn.execute(stmt).mappings().all()
         return [
             {
-                "native_id": str(r["native_id"]),
+                "cache_id": str(r["cache_id"]),
                 "title": r["title"],
-                "external_id": r["external_id"],
+                "native_id": r["native_id"],
                 "source": r["source"],
                 "frequency": r["frequency"],
                 "observation_start": str(r["observation_start"] or ""),
@@ -219,9 +246,9 @@ class SeriesCache:
         engine = cls._engine_or_raise()
         t = cls._table_or_raise()
         cols = [
-            t.c.native_id,
+            t.c.cache_id,
             t.c.source,
-            t.c.external_id,
+            t.c.native_id,
             t.c.title,
             t.c.frequency,
             t.c.observation_start,
@@ -233,16 +260,16 @@ class SeriesCache:
         ]
         try:
             uid = uuid.UUID(id_str)
-            stmt = select(*cols).where(t.c.native_id == uid)
+            stmt = select(*cols).where(t.c.cache_id == uid)
         except ValueError:
-            stmt = select(*cols).where(t.c.external_id == id_str)
+            stmt = select(*cols).where(t.c.native_id == id_str)
         with engine.connect() as conn:
             rows = conn.execute(stmt).mappings().all()
         return [
             {
-                "native_id": str(r["native_id"]),
+                "cache_id": str(r["cache_id"]),
                 "source": r["source"],
-                "external_id": r["external_id"],
+                "native_id": r["native_id"],
                 "title": r["title"],
                 "frequency": r["frequency"],
                 "observation_start": str(r["observation_start"] or ""),

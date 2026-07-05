@@ -1,6 +1,215 @@
 import { handleResumeRequest } from "./api.js";
 import { sessionId as sessionIdState } from "./state.js";
 
+// Render the create-time-series-report form into `dialog`. Works both as a fresh
+// dialog (from the form dispatcher) and as an in-place transition from the series
+// selection table (dialog already open) — it only appends/opens when needed.
+function showCreateReportForm(dialog, prefill, sessionId, promptLabel) {
+    prefill = prefill || {};
+    dialog.classList.remove("report-picker", "series-select");
+    dialog.innerHTML = `
+        <form method="dialog" novalidate autocomplete="off">
+            <label for="tsr-title">Title:</label>
+            <input id="tsr-title" name="report_title" type="text" placeholder="Report title" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
+
+            <label for="tsr-description">Description:</label>
+            <textarea id="tsr-description" name="report_description" rows="3" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Brief description of this report" required></textarea>
+
+            <label for="tsr-tags">Tags:</label>
+            <input id="tsr-tags" name="tags" type="text" placeholder="gdp, labor, quarterly" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text">
+
+            <label for="tsr-ids">Time Series IDs:</label>
+            <input id="tsr-ids" name="time_series_ids" type="text" placeholder="id-001, id-002, id-003" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
+
+            <label for="tsr-from">Start Time:</label>
+            <input id="tsr-from" name="time_range_from" type="date" autocomplete="off" required>
+
+            <label for="tsr-to">End Time (omit for latest):</label>
+            <input id="tsr-to" name="time_range_to" type="date" autocomplete="off">
+
+            <menu>
+                <button type="button" class="btn" id="cancelFormBtn">Cancel</button>
+                <button type="button" class="btn primary" id="submitFormBtn">Create Report</button>
+            </menu>
+        </form>
+    `;
+    if (!dialog.isConnected) document.body.appendChild(dialog);
+    if (!dialog.open) dialog.showModal();
+
+    const titleInput       = dialog.querySelector("input[name='report_title']");
+    const descriptionInput = dialog.querySelector("textarea[name='report_description']");
+    const tagsInput        = dialog.querySelector("input[name='tags']");
+    const idsInput         = dialog.querySelector("input[name='time_series_ids']");
+    const fromInput        = dialog.querySelector("input[name='time_range_from']");
+    const toInput          = dialog.querySelector("input[name='time_range_to']");
+
+    if (prefill.report_title)       titleInput.value       = prefill.report_title;
+    if (prefill.report_description) descriptionInput.value = prefill.report_description;
+    if (prefill.tags)               tagsInput.value        = prefill.tags;
+    if (prefill.time_series_ids)    idsInput.value         = prefill.time_series_ids;
+    if (prefill.time_range_from)    fromInput.value        = prefill.time_range_from;
+    if (prefill.time_range_to)      toInput.value          = prefill.time_range_to;
+
+    requestAnimationFrame(() => titleInput.focus());
+
+    const close = () => { sessionIdState.val = null; dialog.close(); dialog.remove(); };
+    dialog.querySelector("#cancelFormBtn").addEventListener("click", close);
+    dialog.addEventListener("cancel", e => { e.preventDefault(); close(); });
+
+    const submit = async () => {
+        if (!dialog.querySelector("form").reportValidity()) return;
+        close();
+        const payload = {
+            report_title:       titleInput.value.trim(),
+            report_description: descriptionInput.value.trim(),
+            tags:               tagsInput.value.trim(),
+            time_series_ids:    idsInput.value.trim(),
+            time_range_from:    fromInput.value.trim(),
+        };
+        if (toInput.value.trim()) payload.time_range_to = toInput.value.trim();
+        await handleResumeRequest(sessionId, payload, promptLabel);
+    };
+    dialog.querySelector("#submitFormBtn").addEventListener("click", submit);
+    [titleInput, idsInput].forEach(
+        el => el.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); submit(); } })
+    );
+}
+
+// "Create Time Series Report" step 1: run the ETF/FRED search from the prefilled
+// query, present the hits as a multi-select table, then on Create fetch the picks
+// into the time series cache and hand off to the create-report form.
+function showSeriesSelectionTable(dialog, formSchema, sessionId, promptLabel) {
+    const prefill = formSchema.prefill || {};
+    const source  = String(prefill.search_source || "").toLowerCase();
+    const query   = prefill.search_query || "";
+
+    dialog.classList.add("report-picker", "series-select");
+    dialog.innerHTML = `
+        <form method="dialog" novalidate autocomplete="off">
+            <h3 style="margin-top:0">Create Time Series Report</h3>
+            <p style="margin:.25rem 0 .75rem;color:#888;">Select the series to include, then click Create.</p>
+            <div class="report-picker-wrap">
+                <table class="report-picker-table">
+                    <thead>
+                        <tr>
+                            <th style="width:2.25rem"></th>
+                            <th>ID</th><th>Title</th><th>Source</th><th>Obs Start</th><th>Obs End</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ss-tbody"></tbody>
+                </table>
+                <p id="ss-status" style="color:#888;text-align:center;">Searching…</p>
+            </div>
+            <menu>
+                <button type="button" class="btn" id="cancelFormBtn">Cancel</button>
+                <button type="button" class="btn primary" id="createFormBtn" disabled>Create</button>
+            </menu>
+        </form>
+    `;
+    document.body.appendChild(dialog);
+    dialog.showModal();
+
+    const tbody     = dialog.querySelector("#ss-tbody");
+    const status    = dialog.querySelector("#ss-status");
+    const createBtn = dialog.querySelector("#createFormBtn");
+    const selected  = new Map();  // native_id -> row
+
+    const updateCreateBtn = () => {
+        createBtn.disabled = selected.size === 0;
+        createBtn.textContent = selected.size ? `Create (${selected.size})` : "Create";
+    };
+
+    const renderRows = (rows) => {
+        tbody.innerHTML = "";
+        if (!rows.length) { status.style.display = ""; status.textContent = "No matching series found."; return; }
+        status.style.display = "none";
+        for (const r of rows) {
+            const tr = document.createElement("tr");
+            tr.className = "report-picker-row";
+            tr.innerHTML = `
+                <td><input type="checkbox"></td>
+                <td><code>${r.native_id}</code></td>
+                <td>${r.title || ""}</td>
+                <td>${r.source || ""}</td>
+                <td>${r.observation_start || ""}</td>
+                <td>${r.observation_end || ""}</td>
+            `;
+            const cb = tr.querySelector("input[type=checkbox]");
+            const toggle = (on) => {
+                if (on) { selected.set(r.native_id, r); tr.classList.add("selected"); }
+                else    { selected.delete(r.native_id); tr.classList.remove("selected"); }
+                cb.checked = on;
+                updateCreateBtn();
+            };
+            tr.addEventListener("click", (e) => { if (e.target !== cb) toggle(!selected.has(r.native_id)); });
+            cb.addEventListener("change", () => toggle(cb.checked));
+            tbody.appendChild(tr);
+        }
+    };
+
+    (async () => {
+        try {
+            const url = `/api/series/search?source=${encodeURIComponent(source)}&q=${encodeURIComponent(query)}`;
+            const resp = await fetch(url);
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const data = await resp.json();
+            renderRows(data.rows || []);
+        } catch (e) {
+            status.style.display = "";
+            status.textContent = `Search failed: ${e.message}`;
+        }
+    })();
+
+    const close = () => { sessionIdState.val = null; dialog.close(); dialog.remove(); };
+    dialog.querySelector("#cancelFormBtn").addEventListener("click", close);
+    dialog.addEventListener("cancel", e => { e.preventDefault(); close(); });
+
+    createBtn.addEventListener("click", async () => {
+        if (selected.size === 0) return;
+        const picks = [...selected.values()];
+        createBtn.disabled = true;
+        status.style.display = "";
+        status.textContent = `Fetching ${picks.length} series into cache…`;
+
+        const cacheIds = [];
+        const starts = [];
+        const ends = [];
+        const failed = [];
+        for (const p of picks) {
+            try {
+                const resp = await fetch("/api/series/fetch", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ source: p.source, native_id: p.native_id }),
+                });
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const entry = await resp.json();
+                cacheIds.push(entry.cache_id);
+                if (entry.observation_start) starts.push(entry.observation_start);
+                if (entry.observation_end) ends.push(entry.observation_end);
+            } catch (e) {
+                failed.push(p.native_id);
+            }
+        }
+
+        if (failed.length) {
+            status.textContent = `Failed to fetch: ${failed.join(", ")}. Deselect those and retry.`;
+            updateCreateBtn();
+            return;
+        }
+
+        // Default the report range to the union span of the selected series.
+        // ISO dates (YYYY-MM-DD) sort lexicographically, so string min/max = date min/max.
+        const carried = { ...prefill, time_series_ids: cacheIds.join(", ") };
+        if (starts.length) carried.time_range_from = starts.reduce((a, b) => (a < b ? a : b));
+        if (ends.length)   carried.time_range_to   = ends.reduce((a, b) => (a > b ? a : b));
+
+        // Hand off to the create-report form, prefilled with the resolved cache_ids
+        // and the derived time range.
+        showCreateReportForm(dialog, carried, sessionId, promptLabel);
+    });
+}
+
 export function showFormDialog(formSchema, sessionId, promptLabel) {
     const formType = formSchema.type;
     const dialog = document.createElement("dialog");
@@ -120,73 +329,18 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
         );
 
     } else if (formType === "create_time_series_report") {
-        dialog.innerHTML = `
-            <form method="dialog" novalidate autocomplete="off">
-                <label for="tsr-title">Title:</label>
-                <input id="tsr-title" name="report_title" type="text" placeholder="Report title" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
-
-                <label for="tsr-description">Description:</label>
-                <textarea id="tsr-description" name="report_description" rows="3" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Brief description of this report" required></textarea>
-
-                <label for="tsr-tags">Tags:</label>
-                <input id="tsr-tags" name="tags" type="text" placeholder="gdp, labor, quarterly" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text">
-
-                <label for="tsr-ids">Time Series IDs:</label>
-                <input id="tsr-ids" name="time_series_ids" type="text" placeholder="id-001, id-002, id-003" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
-
-                <label for="tsr-from">Start Time:</label>
-                <input id="tsr-from" name="time_range_from" type="date" autocomplete="off" required>
-
-                <label for="tsr-to">End Time (omit for latest):</label>
-                <input id="tsr-to" name="time_range_to" type="date" autocomplete="off">
-
-                <menu>
-                    <button type="button" class="btn" id="cancelFormBtn">Cancel</button>
-                    <button type="button" class="btn primary" id="submitFormBtn">Create Report</button>
-                </menu>
-            </form>
-        `;
-        document.body.appendChild(dialog);
-        dialog.showModal();
-
-        const titleInput       = dialog.querySelector("input[name='report_title']");
-        const descriptionInput = dialog.querySelector("textarea[name='report_description']");
-        const tagsInput        = dialog.querySelector("input[name='tags']");
-        const idsInput         = dialog.querySelector("input[name='time_series_ids']");
-        const fromInput        = dialog.querySelector("input[name='time_range_from']");
-        const toInput          = dialog.querySelector("input[name='time_range_to']");
-
+        // Two modes:
+        //  (a) search-driven — prefill carries search_query: show the "Create Time
+        //      Series Report" selection table first (search -> pick -> fetch into
+        //      cache), then the create form prefilled with the resulting cache_ids.
+        //  (b) direct — no search_query: show the create form immediately (the LLM
+        //      already supplied explicit time_series_ids, or the user fills them in).
         const prefill = formSchema.prefill || {};
-        if (prefill.report_title)       titleInput.value       = prefill.report_title;
-        if (prefill.report_description) descriptionInput.value = prefill.report_description;
-        if (prefill.tags)               tagsInput.value        = prefill.tags;
-        if (prefill.time_series_ids)    idsInput.value         = prefill.time_series_ids;
-        if (prefill.time_range_from)    fromInput.value        = prefill.time_range_from;
-        if (prefill.time_range_to)      toInput.value          = prefill.time_range_to;
-
-        requestAnimationFrame(() => titleInput.focus());
-
-        const close = () => { sessionIdState.val = null; dialog.close(); dialog.remove(); };
-        dialog.querySelector("#cancelFormBtn").addEventListener("click", close);
-        dialog.addEventListener("cancel", e => { e.preventDefault(); close(); });
-
-        const submit = async () => {
-            if (!dialog.querySelector("form").reportValidity()) return;
-            close();
-            const payload = {
-                report_title:       titleInput.value.trim(),
-                report_description: descriptionInput.value.trim(),
-                tags:               tagsInput.value.trim(),
-                time_series_ids:    idsInput.value.trim(),
-                time_range_from:    fromInput.value.trim(),
-            };
-            if (toInput.value.trim()) payload.time_range_to = toInput.value.trim();
-            await handleResumeRequest(sessionId, payload, promptLabel);
-        };
-        dialog.querySelector("#submitFormBtn").addEventListener("click", submit);
-        [titleInput, idsInput].forEach(
-            el => el.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); submit(); } })
-        );
+        if (prefill.search_query) {
+            showSeriesSelectionTable(dialog, formSchema, sessionId, promptLabel);
+        } else {
+            showCreateReportForm(dialog, prefill, sessionId, promptLabel);
+        }
 
     } else if (formType === "select_time_series_report") {
         dialog.classList.add("report-picker");
@@ -332,7 +486,7 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
             titleInput.value = report.report_title || "";
             descInput.value  = report.report_description || "";
             tagsInput.value  = (report.tags || []).join(", ");
-            idsInput.value   = (report.time_series_info || []).map(s => s.native_id).join(", ");
+            idsInput.value   = (report.time_series_info || []).map(s => s.cache_id).join(", ");
             fromInput.value  = report.time_range_from || "";
             toInput.value    = report.time_range_to || "";
 

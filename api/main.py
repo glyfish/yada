@@ -24,6 +24,9 @@ from apps.agentic.core.mcp_tool_registry import MCPToolRegistry
 from apps.agentic.db.series_cache import SeriesCache
 from apps.agentic.db.report_cache import ReportCache
 from apps.agentic.agents.plots.time_series_report_agent import TimeSeriesInfoEntry
+from apps.agentic.agents.data.caching_tiingo_tool import CachingTiingoTool
+from apps.agentic.agents.data.caching_fred_tool import CachingFredTool
+from apps.agentic.agents.document.document_agent import search_series_rows
 from apps.agentic.core.pricing import estimate_cost
 from pathlib import Path
 from dotenv import load_dotenv
@@ -401,8 +404,8 @@ async def get_report(report_id: str):
         "time_range_to": str(record["time_range_to"]) if record.get("time_range_to") else None,
         "time_series_info": [
             {
+                "cache_id": entry.get("cache_id", ""),
                 "native_id": entry.get("native_id", ""),
-                "external_id": entry.get("external_id", ""),
                 "title": entry.get("title", ""),
                 "source": entry.get("source", ""),
             }
@@ -435,10 +438,10 @@ async def update_report(report_id: str, req: UpdateReportPayload):
         raw_metadata = entry.get("metadata")
         metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
         time_series_info.append({
-            "native_id": str(entry["native_id"]),
+            "cache_id": str(entry["cache_id"]),
             "title": str(entry.get("title") or ""),
             "source": str(entry.get("source") or ""),
-            "external_id": str(entry.get("external_id") or ""),
+            "native_id": str(entry.get("native_id") or ""),
             "frequency": str(entry.get("frequency") or ""),
             "observation_start": str(entry.get("observation_start") or ""),
             "observation_end": str(entry.get("observation_end") or ""),
@@ -481,6 +484,97 @@ async def list_reports(q: str = Query("", description="Filter by title, tags, or
             or any(q_lower in tag.lower() for tag in r["tags"])
         ]
     return reports
+
+
+# Maps a data source to its (observations tool, info tool, caching wrapper, id kwarg).
+# The caching wrapper fetches the full series into SeriesCache (or hits the cache)
+# and returns a SeriesRef; we then read the cached entry back for display metadata.
+_SERIES_SOURCE_SPECS = {
+    "tiingo": ("tiingo_price_series", "tiingo_series_info", CachingTiingoTool, "ticker"),
+    "fred": ("fred_series_observations", "fred_series_info", CachingFredTool, "series_id"),
+}
+
+
+@app.get("/api/series/search")
+async def search_series(
+    source: str = Query(..., description="Search source: 'etf' or 'fred'"),
+    q: str = Query(..., description="Natural-language search query"),
+):
+    """
+    Structured search over the ETF or FRED metadata store, returning selectable
+    rows for the report-builder table. Uses the same LLM filter extraction as the
+    chat search agents. Rows carry the fetch source ('tiingo' for ETFs, 'fred' for
+    FRED) so each selection can be handed straight to /api/series/fetch.
+    """
+    src = source.strip().lower()
+    if src not in ("etf", "fred"):
+        raise HTTPException(status_code=400, detail="source must be 'etf' or 'fred'")
+    if not q.strip():
+        raise HTTPException(status_code=400, detail="q is required")
+    try:
+        rows = await search_series_rows(src, q)
+    except Exception as e:
+        logger.error(f"search_series {src} q={q!r} failed: {e}")
+        raise HTTPException(status_code=502, detail=f"Search failed: {e}")
+    return {"source": src, "query": q, "rows": rows}
+
+
+class FetchSeriesPayload(BaseModel):
+    source: str
+    native_id: str
+
+
+@app.post("/api/series/fetch")
+async def fetch_series(req: FetchSeriesPayload):
+    """
+    Fetch a single series from its source into SeriesCache and return the resulting
+    cache entry. Idempotent — a second call for the same series returns the existing
+    cache_id. This is the bridge from a search result (source + native_id) to the
+    cache_id a report is built from.
+    """
+    source = req.source.strip().lower()
+    native_id = req.native_id.strip()
+    if not native_id:
+        raise HTTPException(status_code=400, detail="native_id is required")
+
+    spec = _SERIES_SOURCE_SPECS.get(source)
+    if spec is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported source '{req.source}'. Expected one of: {', '.join(_SERIES_SOURCE_SPECS)}",
+        )
+    obs_tool_name, info_tool_name, tool_cls, id_kwarg = spec
+
+    wrapped = MCPToolRegistry.get(obs_tool_name)
+    if wrapped is None:
+        raise HTTPException(
+            status_code=503,
+            detail=f"MCP tool '{obs_tool_name}' is unavailable. Is the MCP server running?",
+        )
+
+    tool = tool_cls(wrapped=wrapped, info_tool=MCPToolRegistry.get(info_tool_name))
+    try:
+        ref_json = await tool._arun(**{id_kwarg: native_id})
+    except Exception as e:
+        logger.error(f"fetch_series {source}:{native_id} failed: {e}")
+        raise HTTPException(status_code=502, detail=f"Failed to fetch series: {e}")
+
+    cache_id = json.loads(ref_json)["cache_id"]
+    entry = await SeriesCache.get_by_cache_id(cache_id)
+    if entry is None:
+        raise HTTPException(status_code=500, detail="Series fetched but not found in cache")
+
+    return {
+        "cache_id": str(entry["cache_id"]),
+        "source": str(entry.get("source") or source),
+        "native_id": str(entry.get("native_id") or native_id),
+        "title": str(entry.get("title") or ""),
+        "frequency": str(entry.get("frequency") or ""),
+        "units": str(entry.get("units") or ""),
+        "observation_start": str(entry.get("observation_start") or ""),
+        "observation_end": str(entry.get("observation_end") or ""),
+        "observation_count": int(entry.get("observation_count") or 0),
+    }
 
 
 # Mount the document API router

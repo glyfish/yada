@@ -44,7 +44,9 @@ class RequestHumanFormInput(BaseModel):
         description=(
             "Optional pre-filled values for form fields extracted from the user's request. "
             "For create_time_series_report: keys are report_title, report_description, "
-            "time_series_ids, time_range_from, time_range_to. "
+            "time_series_ids, time_range_from, time_range_to. When the user describes the "
+            "series by a search rather than explicit cache IDs, instead pass search_source "
+            "('etf' or 'fred') and search_query (the natural-language criteria). "
             "For load_github_repo: keys are account, repo."
         ),
     )
@@ -365,8 +367,14 @@ Analyze the user's request and call the appropriate tool(s) in the correct order
 A request may require multiple subagents called sequentially, for example searching for data
 and then plotting it. Pass the full context needed for each subagent to do its job.
 
-When multiple tools are called in sequence, your final response should only contain the verbatim output
-from the last tool in the chain. Do not include raw data or intermediate results from earlier tools.
+When you call multiple tools, how to assemble the final response depends on how they relate:
+- Dependent chain — one tool's output feeds the next (e.g. fetch a time series, then plot it).
+  Your final response should contain ONLY the verbatim output of the LAST tool in the chain. Do
+  not include the raw data or intermediate results from earlier tools.
+- Independent results — the user asked for several distinct things in one request (e.g. an ETF
+  search AND a FRED search, or two separate plots). Your final response must contain the verbatim
+  output of EVERY such tool, one after another in the order requested, each copied exactly and
+  separated by a blank line. Never drop or summarize any of them.
 </instructions>
 
 <output_rule>
@@ -377,7 +385,8 @@ as returned — character for character, with zero modifications.
 - Do NOT rephrase, condense, or reformat the tool output.
 - Do NOT strip markdown, HTML tags, code fences, or any other formatting.
 - Do NOT omit any section of the tool result, regardless of its length.
-- Output the complete tool result verbatim as your entire response.
+- Output the complete tool result verbatim as your entire response. When the request produced
+  multiple independent results, output ALL of them verbatim, separated by a blank line — never just one.
 
 The tool responses contain precise formatting (HTML tags, image references, markdown, JSON blocks)
 that must be preserved exactly. Any modification breaks downstream rendering.
@@ -413,6 +422,21 @@ When the user wants to create a time series report:
    form fields are pre-populated. Keys: report_title, report_description, time_series_ids,
    time_range_from (required, YYYY-MM-DD), time_range_to (optional, YYYY-MM-DD).
 2. After the user submits the form, pass the form data as the request to delegate_to_time_series_agent.
+
+SPECIAL CASE — the user describes the series to include by a SEARCH instead of giving
+explicit cache IDs (e.g. "create a report using fixed income ETFs available on US exchanges",
+"build a report from FRED GDP series still being updated"):
+1. Still call request_human_form with form_type: create_time_series_report, but instead of
+   time_series_ids pass two prefill keys: search_source and search_query.
+   - search_source: "etf" when the series are ETFs / mutual funds / stock tickers, "fred" when
+     they are FRED economic series.
+   - search_query: the natural-language description of the series to search for (the criteria
+     part of the request, e.g. "fixed income ETFs available on US exchanges").
+   The form then shows the user a selection table of matching series; on submit its data is a
+   normal create_time_series_report payload (with the chosen cache IDs already resolved).
+2. After the user submits the form, pass the form data as the request to delegate_to_time_series_agent.
+Do NOT delegate the search yourself — the form runs the search. Only pass search_source and
+search_query in prefill.
 
 When the user wants to PLOT a time series report but does NOT specify which report:
 1. Call request_human_form with form_type: select_time_series_report. This presents the user

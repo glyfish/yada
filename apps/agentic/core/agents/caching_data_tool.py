@@ -38,7 +38,7 @@ class CachingDataTool(BaseTool):
             return SeriesRef(
                 source=self.source,
                 native_id=native_id,
-                cache_id=str(entry["native_id"]),
+                cache_id=str(entry["cache_id"]),
             ).to_json()
 
         logger.debug(f"{self.name}: cache miss for {self.source}:{native_id} — fetching")

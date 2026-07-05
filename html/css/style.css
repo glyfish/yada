@@ -308,6 +308,16 @@ dialog.modal menu {
 dialog.modal.report-picker {
     width: min(780px, 96vw);
 }
+dialog.modal.report-picker.series-select {
+    width: min(980px, 96vw);
+}
+/* Keep the Obs Start / Obs End dates on one line (Title stays wrappable). */
+dialog.modal.series-select .report-picker-table th:nth-child(5),
+dialog.modal.series-select .report-picker-table th:nth-child(6),
+dialog.modal.series-select .report-picker-table td:nth-child(5),
+dialog.modal.series-select .report-picker-table td:nth-child(6) {
+    white-space: nowrap;
+}
 dialog.modal.report-picker form {
     display: flex;
     flex-direction: column;

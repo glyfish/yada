@@ -12,12 +12,8 @@ from git import Repo
 
 from langchain_chroma import Chroma
 from langchain_openai import OpenAIEmbeddings
-from langchain_community.document_loaders import GitLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
 
-from apps.agentic.core.utils import load_api_key
-from apps.agentic.core.constants import (GITHUB_LOCAL_PATH, GITHUB_EXCLUDED_REPOS, CHROMA_DB_MAX_BATCH_SIZE,
-                                         RESEARCH_LIBRARY_LOCAL_PATH, DB_PATH)
+from apps.agentic.core.constants import (DB_PATH)
 import tiktoken
 
 logger = get_logger("YADA")

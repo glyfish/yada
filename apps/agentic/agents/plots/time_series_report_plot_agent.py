@@ -79,7 +79,7 @@ class GetReportInfoInput(BaseModel):
 
 
 class ReportSinglePlotInput(BaseModel):
-    native_id: str = Field(..., description="native_id UUID of the series from get_report_info.")
+    cache_id: str = Field(..., description="cache_id UUID of the series from get_report_info.")
     date_from: str | None = Field(None, description="Start date YYYY-MM-DD (from report time_range_from).")
     date_to: str | None = Field(None, description="End date YYYY-MM-DD (from report time_range_to, or None for latest).")
     title: str = Field(default="Time Series", description="Plot title.")
@@ -87,7 +87,7 @@ class ReportSinglePlotInput(BaseModel):
 
 
 class ReportComparisonPlotInput(BaseModel):
-    native_ids: list[str] = Field(..., description="List of native_id UUIDs (2-5) from get_report_info.")
+    cache_ids: list[str] = Field(..., description="List of cache_id UUIDs (2-5) from get_report_info.")
     date_from: str | None = Field(None, description="Start date YYYY-MM-DD.")
     date_to: str | None = Field(None, description="End date YYYY-MM-DD, or None for latest.")
     title: str = Field(default="Time Series Comparison", description="Plot title.")
@@ -96,8 +96,8 @@ class ReportComparisonPlotInput(BaseModel):
 
 
 class ReportTwinxPlotInput(BaseModel):
-    left_native_id: str = Field(..., description="native_id UUID for the left y-axis series.")
-    right_native_id: str = Field(..., description="native_id UUID for the right y-axis series.")
+    left_cache_id: str = Field(..., description="cache_id UUID for the left y-axis series.")
+    right_cache_id: str = Field(..., description="cache_id UUID for the right y-axis series.")
     date_from: str | None = Field(None)
     date_to: str | None = Field(None)
     title: str = Field(default="Time Series", description="Plot title.")
@@ -108,8 +108,8 @@ class ReportTwinxPlotInput(BaseModel):
 
 
 class ReportTwinxComparisonPlotInput(BaseModel):
-    left_native_ids: list[str] = Field(..., description="native_id UUIDs for the left y-axis series.")
-    right_native_ids: list[str] = Field(..., description="native_id UUIDs for the right y-axis series.")
+    left_cache_ids: list[str] = Field(..., description="cache_id UUIDs for the left y-axis series.")
+    right_cache_ids: list[str] = Field(..., description="cache_id UUIDs for the right y-axis series.")
     date_from: str | None = Field(None)
     date_to: str | None = Field(None)
     title: str = Field(default="Time Series", description="Plot title.")
@@ -119,7 +119,7 @@ class ReportTwinxComparisonPlotInput(BaseModel):
 
 
 class ReportStackPlotInput(BaseModel):
-    native_ids: list[str] = Field(..., description="List of native_id UUIDs (2-5) from get_report_info.")
+    cache_ids: list[str] = Field(..., description="List of cache_id UUIDs (2-5) from get_report_info.")
     date_from: str | None = Field(None)
     date_to: str | None = Field(None)
     title: str = Field(default="Time Series Stack", description="Plot title.")
@@ -156,7 +156,7 @@ class TimeSeriesReportPlotAgent(ReactAgent):
 
             Always follow this sequence:
             1. Call get_report_info with the report ID or title to retrieve report metadata.
-               This returns time_range_from, time_range_to, and a time_series list with native_id,
+               This returns time_range_from, time_range_to, and a time_series list with cache_id,
                units, value_range, observation_start, and observation_end per series.
                Never load raw observations — use only this metadata to choose plot types.
             2. Group the series into batches of at most 5. For reports with more than 5 series,
@@ -203,7 +203,7 @@ class TimeSeriesReportPlotAgent(ReactAgent):
             primary_function="""
                 Retrieve report metadata by UUID or case-insensitive title substring.
                 Returns time_range_from, time_range_to, and the time_series list containing
-                native_id, units, value_range, observation_start, and observation_end per series.
+                cache_id, units, value_range, observation_start, and observation_end per series.
                 If multiple reports match a title search, returns the match list so the user
                 can be asked to select one by report_id. Never returns raw observations.
             """,
@@ -240,20 +240,20 @@ class TimeSeriesReportPlotAgent(ReactAgent):
 
         time_series = []
         for entry in (record.get("time_series_info") or []):
-            native_id = entry.get("native_id", "")
+            cache_id = entry.get("cache_id", "")
             value_range = None
             try:
-                _, values = _load_series_by_cache_id(native_id, date_from, date_to)
+                _, values = _load_series_by_cache_id(cache_id, date_from, date_to)
                 if values:
                     value_range = {"min": float(min(values)), "max": float(max(values))}
             except Exception as exc:
-                logger.warning(f"get_report_info: could not load series {native_id} for value_range: {exc}")
+                logger.warning(f"get_report_info: could not load series {cache_id} for value_range: {exc}")
             metadata = dict(entry.get("metadata") or {})
             time_series.append({
-                "native_id": native_id,
+                "cache_id": cache_id,
                 "title": entry.get("title", ""),
                 "source": entry.get("source", ""),
-                "external_id": entry.get("external_id", ""),
+                "native_id": entry.get("native_id", ""),
                 "frequency": entry.get("frequency", ""),
                 "observation_start": entry.get("observation_start", ""),
                 "observation_end": entry.get("observation_end", ""),
@@ -277,7 +277,7 @@ class TimeSeriesReportPlotAgent(ReactAgent):
         args_schema=ReportSinglePlotInput,
         metadata=ToolSpec(
             primary_function="""
-                Plot a single time series from the report using its native_id.
+                Plot a single time series from the report using its cache_id.
                 Use when the group contains exactly one series.
                 Pass date_from and date_to from the report time_range.
             """,
@@ -287,14 +287,14 @@ class TimeSeriesReportPlotAgent(ReactAgent):
         ),
     )
     def report_plot_single(
-        native_id: str,
+        cache_id: str,
         date_from: str | None,
         date_to: str | None,
         title: str,
         ylabel: str,
     ) -> str:
         try:
-            times, values = _load_series_by_cache_id(native_id, date_from, date_to)
+            times, values = _load_series_by_cache_id(cache_id, date_from, date_to)
             file = generate_time_series_plot(
                 time=numpy.array(times),
                 values=numpy.array(values),
@@ -306,7 +306,7 @@ class TimeSeriesReportPlotAgent(ReactAgent):
             logger.debug(f"report_plot_single: saved plot → {file}")
             return f'<div class="time-series-plot"><img src="{file}"></div>'
         except Exception as exc:
-            logger.error(f"report_plot_single failed for native_id={native_id}: {exc}", exc_info=True)
+            logger.error(f"report_plot_single failed for cache_id={cache_id}: {exc}", exc_info=True)
             raise
 
 
@@ -324,7 +324,7 @@ class TimeSeriesReportPlotAgent(ReactAgent):
         ),
     )
     def report_plot_comparison(
-        native_ids: list[str],
+        cache_ids: list[str],
         date_from: str | None,
         date_to: str | None,
         title: str,
@@ -332,7 +332,7 @@ class TimeSeriesReportPlotAgent(ReactAgent):
         labels: list[str] | None,
     ) -> str:
         try:
-            loaded = [_load_series_by_cache_id(nid, date_from, date_to) for nid in native_ids]
+            loaded = [_load_series_by_cache_id(nid, date_from, date_to) for nid in cache_ids]
             file = generate_time_series_comparison(
                 time=numpy.array(loaded[0][0]),
                 values=[numpy.array(t[1]) for t in loaded],
@@ -345,7 +345,7 @@ class TimeSeriesReportPlotAgent(ReactAgent):
             logger.debug(f"report_plot_comparison: saved plot → {file}")
             return f'<div class="time-series-plot"><img src="{file}"></div>'
         except Exception as exc:
-            logger.error(f"report_plot_comparison failed for native_ids={native_ids}: {exc}", exc_info=True)
+            logger.error(f"report_plot_comparison failed for cache_ids={cache_ids}: {exc}", exc_info=True)
             raise
 
 
@@ -363,8 +363,8 @@ class TimeSeriesReportPlotAgent(ReactAgent):
         ),
     )
     def report_plot_twinx(
-        left_native_id: str,
-        right_native_id: str,
+        left_cache_id: str,
+        right_cache_id: str,
         date_from: str | None,
         date_to: str | None,
         title: str,
@@ -374,8 +374,8 @@ class TimeSeriesReportPlotAgent(ReactAgent):
         right_label: str | None,
     ) -> str:
         try:
-            left_times, left_values = _load_series_by_cache_id(left_native_id, date_from, date_to)
-            _, right_values = _load_series_by_cache_id(right_native_id, date_from, date_to)
+            left_times, left_values = _load_series_by_cache_id(left_cache_id, date_from, date_to)
+            _, right_values = _load_series_by_cache_id(right_cache_id, date_from, date_to)
             labels = [left_label, right_label] if left_label and right_label else None
             file = generate_time_series_twinx(
                 time=numpy.array(left_times),
@@ -391,7 +391,7 @@ class TimeSeriesReportPlotAgent(ReactAgent):
             logger.debug(f"report_plot_twinx: saved plot → {file}")
             return f'<div class="time-series-plot"><img src="{file}"></div>'
         except Exception as exc:
-            logger.error(f"report_plot_twinx failed for left={left_native_id}, right={right_native_id}: {exc}", exc_info=True)
+            logger.error(f"report_plot_twinx failed for left={left_cache_id}, right={right_cache_id}: {exc}", exc_info=True)
             raise
 
 
@@ -401,8 +401,8 @@ class TimeSeriesReportPlotAgent(ReactAgent):
         metadata=ToolSpec(
             primary_function="""
                 Plot 3-5 report series with exactly 2 distinct units on dual y-axes.
-                Assign series sharing the majority unit to left_native_ids and the
-                remaining series to right_native_ids.
+                Assign series sharing the majority unit to left_cache_ids and the
+                remaining series to right_cache_ids.
             """,
             positive_examples=[
                 PositiveExample(input="Plot GDP (left) with CPI and PCE (right) on dual axes."),
@@ -410,8 +410,8 @@ class TimeSeriesReportPlotAgent(ReactAgent):
         ),
     )
     def report_plot_twinx_comparison(
-        left_native_ids: list[str],
-        right_native_ids: list[str],
+        left_cache_ids: list[str],
+        right_cache_ids: list[str],
         date_from: str | None,
         date_to: str | None,
         title: str,
@@ -420,8 +420,8 @@ class TimeSeriesReportPlotAgent(ReactAgent):
         labels: list[str] | None,
     ) -> str:
         try:
-            left_loaded = [_load_series_by_cache_id(nid, date_from, date_to) for nid in left_native_ids]
-            right_loaded = [_load_series_by_cache_id(nid, date_from, date_to) for nid in right_native_ids]
+            left_loaded = [_load_series_by_cache_id(nid, date_from, date_to) for nid in left_cache_ids]
+            right_loaded = [_load_series_by_cache_id(nid, date_from, date_to) for nid in right_cache_ids]
             file = generate_time_series_twinx_comparison(
                 time=numpy.array(left_loaded[0][0]),
                 left=[numpy.array(t[1]) for t in left_loaded],
@@ -436,7 +436,7 @@ class TimeSeriesReportPlotAgent(ReactAgent):
             logger.debug(f"report_plot_twinx_comparison: saved plot → {file}")
             return f'<div class="time-series-plot"><img src="{file}"></div>'
         except Exception as exc:
-            logger.error(f"report_plot_twinx_comparison failed for left={left_native_ids}, right={right_native_ids}: {exc}", exc_info=True)
+            logger.error(f"report_plot_twinx_comparison failed for left={left_cache_ids}, right={right_cache_ids}: {exc}", exc_info=True)
             raise
 
 
@@ -454,7 +454,7 @@ class TimeSeriesReportPlotAgent(ReactAgent):
         ),
     )
     def report_plot_stack(
-        native_ids: list[str],
+        cache_ids: list[str],
         date_from: str | None,
         date_to: str | None,
         title: str,
@@ -462,7 +462,7 @@ class TimeSeriesReportPlotAgent(ReactAgent):
         labels: list[str] | None,
     ) -> str:
         try:
-            loaded = [_load_series_by_cache_id(nid, date_from, date_to) for nid in native_ids]
+            loaded = [_load_series_by_cache_id(nid, date_from, date_to) for nid in cache_ids]
             file = generate_time_series_stack(
                 time=numpy.array(loaded[0][0]),
                 values=[numpy.array(t[1]) for t in loaded],
@@ -475,5 +475,5 @@ class TimeSeriesReportPlotAgent(ReactAgent):
             logger.debug(f"report_plot_stack: saved plot → {file}")
             return f'<div class="time-series-plot"><img src="{file}"></div>'
         except Exception as exc:
-            logger.error(f"report_plot_stack failed for native_ids={native_ids}: {exc}", exc_info=True)
+            logger.error(f"report_plot_stack failed for cache_ids={cache_ids}: {exc}", exc_info=True)
             raise

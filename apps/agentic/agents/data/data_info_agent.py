@@ -38,9 +38,9 @@ class ListTimeSeriesInput(BaseModel):
 
 
 class TimeSeriesDetailsInput(BaseModel):
-    native_id_or_external_id: str = Field(
+    cache_id_or_native_id: str = Field(
         ...,
-        description="native_id UUID or external_id (e.g. UNRATE) of the cached series.",
+        description="cache_id UUID or native_id (e.g. UNRATE) of the cached series.",
     )
 
 
@@ -196,8 +196,8 @@ class DataInfoAgent(ReactAgent):
         in all data stores. The tools allow you to:
         - List all time series reports (title, report_id, time range).
         - Show full metadata for a specific report by report_id or title substring, including the series it contains.
-        - List all cached time series (title, native_id, external_id, source, frequency, date range).
-        - Show full metadata for a specific cached time series by native_id or external_id.
+        - List all cached time series (title, cache_id, native_id, source, frequency, date range).
+        - Show full metadata for a specific cached time series by cache_id or native_id.
         - List repository names and filenames for code repositories.
         - Summarize metadata for research notes, including filename, title, author, topic, and shelf.
         - Filter research note titles using author/topic/shelf metadata.
@@ -507,7 +507,7 @@ class DataInfoAgent(ReactAgent):
             primary_function="""
                 Return full metadata for a time series report identified by report_id UUID or
                 a title substring. Returns the title, description, time range, and the list of
-                time series entries (native_id, external_id, title, units, value_range, etc.).
+                time series entries (cache_id, native_id, title, units, value_range, etc.).
                 If multiple reports match the title fragment, a disambiguation list is returned.
             """,
             positive_examples=[
@@ -555,13 +555,13 @@ class DataInfoAgent(ReactAgent):
             "",
             "**Time Series:**",
             "",
-            "| Title | native_id | external_id | Source | Frequency | Units |",
+            "| Title | cache_id | native_id | Source | Frequency | Units |",
             "|-------|-----------|-------------|--------|-----------|-------|",
         ]
         for s in series_info:
             units = (s.get("metadata") or {}).get("units", "")
             lines.append(
-                f"| {s.get('title', '')} | `{s.get('native_id', '')}` | {s.get('external_id', '')}"
+                f"| {s.get('title', '')} | `{s.get('cache_id', '')}` | {s.get('native_id', '')}"
                 f" | {s.get('source', '')} | {s.get('frequency', '')} | {units} |"
             )
         return "\n".join(lines)
@@ -573,7 +573,7 @@ class DataInfoAgent(ReactAgent):
         metadata=ToolSpec(
             primary_function="""
                 List all time series stored in the cache.
-                Returns title, native_id, external_id, source, frequency,
+                Returns title, cache_id, native_id, source, frequency,
                 observation_start, and observation_end for each series.
             """,
             positive_examples=[
@@ -590,11 +590,11 @@ class DataInfoAgent(ReactAgent):
         rows = SeriesCache._list_series_sync()
         if not rows:
             return "No time series found in the cache."
-        lines = ["| Title | native_id | external_id | Source | Frequency | Start | End |",
+        lines = ["| Title | cache_id | native_id | Source | Frequency | Start | End |",
                  "|-------|-----------|-------------|--------|-----------|-------|-----|"]
         for r in rows:
             lines.append(
-                f"| {r['title']} | `{r['native_id']}` | {r['external_id']}"
+                f"| {r['title']} | `{r['cache_id']}` | {r['native_id']}"
                 f" | {r['source']} | {r['frequency']}"
                 f" | {r['observation_start']} | {r['observation_end']} |"
             )
@@ -606,23 +606,23 @@ class DataInfoAgent(ReactAgent):
         args_schema=TimeSeriesDetailsInput,
         metadata=ToolSpec(
             primary_function="""
-                Return full metadata for a cached time series identified by native_id UUID
-                or external_id (e.g. UNRATE). Does not return observations.
-                If external_id matches multiple entries all are returned.
+                Return full metadata for a cached time series identified by cache_id UUID
+                or native_id (e.g. UNRATE). Does not return observations.
+                If native_id matches multiple entries all are returned.
             """,
             positive_examples=[
                 PositiveExample(input="Show me the details for time series UNRATE."),
-                PositiveExample(input="What are the details of the series with native_id abc-123?"),
+                PositiveExample(input="What are the details of the series with cache_id abc-123?"),
             ],
             requires_context=[
-                "Call list_time_series first if the native_id or external_id is not already known.",
+                "Call list_time_series first if the cache_id or native_id is not already known.",
             ],
         ),
     )
-    def list_time_series_details(native_id_or_external_id: str) -> str:
-        rows = SeriesCache._get_details_by_id_sync(native_id_or_external_id)
+    def list_time_series_details(cache_id_or_native_id: str) -> str:
+        rows = SeriesCache._get_details_by_id_sync(cache_id_or_native_id)
         if not rows:
-            return f"No cached series found matching `{native_id_or_external_id}`."
+            return f"No cached series found matching `{cache_id_or_native_id}`."
         blocks = []
         for r in rows:
             units = (r.get("metadata") or {}).get("units", "")
@@ -630,8 +630,8 @@ class DataInfoAgent(ReactAgent):
             blocks.append(
                 f"**{r['title']}**\n\n"
                 f"| Field | Value |\n|-------|-------|\n"
-                f"| native_id | `{r['native_id']}` |\n"
-                f"| external_id | {r['external_id']} |\n"
+                f"| cache_id | `{r['cache_id']}` |\n"
+                f"| native_id | {r['native_id']} |\n"
                 f"| source | {r['source']} |\n"
                 f"| frequency | {r['frequency']} |\n"
                 f"| units | {units} |\n"

@@ -25,6 +25,7 @@ from apps.agentic.agents.document.research_library_agent import ResearchLibraryA
 from apps.agentic.agents.document.fred_data_info_agent import FredDataInfoAgent
 from apps.agentic.agents.document.etf_data_info_agent import ETFDataInfoAgent
 from apps.agentic.agents.document.document_loader_agent import DocumentLoaderAgent
+from apps.agentic.db.series_cache import SeriesCache
 
 from lib.logger import get_logger
 
@@ -167,6 +168,69 @@ async def delegate_to_etf_data_info_search_agent(request: str) -> str:
     etf_data_info_agent = ETFDataInfoAgent(query=where)
     result = await etf_data_info_agent.agent.ainvoke(state, config)
     return result["messages"][-1].content
+
+
+async def search_series_rows(source: str, query: str) -> list[dict[str, str]]:
+    """
+    Structured search over the ETF or FRED metadata store for the report-builder
+    selection table. Reuses the same LLM filter extraction as the chat search
+    agents, then maps retriever hits to rows keyed for the table and the
+    downstream /api/series/fetch call.
+
+    Each row: native_id (ticker or FRED series_id), title, source (the *fetch*
+    source — 'tiingo' for ETFs, 'fred' for FRED), observation_start/end (known
+    only for FRED before fetch), plus a few display-only fields. Deduplicated by
+    native_id, order preserved.
+    """
+    source = source.strip().lower()
+
+    if source in ("etf", "tiingo"):
+        where, cleaned = await extract_etf_filters(query)
+        hits = await ETFDataInfoAgent(query=where).retriever.ainvoke(cleaned)
+        native_key, title_key, fetch_source = "ticker", "name", "tiingo"
+        extra_keys = ("family", "category_group", "category", "exchange")
+    elif source == "fred":
+        where, cleaned = await extract_fred_filters(query)
+        hits = await FredDataInfoAgent(query=where).retriever.ainvoke(cleaned)
+        native_key, title_key, fetch_source = "series_id", "series_title", "fred"
+        extra_keys = ("frequency", "units", "seasonal_adjustment")
+    else:
+        raise ValueError(f"Unsupported search source '{source}'. Expected 'etf' or 'fred'.")
+
+    rows: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for d in hits:
+        m = d.metadata or {}
+        native_id = str(m.get(native_key) or "").strip()
+        if not native_id or native_id in seen:
+            continue
+        seen.add(native_id)
+        row = {
+            "native_id": native_id,
+            "title": str(m.get(title_key) or ""),
+            "source": fetch_source,
+            "observation_start": str(m.get("observation_start") or ""),
+            "observation_end": str(m.get("observation_end") or ""),
+        }
+        for k in extra_keys:
+            row[k] = str(m.get(k) or "")
+        rows.append(row)
+
+    # Backfill observation dates from the cache for series already fetched. ETF
+    # metadata carries no obs range, but once a ticker is fetched the cache does —
+    # so a previously-cached selection shows its real date span in the table.
+    blanks = [r["native_id"] for r in rows if not r["observation_start"] or not r["observation_end"]]
+    cached = SeriesCache._get_obs_ranges_by_source_sync(fetch_source, blanks)
+    for r in rows:
+        c = cached.get(r["native_id"])
+        if not c:
+            continue
+        if not r["observation_start"]:
+            r["observation_start"] = str(c["observation_start"] or "")
+        if not r["observation_end"]:
+            r["observation_end"] = str(c["observation_end"] or "")
+
+    return rows
 
 
 class DocumentAgent(ReactAgent):

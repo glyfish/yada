@@ -23,10 +23,10 @@ _plot_agent = TimeSeriesReportPlotAgent()
 
 
 class TimeSeriesInfoEntry(TypedDict):
-    native_id: str
+    cache_id: str
     title: str
     source: str
-    external_id: str
+    native_id: str
     frequency: str
     observation_start: str
     observation_end: str
@@ -215,10 +215,10 @@ class TimeSeriesReportAgent(ReactAgent):
             metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
             time_series_info.append(
                 {
-                    "native_id": str(entry["native_id"]),
+                    "cache_id": str(entry["cache_id"]),
                     "title": str(entry.get("title") or ""),
                     "source": str(entry.get("source") or ""),
-                    "external_id": str(entry.get("external_id") or ""),
+                    "native_id": str(entry.get("native_id") or ""),
                     "frequency": str(entry.get("frequency") or ""),
                     "observation_start": str(entry.get("observation_start") or ""),
                     "observation_end": str(entry.get("observation_end") or ""),
@@ -242,7 +242,7 @@ class TimeSeriesReportAgent(ReactAgent):
         )
         logger.debug(f"TimeSeriesReportAgent: created report '{report_title}' → {report_id}")
         detail_lines = "\n".join(
-            f"  - `{row['native_id']}` | {row['source']} | {row['title']}"
+            f"  - `{row['cache_id']}` | {row['source']} | {row['title']}"
             for row in time_series_info
         )
         return (
