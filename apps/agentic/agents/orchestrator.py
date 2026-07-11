@@ -90,8 +90,9 @@ class RequestHumanFormInput(BaseModel):
             "Optional pre-filled values for form fields extracted from the user's request. "
             "For create_time_series_report: keys are report_title, report_description, "
             "time_series_ids, time_range_from, time_range_to. When the user describes the "
-            "series by a search rather than explicit cache IDs, instead pass search_source "
-            "('etf' or 'fred') and search_query (the natural-language criteria). "
+            "series by a search rather than explicit cache IDs, instead pass 'searches': a list "
+            "of {source, query} objects, one per data store named — source is 'etf' or 'fred', "
+            "query is the natural-language criteria for that store. "
             "For load_github_repo: keys are account, repo."
         ),
     )
@@ -470,18 +471,19 @@ When the user wants to create a time series report:
 
 SPECIAL CASE — the user describes the series to include by a SEARCH instead of giving
 explicit cache IDs (e.g. "create a report using fixed income ETFs available on US exchanges",
-"build a report from FRED GDP series still being updated"):
+"build a report from FRED GDP series still being updated", or a COMPOUND request naming more
+than one store such as "create a report using FRED GDP series and VanEck fixed income ETFs"):
 1. Still call request_human_form with form_type: create_time_series_report, but instead of
-   time_series_ids pass two prefill keys: search_source and search_query.
-   - search_source: "etf" when the series are ETFs / mutual funds / stock tickers, "fred" when
-     they are FRED economic series.
-   - search_query: the natural-language description of the series to search for (the criteria
-     part of the request, e.g. "fixed income ETFs available on US exchanges").
-   The form then shows the user a selection table of matching series; on submit its data is a
-   normal create_time_series_report payload (with the chosen cache IDs already resolved).
+   time_series_ids pass a prefill key 'searches': a list of {{source, query}} objects, ONE PER
+   DATA STORE the user named.
+   - source: "etf" for ETFs / mutual funds / stock tickers, "fred" for FRED economic series.
+   - query: the natural-language criteria for THAT store (the part of the request about it,
+     e.g. "fixed income ETFs available on US exchanges").
+   A single-store request produces a one-element list; a compound request produces one entry
+   per store. The form searches every store and shows one combined selection table; on submit
+   its data is a normal create_time_series_report payload (with the chosen cache IDs resolved).
 2. After the user submits the form, pass the form data as the request to delegate_to_time_series_agent.
-Do NOT delegate the search yourself — the form runs the search. Only pass search_source and
-search_query in prefill.
+Do NOT delegate the search yourself — the form runs the searches. Only pass 'searches' in prefill.
 
 When the user wants to PLOT a time series report but does NOT specify which report:
 1. Call request_human_form with form_type: select_time_series_report. This presents the user

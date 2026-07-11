@@ -80,8 +80,11 @@ function showCreateReportForm(dialog, prefill, sessionId, promptLabel) {
 // into the time series cache and hand off to the create-report form.
 function showSeriesSelectionTable(dialog, formSchema, sessionId, promptLabel) {
     const prefill = formSchema.prefill || {};
-    const source  = String(prefill.search_source || "").toLowerCase();
-    const query   = prefill.search_query || "";
+    // A compound report searches several stores at once — prefill carries a list of
+    // {source, query} searches. Fall back to a single search_source/search_query pair.
+    const searches = (Array.isArray(prefill.searches) && prefill.searches.length)
+        ? prefill.searches
+        : [{ source: prefill.search_source, query: prefill.search_query }];
 
     dialog.classList.add("report-picker", "series-select");
     dialog.innerHTML = `
@@ -134,14 +137,15 @@ function showSeriesSelectionTable(dialog, formSchema, sessionId, promptLabel) {
                 <td>${r.observation_start || ""}</td>
                 <td>${r.observation_end || ""}</td>
             `;
+            const key = `${r.source}:${r.native_id}`;  // native_id alone can collide across sources
             const cb = tr.querySelector("input[type=checkbox]");
             const toggle = (on) => {
-                if (on) { selected.set(r.native_id, r); tr.classList.add("selected"); }
-                else    { selected.delete(r.native_id); tr.classList.remove("selected"); }
+                if (on) { selected.set(key, r); tr.classList.add("selected"); }
+                else    { selected.delete(key); tr.classList.remove("selected"); }
                 cb.checked = on;
                 updateCreateBtn();
             };
-            tr.addEventListener("click", (e) => { if (e.target !== cb) toggle(!selected.has(r.native_id)); });
+            tr.addEventListener("click", (e) => { if (e.target !== cb) toggle(!selected.has(key)); });
             cb.addEventListener("change", () => toggle(cb.checked));
             tbody.appendChild(tr);
         }
@@ -149,11 +153,27 @@ function showSeriesSelectionTable(dialog, formSchema, sessionId, promptLabel) {
 
     (async () => {
         try {
-            const url = `/api/series/search?source=${encodeURIComponent(source)}&q=${encodeURIComponent(query)}`;
-            const resp = await fetch(url);
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            const data = await resp.json();
-            renderRows(data.rows || []);
+            const perSearch = await Promise.all(searches.map(async (s) => {
+                const src = String(s.source || "").toLowerCase();
+                const q = s.query || "";
+                if (!src || !q) return [];
+                const url = `/api/series/search?source=${encodeURIComponent(src)}&q=${encodeURIComponent(q)}`;
+                const resp = await fetch(url);
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                return (await resp.json()).rows || [];
+            }));
+            // Merge all stores' rows into one table, deduped by source:native_id, order preserved.
+            const merged = [];
+            const seen = new Set();
+            for (const rows of perSearch) {
+                for (const r of rows) {
+                    const key = `${r.source}:${r.native_id}`;
+                    if (seen.has(key)) continue;
+                    seen.add(key);
+                    merged.push(r);
+                }
+            }
+            renderRows(merged);
         } catch (e) {
             status.style.display = "";
             status.textContent = `Search failed: ${e.message}`;
@@ -330,13 +350,16 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
 
     } else if (formType === "create_time_series_report") {
         // Two modes:
-        //  (a) search-driven — prefill carries search_query: show the "Create Time
-        //      Series Report" selection table first (search -> pick -> fetch into
-        //      cache), then the create form prefilled with the resulting cache_ids.
-        //  (b) direct — no search_query: show the create form immediately (the LLM
-        //      already supplied explicit time_series_ids, or the user fills them in).
+        //  (a) search-driven — prefill carries searches (a list of {source, query}) or a
+        //      single search_query: show the "Create Time Series Report" selection table
+        //      first (search -> pick -> fetch into cache), then the create form prefilled
+        //      with the resulting cache_ids.
+        //  (b) direct — neither present: show the create form immediately (the LLM already
+        //      supplied explicit time_series_ids, or the user fills them in).
         const prefill = formSchema.prefill || {};
-        if (prefill.search_query) {
+        const hasSearch = prefill.search_query
+            || (Array.isArray(prefill.searches) && prefill.searches.length > 0);
+        if (hasSearch) {
             showSeriesSelectionTable(dialog, formSchema, sessionId, promptLabel);
         } else {
             showCreateReportForm(dialog, prefill, sessionId, promptLabel);
