@@ -488,14 +488,13 @@ class DataInfoAgent(ReactAgent):
         if not rows:
             return "No time series reports found."
         lines = [
-            "| Title | Tags | report_id | Time Range From | Time Range To |",
-            "|-------|------|-----------|-----------------|---------------|",
+            "| Title | report_id | Time Range From | Time Range To |",
+            "|-------|-----------|-----------------|---------------|",
         ]
         for r in rows:
             time_to = r["time_range_to"] or "latest"
-            tags_str = ", ".join(r.get("tags") or [])
             lines.append(
-                f"| {r['report_title']} | {tags_str} | `{r['report_id']}` | {r['time_range_from']} | {time_to} |"
+                f"| {r['report_title']} | `{r['report_id']}` | {r['time_range_from']} | {time_to} |"
             )
         return "\n".join(lines)
 
@@ -540,7 +539,6 @@ class DataInfoAgent(ReactAgent):
             return f"No report found matching `{report_id_or_title}`."
 
         time_to = str(record.get("time_range_to") or "latest")
-        tags_str = ", ".join(record.get("tags") or [])
         series_info = record.get("time_series_info") or []
         lines = [
             f"**{record['report_title']}**",
@@ -549,7 +547,6 @@ class DataInfoAgent(ReactAgent):
             "|-------|-------|",
             f"| report_id | `{record['report_id']}` |",
             f"| description | {record.get('report_description', '')} |",
-            f"| tags | {tags_str} |",
             f"| time_range_from | {record.get('time_range_from', '')} |",
             f"| time_range_to | {time_to} |",
             "",

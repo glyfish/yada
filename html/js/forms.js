@@ -16,9 +16,6 @@ function showCreateReportForm(dialog, prefill, sessionId, promptLabel) {
             <label for="tsr-description">Description:</label>
             <textarea id="tsr-description" name="report_description" rows="3" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Brief description of this report" required></textarea>
 
-            <label for="tsr-tags">Tags:</label>
-            <input id="tsr-tags" name="tags" type="text" placeholder="gdp, labor, quarterly" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text">
-
             <label for="tsr-ids">Time Series IDs:</label>
             <input id="tsr-ids" name="time_series_ids" type="text" placeholder="id-001, id-002, id-003" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
 
@@ -39,14 +36,12 @@ function showCreateReportForm(dialog, prefill, sessionId, promptLabel) {
 
     const titleInput       = dialog.querySelector("input[name='report_title']");
     const descriptionInput = dialog.querySelector("textarea[name='report_description']");
-    const tagsInput        = dialog.querySelector("input[name='tags']");
     const idsInput         = dialog.querySelector("input[name='time_series_ids']");
     const fromInput        = dialog.querySelector("input[name='time_range_from']");
     const toInput          = dialog.querySelector("input[name='time_range_to']");
 
     if (prefill.report_title)       titleInput.value       = prefill.report_title;
     if (prefill.report_description) descriptionInput.value = prefill.report_description;
-    if (prefill.tags)               tagsInput.value        = prefill.tags;
     if (prefill.time_series_ids)    idsInput.value         = prefill.time_series_ids;
     if (prefill.time_range_from)    fromInput.value        = prefill.time_range_from;
     if (prefill.time_range_to)      toInput.value          = prefill.time_range_to;
@@ -63,7 +58,6 @@ function showCreateReportForm(dialog, prefill, sessionId, promptLabel) {
         const payload = {
             report_title:       titleInput.value.trim(),
             report_description: descriptionInput.value.trim(),
-            tags:               tagsInput.value.trim(),
             time_series_ids:    idsInput.value.trim(),
             time_range_from:    fromInput.value.trim(),
         };
@@ -376,7 +370,7 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
                 <div id="rp-table-wrap" class="report-picker-wrap">
                     <table class="report-picker-table">
                         <thead>
-                            <tr><th>Title</th><th>Tags</th><th>From</th><th>To</th></tr>
+                            <tr><th>Title</th><th>From</th><th>To</th></tr>
                         </thead>
                         <tbody id="rp-tbody"></tbody>
                     </table>
@@ -411,9 +405,8 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
                 const tr = document.createElement("tr");
                 tr.className = "report-picker-row";
                 tr.dataset.reportId = r.report_id;
-                const tags = (r.tags || []).join(", ");
                 const to   = r.time_range_to || "latest";
-                tr.innerHTML = `<td>${r.report_title}</td><td>${tags}</td><td>${r.time_range_from}</td><td>${to}</td>`;
+                tr.innerHTML = `<td>${r.report_title}</td><td>${r.time_range_from}</td><td>${to}</td>`;
                 tr.addEventListener("click", () => {
                     tbody.querySelectorAll("tr").forEach(row => row.classList.remove("selected"));
                     tr.classList.add("selected");
@@ -433,7 +426,7 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
                 if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
                 renderRows(await resp.json());
             } catch (e) {
-                tbody.innerHTML = `<tr><td colspan="4" style="color:red">Failed to load reports: ${e.message}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="3" style="color:red">Failed to load reports: ${e.message}</td></tr>`;
             }
         };
 
@@ -493,9 +486,6 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
                     <label for="ed-description">Description:</label>
                     <textarea id="ed-description" name="report_description" rows="3" autocomplete="off" autocapitalize="off" spellcheck="false" required></textarea>
 
-                    <label for="ed-tags">Tags:</label>
-                    <input id="ed-tags" name="tags" type="text" autocomplete="off" autocapitalize="off" spellcheck="false">
-
                     <label for="ed-ids">Time Series IDs:</label>
                     <input id="ed-ids" name="time_series_ids" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" required>
 
@@ -515,14 +505,12 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
 
             const titleInput = editDialog.querySelector("input[name='report_title']");
             const descInput  = editDialog.querySelector("textarea[name='report_description']");
-            const tagsInput  = editDialog.querySelector("input[name='tags']");
             const idsInput   = editDialog.querySelector("input[name='time_series_ids']");
             const fromInput  = editDialog.querySelector("input[name='time_range_from']");
             const toInput    = editDialog.querySelector("input[name='time_range_to']");
 
             titleInput.value = report.report_title || "";
             descInput.value  = report.report_description || "";
-            tagsInput.value  = (report.tags || []).join(", ");
             idsInput.value   = (report.time_series_info || []).map(s => s.cache_id).join(", ");
             fromInput.value  = report.time_range_from || "";
             toInput.value    = report.time_range_to || "";
@@ -539,7 +527,6 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
                 const payload = {
                     report_title:       titleInput.value.trim(),
                     report_description: descInput.value.trim(),
-                    tags:               tagsInput.value.trim(),
                     time_series_ids:    idsInput.value.trim(),
                     time_range_from:    fromInput.value,
                     time_range_to:      toInput.value || null,

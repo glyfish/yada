@@ -413,7 +413,7 @@ class TimeSeriesReportPlotAgent(ReactAgent):
             "report_id": str(record["report_id"]),
             "report_title": record["report_title"],
             "report_description": record.get("report_description", ""),
-            "tags": list(record.get("tags") or []),
+            "metadata": dict(record.get("metadata") or {}),
             "time_range_from": date_from or "",
             "time_range_to": date_to,
             "time_series": time_series,

@@ -7,6 +7,7 @@ from langchain_core.tools import BaseTool
 
 from apps.agentic.db.series_cache import SeriesCache
 from apps.agentic.db.series_ref import SeriesRef
+from apps.agentic.core.agents.series_metadata import catalog_metadata
 from lib.logger import get_logger
 
 logger = get_logger("YADA")
@@ -46,6 +47,11 @@ class CachingDataTool(BaseTool):
         obs_start, obs_end, obs_count = self._obs_range(data)
 
         meta = await self._fetch_metadata(native_id)
+        # Enrich with catalog metadata (family/category/exchange or FRED category) from
+        # the document store, as a source-keyed dict, so the cached series is filterable
+        # by reusing the document-search filter extractors. Best-effort — {} when the
+        # series isn't in the catalog store.
+        catalog = catalog_metadata(self.source, native_id)
         cache_id = await SeriesCache.put(
             source=self.source,
             native_id=native_id,
@@ -56,6 +62,7 @@ class CachingDataTool(BaseTool):
             frequency=meta.get("frequency"),
             units=meta.get("units"),
             title=meta.get("title"),
+            catalog=catalog,
         )
 
         ref = SeriesRef(source=self.source, native_id=native_id, cache_id=cache_id)

@@ -171,6 +171,7 @@ class SeriesCache:
         units: str | None = None,
         title: str | None = None,
         ttl_days: int | None = None,
+        catalog: dict | None = None,
     ) -> str:
         engine = cls._engine_or_raise()
         now = datetime.now(tz=timezone.utc)
@@ -196,6 +197,11 @@ class SeriesCache:
         metadata: dict[str, Any] = {"observation_count": observation_count}
         if units is not None:
             metadata["units"] = units
+        # Source-keyed catalog metadata ({"tiingo": {"family": [...], ...}}) lives
+        # alongside the flat keys so the series can be filtered by reusing the
+        # document-search extractors' where-dict against metadata[source].
+        if catalog:
+            metadata.update(catalog)
 
         stmt = (
             insert(cls._table_or_raise())
@@ -358,6 +364,7 @@ class SeriesCache:
         units: str | None = None,
         title: str | None = None,
         ttl_days: int | None = None,
+        catalog: dict | None = None,
     ) -> str:
         return await asyncio.to_thread(
             cls._put_sync,
@@ -371,4 +378,5 @@ class SeriesCache:
             units,
             title,
             ttl_days,
+            catalog,
         )

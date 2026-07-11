@@ -25,6 +25,7 @@ from apps.agentic.db.series_cache import SeriesCache
 from apps.agentic.db.report_cache import ReportCache
 from apps.agentic.agents.plots.time_series_report_agent import TimeSeriesInfoEntry
 from apps.agentic.agents.plots.time_series_report_plot_agent import render_report_plot
+from apps.agentic.core.agents.series_metadata import report_metadata_from_series
 from apps.agentic.agents.data.series_fetch import fetch_series_into_cache, SERIES_SOURCE_SPECS
 from apps.agentic.agents.document.document_agent import search_series_rows
 from apps.agentic.core.pricing import estimate_cost
@@ -414,7 +415,7 @@ async def get_report(report_id: str):
         "report_id": str(record["report_id"]),
         "report_title": record["report_title"],
         "report_description": record.get("report_description") or "",
-        "tags": list(record.get("tags") or []),
+        "metadata": dict(record.get("metadata") or {}),
         "time_range_from": str(record.get("time_range_from") or ""),
         "time_range_to": str(record["time_range_to"]) if record.get("time_range_to") else None,
         "time_series_info": [
@@ -432,7 +433,6 @@ async def get_report(report_id: str):
 class UpdateReportPayload(BaseModel):
     report_title: str
     report_description: str
-    tags: str
     time_series_ids: str
     time_range_from: str
     time_range_to: Optional[str] = None
@@ -441,7 +441,6 @@ class UpdateReportPayload(BaseModel):
 @app.put("/api/reports/{report_id}")
 async def update_report(report_id: str, req: UpdateReportPayload):
     ids = [s.strip() for s in req.time_series_ids.split(",") if s.strip()]
-    tags = [t.strip() for t in req.tags.split(",") if t.strip()]
 
     time_series_info: list[TimeSeriesInfoEntry] = []
     missing: list[str] = []
@@ -473,7 +472,7 @@ async def update_report(report_id: str, req: UpdateReportPayload):
         time_series_info=time_series_info,
         time_range_from=req.time_range_from,
         time_range_to=req.time_range_to or None,
-        tags=tags,
+        metadata=report_metadata_from_series(time_series_info),
     )
     if updated is None:
         raise HTTPException(status_code=404, detail="Report not found")
@@ -488,7 +487,7 @@ async def delete_report(report_id: str):
 
 
 @app.get("/api/reports")
-async def list_reports(q: str = Query("", description="Filter by title, tags, or description")):
+async def list_reports(q: str = Query("", description="Filter by title or description")):
     reports = await ReportCache.list_reports()
     if q:
         q_lower = q.lower()
@@ -496,7 +495,6 @@ async def list_reports(q: str = Query("", description="Filter by title, tags, or
             r for r in reports
             if q_lower in r["report_title"].lower()
             or q_lower in r["report_description"].lower()
-            or any(q_lower in tag.lower() for tag in r["tags"])
         ]
     return reports
 
