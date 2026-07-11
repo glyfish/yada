@@ -1,15 +1,19 @@
 from __future__ import annotations
 
-from sqlalchemy import and_, cast
+from sqlalchemy import and_, cast, func
 from sqlalchemy.dialects.postgresql import JSONB, array
 
-# Catalog fields stored per source in the metadata JSONB (must match
-# series_metadata._CATALOG). Only these are filtered here — other where-dict keys
-# ($gte date ranges, popularity, series_id) are handled elsewhere or ignored.
+# Catalog string fields stored per source in the metadata JSONB (must match
+# series_metadata._CATALOG). Filtered by list containment.
 _CATALOG_FIELDS = {
     "tiingo": {"family", "category_group", "category", "exchange"},
     "fred": {"category_name", "category_path", "seasonal_adjustment", "frequency"},
 }
+
+# Numeric YYYYMMDD fields recorded in the metadata at fetch (any source); filtered by
+# range against the stored (current) observation dates — one consistent source of truth.
+_RANGE_FIELDS = {"observation_start_int", "observation_end_int"}
+_RANGE_OPS = {"$gte": ">=", "$lte": "<=", "$gt": ">", "$lt": "<"}
 
 
 def _flatten(where: dict | None) -> list[tuple[str, object]]:
@@ -44,13 +48,21 @@ def metadata_where(metadata_col, source: str, where: dict | None):
     fields = _CATALOG_FIELDS.get(source, set())
     clauses = []
     for field, spec in _flatten(where):
-        if field not in fields:
-            continue
-        arr = cast(metadata_col[source][field], JSONB)
-        if isinstance(spec, dict):
-            values = [str(v) for v in (spec.get("$in") or [])]
-            if values:
-                clauses.append(arr.has_any(array(values)))
-        elif spec is not None:
-            clauses.append(arr.has_key(str(spec)))
+        if field in fields:
+            # Catalog string field: list containment (? for exact, ?| for $in).
+            arr = cast(metadata_col[source][field], JSONB)
+            if isinstance(spec, dict):
+                values = [str(v) for v in (spec.get("$in") or [])]
+                if values:
+                    clauses.append(arr.has_any(array(values)))
+            elif spec is not None:
+                clauses.append(arr.has_key(str(spec)))
+        elif field in _RANGE_FIELDS and isinstance(spec, dict):
+            # Numeric int array: any stored value satisfies the comparison. The int
+            # values are safe to inline (from _iso_to_yyyymmdd); the field is fixed.
+            for op, sqlop in _RANGE_OPS.items():
+                if op in spec:
+                    val = int(spec[op])
+                    path = f'$."{field}"[*] ? (@ {sqlop} {val})'
+                    clauses.append(func.jsonb_path_exists(cast(metadata_col[source], JSONB), path))
     return and_(*clauses) if clauses else None

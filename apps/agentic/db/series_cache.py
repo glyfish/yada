@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
@@ -14,6 +15,14 @@ from apps.agentic.db.metadata_filter import metadata_where
 from lib.logger import get_logger
 
 logger = get_logger("YADA")
+
+
+def _date_to_int(value: str | None) -> int | None:
+    """ISO date string -> YYYYMMDD integer (matching the FRED loader's *_int fields)."""
+    if not isinstance(value, str):
+        return None
+    m = re.match(r"\s*(\d{4})-(\d{2})-(\d{2})", value)
+    return int(m.group(1) + m.group(2) + m.group(3)) if m else None
 _DEFAULT_CACHE_TTL_DAYS = 30
 _SOURCE_TTL_DAYS: dict[str, int] = {
     "fred": 30,
@@ -203,6 +212,15 @@ class SeriesCache:
         # document-search extractors' where-dict against metadata[source].
         if catalog:
             metadata.update(catalog)
+        # Also record the CURRENT observation-date ints (YYYYMMDD) under the source key,
+        # as single-element lists (uniform with the catalog fields), so recency filters
+        # run against the metadata too — one consistent source of truth for filtering.
+        src_meta = metadata.setdefault(source, {})
+        for _key, _iso in (("observation_start_int", observation_start),
+                            ("observation_end_int", observation_end)):
+            _i = _date_to_int(_iso)
+            if _i is not None:
+                src_meta[_key] = [_i]
 
         stmt = (
             insert(cls._table_or_raise())
