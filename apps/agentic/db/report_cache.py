@@ -10,6 +10,7 @@ from sqlalchemy import MetaData, Table, create_engine, delete, select, text, upd
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import Engine
 
+from apps.agentic.db.metadata_filter import metadata_where
 from lib.logger import get_logger
 
 logger = get_logger("YADA")
@@ -103,7 +104,7 @@ class ReportCache:
 
 
     @classmethod
-    def _list_reports_sync(cls) -> list[dict[str, Any]]:
+    def _list_reports_sync(cls, source: str | None = None, where: dict | None = None) -> list[dict[str, Any]]:
         engine = cls._engine_or_raise()
         t = cls._table_or_raise()
         stmt = select(
@@ -113,7 +114,14 @@ class ReportCache:
             t.c.metadata,
             t.c.time_range_from,
             t.c.time_range_to,
-        ).order_by(t.c.report_title)
+        )
+        # A report's metadata column is the merged catalog, so the same containment
+        # filter used for a cached series selects reports that contain a matching series.
+        if source:
+            mw = metadata_where(t.c.metadata, source, where)
+            if mw is not None:
+                stmt = stmt.where(mw)
+        stmt = stmt.order_by(t.c.report_title)
         with engine.connect() as conn:
             rows = conn.execute(stmt).mappings().all()
         return [
@@ -237,8 +245,8 @@ class ReportCache:
 
 
     @classmethod
-    async def list_reports(cls) -> list[dict[str, Any]]:
-        return await asyncio.to_thread(cls._list_reports_sync)
+    async def list_reports(cls, source: str | None = None, where: dict | None = None) -> list[dict[str, Any]]:
+        return await asyncio.to_thread(cls._list_reports_sync, source, where)
 
 
     @classmethod

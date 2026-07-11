@@ -1,6 +1,9 @@
+from typing import Annotated
+
 from pydantic import BaseModel, Field
 
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langgraph.prebuilt import InjectedState
 
 
 from apps.agentic.core.tool_spec import PositiveExample, NegativeExample, ToolSpec, tool_spec
@@ -8,6 +11,7 @@ from apps.agentic.core.tool_spec import PositiveExample, NegativeExample, ToolSp
 from pathlib import Path
 
 from apps.agentic.core.agents.react_agent import ReactAgent
+from apps.agentic.core.agents.llm_filter_extractor import extract_etf_filters, extract_fred_filters
 from apps.agentic.core.constants import GITHUB_LOCAL_PATH, DB_PATH
 from apps.agentic.core.document_loaders.etf.finance_database_loader import FinanceDatabaseLoader
 from apps.agentic.core.document_loaders.etf.exchange_metadata import EXCHANGES, CURRENCIES
@@ -21,6 +25,37 @@ from apps.agentic.db.report_cache import ReportCache
 from lib.logger import get_logger
 
 logger = get_logger("YADA")
+
+
+# Maps a source hint the model passes ('etf'/'fred') to the cache source value and the
+# document-search filter extractor to reuse. Reusing the extractors means "VanEck fixed
+# income" / "FRED GDP" filter the cache/reports the same way they filter document search.
+_SOURCE_EXTRACTORS = {
+    "etf": ("tiingo", extract_etf_filters),
+    "fred": ("fred", extract_fred_filters),
+}
+
+
+def _original_request(state) -> str:
+    """The user's request from the agent's first message — filter extraction runs on the
+    verbatim text (injected via InjectedState), never the model's paraphrased tool arg."""
+    messages = state.get("messages") if isinstance(state, dict) else None
+    if messages:
+        content = getattr(messages[0], "content", None)
+        if isinstance(content, str):
+            return content
+    return ""
+
+
+async def _resolve_cache_filter(source, state):
+    """Resolve a source hint to (cache_source, where) by running the matching extractor on
+    the original request. Returns (None, None) when no source is given (list everything)."""
+    spec = _SOURCE_EXTRACTORS.get(str(source or "").strip().lower())
+    if spec is None:
+        return None, None
+    cache_source, extractor = spec
+    where, _ = await extractor(_original_request(state))
+    return cache_source, where
 
 class ListTimeSeriesReportsInput(BaseModel):
     pass
@@ -467,24 +502,33 @@ class DataInfoAgent(ReactAgent):
 
     @staticmethod
     @tool_spec(
-        args_schema=ListTimeSeriesReportsInput,
+        args_schema=None,
         metadata=ToolSpec(
             primary_function="""
-                List all time series reports stored in the report cache.
+                List time series reports stored in the report cache.
                 Returns report_id, report_title, time_range_from, and time_range_to for each report.
+                To filter by the kind of series a report contains, pass source='etf' (ETFs /
+                funds / tickers) or source='fred' (FRED economic series) — the specific criteria
+                (fund family, category/asset class, exchange, or FRED category) are read from the
+                request automatically. Omit source to list every report.
             """,
             positive_examples=[
                 PositiveExample(input="What time series reports do I have?"),
                 PositiveExample(input="List all time series reports."),
                 PositiveExample(input="Show me my reports."),
+                PositiveExample(input="List my reports for VanEck fixed income ETFs."),
             ],
             suggests_followup=[
                 "list_time_series_report_details to see full metadata for a specific report",
             ],
         ),
     )
-    def list_time_series_reports() -> str:
-        rows = ReportCache._list_reports_sync()
+    async def list_time_series_reports(
+        source: str | None = None,
+        state: Annotated[dict, InjectedState] = None,
+    ) -> str:
+        cache_source, where = await _resolve_cache_filter(source, state)
+        rows = ReportCache._list_reports_sync(cache_source, where)
         if not rows:
             return "No time series reports found."
         lines = [
@@ -566,25 +610,34 @@ class DataInfoAgent(ReactAgent):
 
     @staticmethod
     @tool_spec(
-        args_schema=ListTimeSeriesInput,
+        args_schema=None,
         metadata=ToolSpec(
             primary_function="""
-                List all time series stored in the cache.
+                List time series stored in the cache.
                 Returns title, cache_id, native_id, source, frequency,
                 observation_start, and observation_end for each series.
+                To filter, pass source='etf' (ETFs / funds / tickers) or source='fred' (FRED
+                economic series) — the specific criteria (fund family, category/asset class,
+                exchange, or FRED category) are read from the request automatically. Omit source
+                to list every cached series.
             """,
             positive_examples=[
                 PositiveExample(input="What time series do I have cached?"),
                 PositiveExample(input="List all cached time series."),
                 PositiveExample(input="Show me the time series in the cache."),
+                PositiveExample(input="List my cached VanEck fixed income ETFs."),
             ],
             suggests_followup=[
                 "list_time_series_details to see full metadata for a specific series",
             ],
         ),
     )
-    def list_time_series() -> str:
-        rows = SeriesCache._list_series_sync()
+    async def list_time_series(
+        source: str | None = None,
+        state: Annotated[dict, InjectedState] = None,
+    ) -> str:
+        cache_source, where = await _resolve_cache_filter(source, state)
+        rows = SeriesCache._list_series_sync(cache_source, where)
         if not rows:
             return "No time series found in the cache."
         lines = ["| Title | cache_id | native_id | Source | Frequency | Start | End |",

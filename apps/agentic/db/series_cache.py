@@ -6,10 +6,11 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import MetaData, Table, create_engine, select, text
+from sqlalchemy import MetaData, Table, and_, create_engine, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import Engine
 
+from apps.agentic.db.metadata_filter import metadata_where
 from lib.logger import get_logger
 
 logger = get_logger("YADA")
@@ -269,7 +270,7 @@ class SeriesCache:
 
 
     @classmethod
-    def _list_series_sync(cls) -> list[dict]:
+    def _list_series_sync(cls, source: str | None = None, where: dict | None = None) -> list[dict]:
         engine = cls._engine_or_raise()
         t = cls._table_or_raise()
         stmt = select(
@@ -281,7 +282,18 @@ class SeriesCache:
             t.c.observation_start,
             t.c.observation_end,
             t.c.metadata,
-        ).order_by(t.c.source, t.c.title)
+        )
+        # source scopes the rows; where filters by catalog metadata (reusing the
+        # document-search extractors' where-dict against metadata[source]).
+        conds = []
+        if source:
+            conds.append(t.c.source == source)
+            mw = metadata_where(t.c.metadata, source, where)
+            if mw is not None:
+                conds.append(mw)
+        if conds:
+            stmt = stmt.where(and_(*conds))
+        stmt = stmt.order_by(t.c.source, t.c.title)
         with engine.connect() as conn:
             rows = conn.execute(stmt).mappings().all()
         return [
