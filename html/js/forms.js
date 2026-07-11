@@ -1,4 +1,5 @@
 import { handleResumeRequest } from "./api.js";
+import { prependResultCard, fillLastCardMeta } from "./feed.js";
 import { sessionId as sessionIdState } from "./state.js";
 
 // Render the create-time-series-report form into `dialog`. Works both as a fresh
@@ -453,8 +454,21 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
 
         const submit = async () => {
             if (!selectedId) return;
-            close();
-            await handleResumeRequest(sessionId, { report_id: selectedId }, promptLabel);
+            const id = selectedId;
+            close();  // abandons the suspended graph; plotting is deterministic below
+            // Deterministic plot — no agent, no LLM tokens.
+            try {
+                const resp = await fetch(`/api/reports/${id}/plot`, { method: "POST" });
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({}));
+                    throw new Error(err.detail || `HTTP ${resp.status}`);
+                }
+                const data = await resp.json();
+                await prependResultCard(`Plot report: ${data.report_title}`, data.html);
+                fillLastCardMeta({ total_tokens: 0, input_tokens: 0, output_tokens: 0, cost_usd: 0 });
+            } catch (e) {
+                await prependResultCard("Plot report", `Failed to plot report: ${e.message}`);
+            }
         };
         dialog.querySelector("#submitFormBtn").addEventListener("click", submit);
 

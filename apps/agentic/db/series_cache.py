@@ -26,6 +26,17 @@ _SOURCE_FREQUENCY_TTL_DAYS: dict[tuple[str, str], int] = {
     ("alpaca", "1Hour"): 1,
     ("alpaca", "1Day"): 3,
 }
+# TTL keyed off a series' update cadence — the refresh interval should track how often
+# the source publishes new observations. Keys are normalized (upper-cased) frequency
+# labels: FRED stores short codes (D/W/BW/M/Q/SA/A), other sources long names.
+_FREQUENCY_TTL_DAYS: dict[str, int] = {
+    "D": 1, "DAILY": 1,
+    "W": 7, "BW": 7, "WEEKLY": 7, "BIWEEKLY": 7,
+    "M": 30, "MONTHLY": 30,
+    "Q": 90, "QUARTERLY": 90,
+    "SA": 180, "SEMIANNUAL": 180,
+    "A": 365, "ANNUAL": 365,
+}
 
 class SeriesCache:
     """
@@ -64,7 +75,11 @@ class SeriesCache:
 
 
     @classmethod
-    def _get_by_cache_id_sync(cls, cache_id: str) -> dict | None:
+    def _get_by_cache_id_sync(cls, cache_id: str, include_expired: bool = False) -> dict | None:
+        # include_expired=True returns the persisted observations even past the TTL.
+        # Rows are never deleted (expiry only forces a re-fetch for freshness), so a
+        # saved report can always load its historical snapshot even if the entry has
+        # aged out — the report references a durable series, not a live fetch.
         engine = cls._engine_or_raise()
         stmt = select(cls._table_or_raise()).where(
             cls._table_or_raise().c.cache_id == uuid.UUID(cache_id)
@@ -74,7 +89,7 @@ class SeriesCache:
         if row is None:
             return None
         entry = dict(row)
-        if entry["expires_at"] < datetime.now(tz=timezone.utc):
+        if not include_expired and entry["expires_at"] < datetime.now(tz=timezone.utc):
             logger.debug(f"SeriesCache: cache_id {cache_id} expired")
             return None
         return entry
@@ -126,6 +141,24 @@ class SeriesCache:
 
 
     @classmethod
+    def _existing_ttl_days_sync(cls, source: str, native_id: str, frequency: str) -> int | None:
+        """
+        Return the ttl_days currently stored for a series (by its unique key), or None
+        if there is no row or the column is unset. Ignores expiry — used to preserve a
+        per-series TTL override across re-fetches.
+        """
+        t = cls._table_or_raise()
+        stmt = select(t.c.ttl_days).where(
+            t.c.source == source,
+            t.c.native_id == native_id,
+            t.c.frequency == frequency,
+        )
+        with cls._engine_or_raise().connect() as conn:
+            row = conn.execute(stmt).first()
+        return row[0] if row and row[0] is not None else None
+
+
+    @classmethod
     def _put_sync(
         cls,
         source: str,
@@ -143,7 +176,16 @@ class SeriesCache:
         now = datetime.now(tz=timezone.utc)
         row_frequency = frequency or "unknown"
         row_title = title or native_id
-        effective_ttl_days = cls._effective_ttl_days(source, row_frequency, ttl_days)
+        if ttl_days is not None:
+            effective_ttl_days = ttl_days
+        else:
+            # Honor a per-series override already persisted on the row; otherwise
+            # derive the interval from the series' update cadence (frequency).
+            existing_ttl = cls._existing_ttl_days_sync(source, native_id, row_frequency)
+            effective_ttl_days = (
+                existing_ttl if existing_ttl is not None
+                else cls._effective_ttl_days(source, row_frequency)
+            )
         expires_at = now + timedelta(days=effective_ttl_days)
 
         def _as_date(v: str | None) -> date | None:
@@ -170,9 +212,13 @@ class SeriesCache:
                 created_at=now,
                 updated_at=now,
                 expires_at=expires_at,
+                ttl_days=effective_ttl_days,
             )
             .on_conflict_do_update(
                 constraint="uq_tsc_source_native_frequency",
+                # effective_ttl_days already preserved any existing override (via the
+                # pre-SELECT) and filled in NULLs from cadence, so write it back here —
+                # this keeps overrides and backfills pre-existing rows on re-fetch.
                 set_=dict(
                     title=row_title,
                     metadata=metadata,
@@ -181,6 +227,7 @@ class SeriesCache:
                     observation_end=_as_date(observation_end),
                     updated_at=now,
                     expires_at=expires_at,
+                    ttl_days=effective_ttl_days,
                 ),
             )
             .returning(cls._table_or_raise().c.cache_id)
@@ -201,10 +248,15 @@ class SeriesCache:
         frequency: str,
         ttl_days: int | None = None,
     ) -> int:
+        # Precedence: explicit override -> source+frequency special case (alpaca
+        # intraday) -> generic frequency cadence -> source default -> global default.
         if ttl_days is not None:
             return ttl_days
         if (source, frequency) in _SOURCE_FREQUENCY_TTL_DAYS:
             return _SOURCE_FREQUENCY_TTL_DAYS[(source, frequency)]
+        freq_key = (frequency or "").strip().upper()
+        if freq_key in _FREQUENCY_TTL_DAYS:
+            return _FREQUENCY_TTL_DAYS[freq_key]
         if source in _SOURCE_TTL_DAYS:
             return _SOURCE_TTL_DAYS[source]
         return _DEFAULT_CACHE_TTL_DAYS

@@ -17,6 +17,7 @@ from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from apps.agentic.core.tool_spec import PositiveExample, ToolSpec, tool_spec
 from apps.agentic.core.agents.react_agent import ReactAgent
+from apps.agentic.agents.data.series_fetch import fetch_series_into_cache
 from apps.agentic.db.series_cache import SeriesCache
 from apps.agentic.db.report_cache import ReportCache
 from apps.plots.time_series_plots import (
@@ -29,6 +30,8 @@ from apps.plots.time_series_plots import (
 from lib import config
 from lib.plots import PlotType
 from lib.logger import get_logger
+
+from collections import Counter
 
 logger = get_logger("YADA")
 
@@ -48,9 +51,12 @@ def _load_series_by_cache_id(
     cache_id: str, date_from: str | None, date_to: str | None
 ) -> tuple[list[datetime], list[float]]:
     try:
-        entry = SeriesCache._get_by_cache_id_sync(cache_id)
+        # Reports are durable references — load the persisted snapshot even if the
+        # cache entry has aged out (Tiingo TTL is only a day), so a saved report can
+        # always be plotted without a re-fetch.
+        entry = SeriesCache._get_by_cache_id_sync(cache_id, include_expired=True)
         if entry is None:
-            raise ValueError(f"Series {cache_id} not found in cache or expired")
+            raise ValueError(f"Series {cache_id} not found in cache")
         observations = (entry.get("observations") or {}).get("observations", [])
         times: list[datetime] = []
         values: list[float] = []
@@ -69,6 +75,134 @@ def _load_series_by_cache_id(
     except Exception as exc:
         logger.error(f"_load_series_by_cache_id failed for {cache_id}: {exc}", exc_info=True)
         raise
+
+
+def _select_plot_type(units: list[str]) -> str:
+    """
+    Deterministic plot-type selection from series units — the same rules the plot
+    agent's prompt encodes, as pure code (no LLM). Keys only off series count and the
+    number of distinct units.
+    """
+    n = len(units)
+    distinct = len(set(units))
+    if n == 1:
+        return "single"
+    if distinct == 1:
+        return "comparison"
+    if n == 2 and distinct == 2:
+        return "twinx"
+    if distinct == 2:
+        return "twinx_comparison"
+    return "stack"
+
+
+async def render_report_plot(report_id_or_title: str) -> dict:
+    """
+    Render a report's plot deterministically — no LLM, no agent. Resolves the report,
+    refreshes and loads each series, then picks the plot type (count + distinct units)
+    and axis scale (value span) and renders with the matching generate_time_series_*
+    function. Mirrors the plot agent's tools exactly, so output matches the chat path.
+
+    Returns {report_id, report_title, plot_type, series_count, html}.
+    Raises ValueError when the report is missing or no series data can be loaded.
+    """
+    record = None
+    try:
+        _uuid.UUID(report_id_or_title)
+        record = ReportCache._get_by_report_id_sync(report_id_or_title)
+    except ValueError:
+        pass
+    if record is None:
+        matches = ReportCache._search_by_title_sync(report_id_or_title)
+        if len(matches) == 1:
+            record = ReportCache._get_by_report_id_sync(matches[0]["report_id"])
+    if record is None:
+        raise ValueError(f"No report found matching '{report_id_or_title}'.")
+
+    date_from = str(record["time_range_from"]) if record.get("time_range_from") else None
+    date_to = str(record["time_range_to"]) if record.get("time_range_to") else None
+
+    entries = record.get("time_series_info") or []
+    if not entries:
+        raise ValueError("Report has no series to plot.")
+
+    # Refresh each series (re-fetches only past TTL; preserves cache_id). Best-effort:
+    # loading below falls back to the persisted snapshot via include_expired.
+    for e in entries:
+        src, nid = e.get("source", ""), e.get("native_id", "")
+        if src and nid:
+            try:
+                await fetch_series_into_cache(src, nid)
+            except Exception as exc:
+                logger.warning(f"render_report_plot: refresh failed for {src}:{nid}: {exc}")
+
+    series: list[dict] = []
+    for e in entries:
+        cache_id = e.get("cache_id", "")
+        try:
+            times, values = _load_series_by_cache_id(cache_id, date_from, date_to)
+        except Exception as exc:
+            logger.warning(f"render_report_plot: could not load {cache_id}: {exc}")
+            continue
+        if not times:
+            continue
+        series.append({
+            "label": e.get("native_id") or e.get("title") or cache_id,
+            "units": str((e.get("metadata") or {}).get("units") or ""),
+            "time": numpy.array(times),
+            "values": numpy.array(values),
+        })
+    if not series:
+        raise ValueError("No series data available to plot.")
+
+    title = record["report_title"]
+    plot_type = _select_plot_type([s["units"] for s in series])
+    axis = _axis_type_for([s["values"] for s in series])
+
+    if plot_type == "single":
+        s = series[0]
+        file = generate_time_series_plot(
+            time=s["time"], values=s["values"], title=title,
+            xlabel="Time", ylabel=s["units"] or "Value", plot_axis_type=axis,
+        )
+    elif plot_type == "comparison":
+        file = generate_time_series_comparison(
+            time=series[0]["time"], values=[s["values"] for s in series], title=title,
+            xlabel="Time", ylabel=series[0]["units"] or "Value",
+            labels=[s["label"] for s in series], plot_axis_type=axis,
+        )
+    elif plot_type == "twinx":
+        left, right = series[0], series[1]
+        file = generate_time_series_twinx(
+            time=left["time"], left=left["values"], right=right["values"], title=title,
+            xlabel="Time", left_ylabel=left["units"] or "Value",
+            right_ylabel=right["units"] or "Value", plot_axis_type=axis,
+            labels=[left["label"], right["label"]],
+        )
+    elif plot_type == "twinx_comparison":
+        majority_unit = Counter(s["units"] for s in series).most_common(1)[0][0]
+        left = [s for s in series if s["units"] == majority_unit]
+        right = [s for s in series if s["units"] != majority_unit]
+        file = generate_time_series_twinx_comparison(
+            time=left[0]["time"], left=[s["values"] for s in left],
+            right=[s["values"] for s in right], title=title, xlabel="Time",
+            left_ylabel=left[0]["units"] or "Value", right_ylabel=right[0]["units"] or "Value",
+            plot_axis_type=axis, labels=[s["label"] for s in left + right],
+        )
+    else:  # stack
+        file = generate_time_series_stack(
+            time=series[0]["time"], values=[s["values"] for s in series], title=title,
+            xlabel="Time", ylabels=[s["units"] or "Value" for s in series],
+            labels=[s["label"] for s in series], plot_axis_type=axis,
+        )
+
+    return {
+        "report_id": str(record["report_id"]),
+        "report_title": title,
+        "plot_type": plot_type,
+        "series_count": len(series),
+        "html": f'<div class="time-series-plot"><img src="{file}"></div>',
+    }
 
 
 class GetReportInfoInput(BaseModel):
@@ -213,7 +347,7 @@ class TimeSeriesReportPlotAgent(ReactAgent):
             ],
         ),
     )
-    def get_report_info(report_id_or_title: str) -> str:
+    async def get_report_info(report_id_or_title: str) -> str:
         record = None
         try:
             _uuid.UUID(report_id_or_title)
@@ -237,6 +371,20 @@ class TimeSeriesReportPlotAgent(ReactAgent):
 
         date_from = str(record["time_range_from"]) if record.get("time_range_from") else None
         date_to = str(record["time_range_to"]) if record.get("time_range_to") else None
+
+        # Refresh each series through the caching tool before loading. It re-fetches only
+        # when the entry is missing or past its TTL (a fresh entry is a cache hit, no
+        # network), and the upsert preserves the cache_id so the report's references stay
+        # valid. Best-effort: on failure the include_expired load below still serves the
+        # persisted snapshot.
+        for entry in (record.get("time_series_info") or []):
+            src = entry.get("source", "")
+            nid = entry.get("native_id", "")
+            if src and nid:
+                try:
+                    await fetch_series_into_cache(src, nid)
+                except Exception as exc:
+                    logger.warning(f"get_report_info: refresh failed for {src}:{nid}: {exc}")
 
         time_series = []
         for entry in (record.get("time_series_info") or []):

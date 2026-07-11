@@ -29,6 +29,27 @@ _data_info_agent = DataInfoAgent()
 _document_agent = DocumentAgent()
 _time_series_agent = TimeSeriesAgent()
 
+def _content_to_text(content) -> str:
+    """
+    Flatten a message's content to plain text. LangChain content is sometimes a list
+    of blocks (Anthropic format, e.g. [{"type": "text", "text": "..."}]); join their
+    text so downstream rendering gets the markdown/HTML, not the list's repr.
+    """
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for chunk in content:
+            if isinstance(chunk, dict):
+                text = chunk.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+                    continue
+            parts.append(str(chunk))
+        return "\n".join(parts)
+    return str(content)
+
+
 def assemble_delegate_output(messages: Sequence) -> Optional[str]:
     """
     Build the orchestrator's final response from delegate tool output, verbatim.
@@ -63,15 +84,10 @@ def assemble_delegate_output(messages: Sequence) -> Optional[str]:
         # Pure conversational reply — fall back to the model's own message.
         for msg in reversed(turn):
             if isinstance(msg, AIMessage):
-                content = msg.content
-                return content if isinstance(content, str) else str(content)
+                return _content_to_text(msg.content)
         return None
 
-    contents = [
-        m.content if isinstance(m.content, str) else str(m.content)
-        for m in tool_msgs
-    ]
-    return "\n\n".join(contents)
+    return "\n\n".join(_content_to_text(m.content) for m in tool_msgs)
 
 
 class RequestHumanFormInput(BaseModel):

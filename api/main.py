@@ -24,8 +24,8 @@ from apps.agentic.core.mcp_tool_registry import MCPToolRegistry
 from apps.agentic.db.series_cache import SeriesCache
 from apps.agentic.db.report_cache import ReportCache
 from apps.agentic.agents.plots.time_series_report_agent import TimeSeriesInfoEntry
-from apps.agentic.agents.data.caching_tiingo_tool import CachingTiingoTool
-from apps.agentic.agents.data.caching_fred_tool import CachingFredTool
+from apps.agentic.agents.plots.time_series_report_plot_agent import render_report_plot
+from apps.agentic.agents.data.series_fetch import fetch_series_into_cache, SERIES_SOURCE_SPECS
 from apps.agentic.agents.document.document_agent import search_series_rows
 from apps.agentic.core.pricing import estimate_cost
 from pathlib import Path
@@ -390,6 +390,21 @@ async def resume_request(req: ResumePayload):
     return EventSourceResponse(event_generator())
 
 
+@app.post("/api/reports/{report_id}/plot")
+async def plot_report(report_id: str):
+    """
+    Render a report's plot deterministically — no LLM, no agent hops. This is the
+    cheap path the UI 'Plot Report' button uses instead of resuming the agent graph.
+    """
+    try:
+        return await render_report_plot(report_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"plot_report {report_id} failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to render plot: {e}")
+
+
 @app.get("/api/reports/{report_id}")
 async def get_report(report_id: str):
     record = await ReportCache.get_by_report_id(report_id)
@@ -431,7 +446,7 @@ async def update_report(report_id: str, req: UpdateReportPayload):
     time_series_info: list[TimeSeriesInfoEntry] = []
     missing: list[str] = []
     for cache_id in ids:
-        entry = SeriesCache._get_by_cache_id_sync(cache_id)
+        entry = SeriesCache._get_by_cache_id_sync(cache_id, include_expired=True)
         if not entry:
             missing.append(cache_id)
             continue
@@ -486,15 +501,6 @@ async def list_reports(q: str = Query("", description="Filter by title, tags, or
     return reports
 
 
-# Maps a data source to its (observations tool, info tool, caching wrapper, id kwarg).
-# The caching wrapper fetches the full series into SeriesCache (or hits the cache)
-# and returns a SeriesRef; we then read the cached entry back for display metadata.
-_SERIES_SOURCE_SPECS = {
-    "tiingo": ("tiingo_price_series", "tiingo_series_info", CachingTiingoTool, "ticker"),
-    "fred": ("fred_series_observations", "fred_series_info", CachingFredTool, "series_id"),
-}
-
-
 @app.get("/api/series/search")
 async def search_series(
     source: str = Query(..., description="Search source: 'etf' or 'fred'"),
@@ -536,33 +542,22 @@ async def fetch_series(req: FetchSeriesPayload):
     native_id = req.native_id.strip()
     if not native_id:
         raise HTTPException(status_code=400, detail="native_id is required")
-
-    spec = _SERIES_SOURCE_SPECS.get(source)
-    if spec is None:
+    if source not in SERIES_SOURCE_SPECS:
         raise HTTPException(
             status_code=400,
-            detail=f"Unsupported source '{req.source}'. Expected one of: {', '.join(_SERIES_SOURCE_SPECS)}",
-        )
-    obs_tool_name, info_tool_name, tool_cls, id_kwarg = spec
-
-    wrapped = MCPToolRegistry.get(obs_tool_name)
-    if wrapped is None:
-        raise HTTPException(
-            status_code=503,
-            detail=f"MCP tool '{obs_tool_name}' is unavailable. Is the MCP server running?",
+            detail=f"Unsupported source '{req.source}'. Expected one of: {', '.join(SERIES_SOURCE_SPECS)}",
         )
 
-    tool = tool_cls(wrapped=wrapped, info_tool=MCPToolRegistry.get(info_tool_name))
     try:
-        ref_json = await tool._arun(**{id_kwarg: native_id})
+        entry = await fetch_series_into_cache(source, native_id)
     except Exception as e:
         logger.error(f"fetch_series {source}:{native_id} failed: {e}")
         raise HTTPException(status_code=502, detail=f"Failed to fetch series: {e}")
-
-    cache_id = json.loads(ref_json)["cache_id"]
-    entry = await SeriesCache.get_by_cache_id(cache_id)
     if entry is None:
-        raise HTTPException(status_code=500, detail="Series fetched but not found in cache")
+        raise HTTPException(
+            status_code=503,
+            detail="MCP tool unavailable. Is the MCP server running?",
+        )
 
     return {
         "cache_id": str(entry["cache_id"]),

@@ -207,7 +207,7 @@ class TimeSeriesReportAgent(ReactAgent):
         time_series_info: list[TimeSeriesInfoEntry] = []
         missing: list[str] = []
         for cache_id in ids:
-            entry = SeriesCache._get_by_cache_id_sync(cache_id)
+            entry = SeriesCache._get_by_cache_id_sync(cache_id, include_expired=True)
             if not entry:
                 missing.append(cache_id)
                 continue
