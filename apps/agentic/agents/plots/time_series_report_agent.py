@@ -11,6 +11,7 @@ from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from apps.agentic.core.tool_spec import PositiveExample, NegativeExample, ToolSpec, tool_spec
 from apps.agentic.core.agents.react_agent import ReactAgent
+from apps.agentic.core.llm_factory import router_llm_model
 from apps.agentic.db.report_cache import ReportCache
 from apps.agentic.db.series_cache import SeriesCache
 from apps.agentic.agents.plots.time_series_report_plot_agent import TimeSeriesReportPlotAgent
@@ -133,7 +134,8 @@ class TimeSeriesReportAgent(ReactAgent):
             TimeSeriesReportAgent.delete_time_series_report,
             plot_time_series_report,
         ]
-        super().__init__(tools, "time_series_report_tool_node", mcp_tools=mcp_tools)
+        super().__init__(tools, "time_series_report_tool_node", mcp_tools=mcp_tools,
+                         llm_factory=router_llm_model)
 
     def create_prompt(self):
         system_prompt = """

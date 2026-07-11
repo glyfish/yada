@@ -3,6 +3,7 @@ from __future__ import annotations
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from apps.agentic.core.agents.linear_agent import LinearAgent
+from apps.agentic.core.llm_factory import router_llm_model
 from apps.agentic.agents.data.caching_fred_tool import CachingFredTool
 from apps.agentic.agents.data.caching_tiingo_tool import CachingTiingoTool
 from lib.logger import get_logger
@@ -27,7 +28,8 @@ class TimeSeriesDataFetcherAgent(LinearAgent):
 
     def __init__(self, mcp_tools: list):
         tool_node_name = "time_series_data_fetcher_tool_node"
-        super().__init__([], tool_node_name, mcp_tools=mcp_tools)
+        super().__init__([], tool_node_name, mcp_tools=mcp_tools,
+                         llm_factory=router_llm_model)
 
 
     @classmethod

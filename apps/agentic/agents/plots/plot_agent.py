@@ -7,6 +7,7 @@ from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from pydantic import BaseModel, Field
 
 from apps.agentic.core.agents.react_agent import ReactAgent
+from apps.agentic.core.llm_factory import router_llm_model
 from apps.agentic.core.tool_spec import PositiveExample, NegativeExample, ToolSpec, tool_spec
 from apps.agentic.agents.plots.bar_chart_agent import BarChartAgent
 from apps.agentic.agents.plots.time_series_plot_agent import TimeSeriesPlotAgent
@@ -93,7 +94,8 @@ class PlotAgent(ReactAgent):
             delegate_to_bar_chart_agent,
             delegate_to_time_series_plot_agent,
         ]
-        super().__init__(tools, "plot_agent_tool_node", mcp_tools=mcp_tools)
+        super().__init__(tools, "plot_agent_tool_node", mcp_tools=mcp_tools,
+                         llm_factory=router_llm_model)
 
     def create_prompt(self):
         system_prompt = """

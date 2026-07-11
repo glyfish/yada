@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from apps.agentic.core.agents.react_agent import ReactAgent
+from apps.agentic.core.llm_factory import router_llm_model
 from apps.agentic.core.tool_spec import PositiveExample, ToolSpec, tool_spec
 from apps.agentic.core.document_loaders.github_document_loader import GitHubChromaDocumentLoader
 from apps.agentic.core.document_loaders.research_library_document_loader import ResearchLibraryChromaDocumentLoader
@@ -130,7 +131,8 @@ class DocumentLoaderAgent(ReactAgent):
             DocumentLoaderAgent.load_etf_data,
             DocumentLoaderAgent.reload_etf_data,
         ]
-        super().__init__(tools, "document_loader_tool_node", mcp_tools=mcp_tools)
+        super().__init__(tools, "document_loader_tool_node", mcp_tools=mcp_tools,
+                         llm_factory=router_llm_model)
 
 
     def create_prompt(self):

@@ -7,6 +7,7 @@ from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from pydantic import BaseModel, Field
 
 from apps.agentic.core.agents.react_agent import ReactAgent
+from apps.agentic.core.llm_factory import router_llm_model
 from apps.agentic.core.tool_spec import PositiveExample, NegativeExample, ToolSpec, tool_spec
 from apps.agentic.agents.plots.time_series_report_agent import TimeSeriesReportAgent
 from apps.agentic.agents.time_series.time_series_data_fetcher_agent import TimeSeriesDataFetcherAgent
@@ -122,7 +123,8 @@ class TimeSeriesAgent(ReactAgent):
             delegate_to_time_series_data_fetcher_agent,
             delegate_to_time_series_report_agent,
         ]
-        super().__init__(tools, "time_series_agent_tool_node", mcp_tools=mcp_tools)
+        super().__init__(tools, "time_series_agent_tool_node", mcp_tools=mcp_tools,
+                         llm_factory=router_llm_model)
 
     def create_prompt(self):
         system_prompt = """

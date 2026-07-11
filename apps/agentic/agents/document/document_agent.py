@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from apps.agentic.core.agents.react_agent import ReactAgent
 from apps.agentic.core.agents.messages import WorkerState
+from apps.agentic.core.llm_factory import router_llm_model
 from apps.agentic.core.agents.llm_filter_extractor import (
     extract_etf_filters,
     extract_fred_filters,
@@ -280,7 +281,8 @@ class DocumentAgent(ReactAgent):
             delegate_to_fred_data_info_search_agent,
             delegate_to_etf_data_info_search_agent,
         ]
-        super().__init__(tools, "document_agent_tool_node", mcp_tools=mcp_tools)
+        super().__init__(tools, "document_agent_tool_node", mcp_tools=mcp_tools,
+                         llm_factory=router_llm_model)
 
     def _create_agent(self):
         def route_after_tools(state: WorkerState):
