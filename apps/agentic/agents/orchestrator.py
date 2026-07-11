@@ -1,6 +1,6 @@
 import shortuuid
 from pydantic import BaseModel, Field
-from typing import Literal, Dict, Any, Optional
+from typing import Literal, Dict, Any, Optional, Sequence
 
 from apps.agentic.core.tool_spec import PositiveExample, NegativeExample, ToolSpec, tool_spec
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
@@ -28,6 +28,51 @@ _plot_agent = PlotAgent()
 _data_info_agent = DataInfoAgent()
 _document_agent = DocumentAgent()
 _time_series_agent = TimeSeriesAgent()
+
+def assemble_delegate_output(messages: Sequence) -> Optional[str]:
+    """
+    Build the orchestrator's final response from delegate tool output, verbatim.
+
+    Uses the LAST batch of tool calls in the current turn:
+      - Independent requests -> the model issues parallel tool calls (one AIMessage
+        with several tool_calls) -> every result is included, in order.
+      - Dependent chain -> the final step is the last sequential tool call -> only
+        that result is returned (earlier intermediates are omitted).
+
+    Scoped to the current turn (after the most recent user / injected-form message)
+    so a conversational turn never echoes a previous turn's tool results. Returns
+    None when the turn produced no assistant message at all.
+    """
+    start = 0
+    for i, msg in enumerate(messages):
+        if isinstance(msg, HumanMessage):
+            start = i
+    turn = messages[start + 1:]
+
+    last_tool_call_idx = -1
+    for i, msg in enumerate(turn):
+        if isinstance(msg, AIMessage) and getattr(msg, "tool_calls", None):
+            last_tool_call_idx = i
+
+    tool_msgs = (
+        [m for m in turn[last_tool_call_idx + 1:] if isinstance(m, ToolMessage)]
+        if last_tool_call_idx >= 0 else []
+    )
+
+    if not tool_msgs:
+        # Pure conversational reply — fall back to the model's own message.
+        for msg in reversed(turn):
+            if isinstance(msg, AIMessage):
+                content = msg.content
+                return content if isinstance(content, str) else str(content)
+        return None
+
+    contents = [
+        m.content if isinstance(m.content, str) else str(m.content)
+        for m in tool_msgs
+    ]
+    return "\n\n".join(contents)
+
 
 class RequestHumanFormInput(BaseModel):
     form_type: Literal[
@@ -318,10 +363,10 @@ class OrchestratorAgent(ReactAgent):
             return "tools"
 
         def passthrough(state: WorkerState):
-            for msg in reversed(state["messages"]):
-                if isinstance(msg, ToolMessage):
-                    return {"messages": [AIMessage(content=msg.content)]}
-            return {}
+            content = assemble_delegate_output(state["messages"])
+            if content is None:
+                return {}
+            return {"messages": [AIMessage(content=content)]}
 
         graph = (
             StateGraph(WorkerState)
