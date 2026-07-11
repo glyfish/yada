@@ -30,11 +30,13 @@ class ReactAgent(ABC):
     _mcp_tool_names: list[str] = []
 
     def __init__(self, tools: list[BaseTool], tool_node_name: str,
-                 mcp_tools: list[BaseTool] = [], node: ReactNode | None = None):
+                 mcp_tools: list[BaseTool] = [], node: ReactNode | None = None,
+                 llm_factory=None):
         all_tools = tools + mcp_tools
         self._mcp_tools = mcp_tools
         if node is None:
-            node = ReactNode(all_tools, self.create_prompt(), name=self.__class__.__name__)
+            node = ReactNode(all_tools, self.create_prompt(), name=self.__class__.__name__,
+                             llm_factory=llm_factory)
         self._node = node
         self._tool_node = ToolNode(all_tools, name=tool_node_name)
         self._tool_node_name = tool_node_name

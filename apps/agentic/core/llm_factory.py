@@ -109,10 +109,11 @@ class OpenAILLMFactory(LangsmithLLMFactory):
         )
 
 # Anthropic models that reject sampling params (temperature/top_p/top_k); sending
-# any of them returns a 400. Covers Opus 4.7+, Fable 5, and Mythos.
+# any of them returns a 400. Covers Opus 4.7+, Sonnet 5, Fable 5, and Mythos.
 _ANTHROPIC_NO_SAMPLING_PARAMS = (
     "claude-opus-4-7",
     "claude-opus-4-8",
+    "claude-sonnet-5",
     "claude-fable-5",
     "claude-mythos-5",
     "claude-mythos-preview",
@@ -126,6 +127,7 @@ _ANTHROPIC_REASONING_MODELS = (
     "claude-opus-4-7",
     "claude-opus-4-8",
     "claude-sonnet-4-6",
+    "claude-sonnet-5",
     "claude-fable-5",
     "claude-mythos-5",
     "claude-mythos-preview",
@@ -234,6 +236,21 @@ def filter_llm_model(**kwargs):
         provider=provider,
         model=model,
         temperature=_env_float("FILTER_LLM_TEMPERATURE", 0.0),
+        max_tokens=_env_int("LLM_MAX_TOKENS"),
+        **kwargs,
+    )
+
+
+def router_llm_model(**kwargs):
+    # Pure routing/dispatch agents pick a tool from a described list — classification,
+    # not generation — so a small model at temperature 0 is both cheaper and adequate.
+    # Generation agents keep agent_llm_model. Falls back to the scoring/mini model.
+    provider = os.getenv("LLM_MODEL_PROVIDER", "openai")
+    model = os.getenv("ROUTER_LLM_MODEL", os.getenv("SCORING_LLM_MODEL", "gpt-4.1-mini"))
+    return build_llm(
+        provider=provider,
+        model=model,
+        temperature=_env_float("ROUTER_LLM_TEMPERATURE", 0.0),
         max_tokens=_env_int("LLM_MAX_TOKENS"),
         **kwargs,
     )

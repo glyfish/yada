@@ -11,6 +11,7 @@ from langgraph.prebuilt import tools_condition, ToolNode
 
 from apps.agentic.core.agents.react_agent import ReactAgent
 from apps.agentic.core.agents.messages import WorkerState
+from apps.agentic.core.llm_factory import router_llm_model
 from apps.agentic.core.agents.human_input_node import HumanInputNode
 from apps.agentic.core.checkpointer import checkpointer
 from apps.agentic.agents.search_agent import SearchAgent
@@ -213,7 +214,7 @@ async def delegate_to_plot_agent(request: str) -> str:
             PositiveExample(input="Show me the details for UNRATE in the cache."),
             PositiveExample(input="What time series do I have cached?"),
             PositiveExample(input="List all time series reports."),
-            PositiveExample(input="What reports do I have?"),
+            PositiveExample(input="What time series reports do I have?"),
             PositiveExample(input="Show me the details of the unemployment report."),
             PositiveExample(input="List files in troystribling/zgomot."),
             PositiveExample(input="What are the document shelves available in my research library?"),
@@ -310,7 +311,7 @@ def request_human_form(form_type: str) -> str:
             PositiveExample(input="Load all GitHub repositories."),
             PositiveExample(input="Search my research library for the definition of the Carnot Cycle."),
             PositiveExample(input="What time series are available for GDP in the FRED data that have an end date within a year of today?"),
-            PositiveExample(input="Find MIDI output handling in troystribling/zgomot my code."),
+            PositiveExample(input="Find MIDI output handling in my code in troystribling/zgomot."),
             PositiveExample(input="Load ETF data for VanEck into the database."),
             PositiveExample(input="Update the ETF database."),
             PositiveExample(input="What VanEck fixed income ETFs are available on US Exchanges?"),
@@ -344,7 +345,8 @@ class OrchestratorAgent(ReactAgent):
             delegate_to_document_agent,
         ]
         tool_node_name = "orchestrator_tool_node"
-        super().__init__(tools, tool_node_name, mcp_tools=mcp_tools)
+        # Orchestrator only routes to sub-agents — run it on the cheaper router model.
+        super().__init__(tools, tool_node_name, mcp_tools=mcp_tools, llm_factory=router_llm_model)
 
 
     def _create_agent(self):

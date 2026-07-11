@@ -20,10 +20,12 @@ class ReactNode:
     Serves as a LangGraph-compatible node callable via self._model_runner.
     """
 
-    def __init__(self, tools: list[BaseTool], prompt, name: str = "ReactNode"):
+    def __init__(self, tools: list[BaseTool], prompt, name: str = "ReactNode", llm_factory=None):
         self._name = name
         self._tools = tools
-        self._llm = agent_llm_model()
+        # llm_factory lets an agent pick its model (e.g. router_llm_model for pure
+        # routing agents); defaults to the full agent model for generation.
+        self._llm = (llm_factory or agent_llm_model)()
         self._prompt = prompt
         self._tooled_llm = self._llm.bind_tools(self._tools).with_retry(
             retry_if_exception_type=(
