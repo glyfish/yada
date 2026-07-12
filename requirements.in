@@ -37,3 +37,5 @@ pip-tools
 psycopg2
 financedatabase
 lxml
+pytest
+pytest-asyncio
