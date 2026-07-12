@@ -49,6 +49,23 @@
       "console": "integratedTerminal",
       "cwd": "${workspaceFolder}",
       "justMyCode": true
+    },
+    {
+      "name": "Unit Tests",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": [
+        "tests/unit",
+        "-v"
+      ],
+      "cwd": "${workspaceFolder}",
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "TOKENIZERS_PARALLELISM": "false"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": false
     }
   ]
 }

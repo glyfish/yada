@@ -306,7 +306,7 @@ dialog.modal menu {
 
 /* Report picker dialog */
 dialog.modal.report-picker {
-    width: min(780px, 96vw);
+    width: min(1040px, 96vw);
 }
 dialog.modal.report-picker.series-select {
     width: min(980px, 96vw);
@@ -316,6 +316,39 @@ dialog.modal.series-select .report-picker-table th:nth-child(5),
 dialog.modal.series-select .report-picker-table th:nth-child(6),
 dialog.modal.series-select .report-picker-table td:nth-child(5),
 dialog.modal.series-select .report-picker-table td:nth-child(6) {
+    white-space: nowrap;
+}
+/* Plot picker (Title | Description | From | To): keep the date columns on one line
+   and let the description carry the extra width in a muted color. */
+dialog.modal.report-picker:not(.series-select) .report-picker-table th:nth-child(3),
+dialog.modal.report-picker:not(.series-select) .report-picker-table th:nth-child(4),
+dialog.modal.report-picker:not(.series-select) .report-picker-table td:nth-child(3),
+dialog.modal.report-picker:not(.series-select) .report-picker-table td:nth-child(4) {
+    white-space: nowrap;
+}
+.report-picker-table td.rp-desc {
+    color: #666;
+}
+
+/* Legend key table rendered above a report plot (ID | Title | Description | Units). */
+.markdown-output table.report-series-table {
+    border-collapse: collapse;
+    margin: 0 auto .75rem;
+    font-size: .85rem;
+}
+.report-series-table th,
+.report-series-table td {
+    border: 1px solid #e4e4e4;
+    padding: .3rem .6rem;
+    text-align: left;
+    vertical-align: top;
+}
+.report-series-table th {
+    background: #f4f4f4;
+    font-weight: 600;
+}
+.report-series-table td:last-child,
+.report-series-table th:last-child {
     white-space: nowrap;
 }
 dialog.modal.report-picker form {

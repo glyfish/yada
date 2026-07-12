@@ -508,6 +508,16 @@ Do NOT delegate the search yourself — the form runs the searches. Only pass 's
 When the user wants to PLOT a time series report but does NOT specify which report:
 1. Call request_human_form with form_type: select_time_series_report. This presents the user
    with a searchable list of available reports to pick from.
+   - If the user constrains WHICH reports by content (e.g. "a report that includes government
+     bonds", "reports for VanEck funds", "monthly FRED reports"), pass that constraint as a
+     'filter_query' string in prefill (e.g. prefill: {{filter_query: "government bonds"}}) so
+     the list is pre-filtered to matching reports. Omit filter_query when the user names no
+     such constraint.
+   - Also set 'filter_source' in prefill to "fred" when the constraint is about FRED data, or
+     "etf" when it is about ETFs / funds / tickers (e.g. prefill: {{filter_query: "treasury
+     securities", filter_source: "fred"}}). The ETF and FRED vocabularies overlap, so this
+     keeps a FRED request from matching ETF reports and vice versa. Omit filter_source when the
+     request names no store (e.g. plain "government bonds") so both stores are considered.
 2. After the user selects a report, the form data will contain a report_id field.
    Pass "Plot the report with ID <report_id>" to delegate_to_time_series_agent.
 

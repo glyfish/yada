@@ -26,6 +26,7 @@ from apps.agentic.db.report_cache import ReportCache
 from apps.agentic.agents.plots.time_series_report_agent import TimeSeriesInfoEntry
 from apps.agentic.agents.plots.time_series_report_plot_agent import render_report_plot
 from apps.agentic.core.agents.series_metadata import report_metadata_from_series
+from apps.agentic.core.agents.llm_filter_extractor import extract_etf_filters, extract_fred_filters
 from apps.agentic.agents.data.series_fetch import fetch_series_into_cache, SERIES_SOURCE_SPECS
 from apps.agentic.agents.document.document_agent import search_series_rows
 from apps.agentic.core.pricing import estimate_cost
@@ -503,9 +504,53 @@ async def delete_report(report_id: str):
         raise HTTPException(status_code=404, detail="Report not found")
 
 
+async def _reports_matching_filter(phrase: str, source: str = "") -> list[dict]:
+    """
+    Reports whose merged metadata satisfies a natural-language constraint (e.g.
+    'government bonds', 'VanEck funds'), reusing the document-search filter extractors
+    and the source-keyed metadata filter.
+
+    The ETF and FRED vocabularies overlap (words like 'treasury'/'government' live in
+    both catalogs) and the extractors ignore the store name, so `source` scopes which
+    extractor applies: 'etf' -> ETF only, 'fred' -> FRED only. When the request names
+    no store (source empty) a report matches the ETF *or* the FRED reading. Falls back
+    to all reports when the phrase yields no recognizable filter.
+    """
+    source = (source or "").strip().lower()
+    plan = {
+        "etf": [(extract_etf_filters, "tiingo")],
+        "fred": [(extract_fred_filters, "fred")],
+    }.get(source, [(extract_etf_filters, "tiingo"), (extract_fred_filters, "fred")])
+
+    matched: dict[str, dict] = {}
+    any_filter = False
+    for extractor, cache_source in plan:
+        where, _ = await extractor(phrase)
+        if where is None:
+            continue
+        any_filter = True
+        for r in await ReportCache.list_reports(source=cache_source, where=where):
+            matched[r["report_id"]] = r
+    if any_filter:
+        return sorted(matched.values(), key=lambda r: r["report_title"])
+
+    # The phrase didn't map to the scoped store's vocabulary. Still honor an explicit
+    # source by returning reports that contain that store's data; with no source given,
+    # the request is genuinely unfilterable, so show everything.
+    all_reports = await ReportCache.list_reports()
+    src_key = {"etf": "tiingo", "fred": "fred"}.get(source)
+    if src_key:
+        return [r for r in all_reports if src_key in (r.get("metadata") or {})]
+    return all_reports
+
+
 @app.get("/api/reports")
-async def list_reports(q: str = Query("", description="Filter by title or description")):
-    reports = await ReportCache.list_reports()
+async def list_reports(
+    q: str = Query("", description="Filter by title or description"),
+    metadata_filter: str = Query("", alias="filter", description="Natural-language metadata filter, e.g. 'government bonds'"),
+    source: str = Query("", description="Restrict the metadata filter to a store: 'etf' or 'fred'"),
+):
+    reports = await _reports_matching_filter(metadata_filter, source) if metadata_filter else await ReportCache.list_reports()
     if q:
         q_lower = q.lower()
         reports = [

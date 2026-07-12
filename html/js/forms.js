@@ -1,6 +1,6 @@
 import { handleResumeRequest } from "./api.js";
 import { prependResultCard, fillLastCardMeta } from "./feed.js";
-import { sessionId as sessionIdState } from "./state.js";
+import { sessionId as sessionIdState, clearInput } from "./state.js";
 
 // Render the create-time-series-report form into `dialog`. Works both as a fresh
 // dialog (from the form dispatcher) and as an in-place transition from the series
@@ -86,6 +86,9 @@ function showSeriesSelectionTable(dialog, formSchema, sessionId, promptLabel) {
         <form method="dialog" novalidate autocomplete="off">
             <h3 style="margin-top:0">Create Time Series Report</h3>
             <p style="margin:.25rem 0 .75rem;color:#888;">Select the series to include, then click Create.</p>
+            <input id="ss-search" type="text" placeholder="Filter by ID, title, or source…"
+                autocomplete="off" autocapitalize="off" spellcheck="false"
+                style="width:100%;box-sizing:border-box;margin-bottom:.5rem;">
             <div class="report-picker-wrap">
                 <table class="report-picker-table">
                     <thead>
@@ -110,7 +113,9 @@ function showSeriesSelectionTable(dialog, formSchema, sessionId, promptLabel) {
     const tbody     = dialog.querySelector("#ss-tbody");
     const status    = dialog.querySelector("#ss-status");
     const createBtn = dialog.querySelector("#createFormBtn");
-    const selected  = new Map();  // native_id -> row
+    const searchInput = dialog.querySelector("#ss-search");
+    const selected  = new Map();  // source:native_id -> row (survives filtering)
+    let allRows     = [];         // every search hit; the filter narrows what's rendered
 
     const updateCreateBtn = () => {
         createBtn.disabled = selected.size === 0;
@@ -134,6 +139,9 @@ function showSeriesSelectionTable(dialog, formSchema, sessionId, promptLabel) {
             `;
             const key = `${r.source}:${r.native_id}`;  // native_id alone can collide across sources
             const cb = tr.querySelector("input[type=checkbox]");
+            // Restore prior selection so checks survive filtering / re-render.
+            cb.checked = selected.has(key);
+            if (selected.has(key)) tr.classList.add("selected");
             const toggle = (on) => {
                 if (on) { selected.set(key, r); tr.classList.add("selected"); }
                 else    { selected.delete(key); tr.classList.remove("selected"); }
@@ -145,6 +153,18 @@ function showSeriesSelectionTable(dialog, formSchema, sessionId, promptLabel) {
             tbody.appendChild(tr);
         }
     };
+
+    // Narrow the loaded rows client-side by ID / title / source. Selections persist
+    // in `selected`, so hidden picks are still included when Create is clicked.
+    const applyFilter = () => {
+        const ql = searchInput.value.trim().toLowerCase();
+        const rows = !ql ? allRows : allRows.filter(r =>
+            (r.native_id || "").toLowerCase().includes(ql) ||
+            (r.title || "").toLowerCase().includes(ql) ||
+            (r.source || "").toLowerCase().includes(ql));
+        renderRows(rows);
+    };
+    searchInput.addEventListener("input", applyFilter);
 
     (async () => {
         try {
@@ -168,7 +188,8 @@ function showSeriesSelectionTable(dialog, formSchema, sessionId, promptLabel) {
                     merged.push(r);
                 }
             }
-            renderRows(merged);
+            allRows = merged;
+            applyFilter();
         } catch (e) {
             status.style.display = "";
             status.textContent = `Search failed: ${e.message}`;
@@ -361,16 +382,19 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
         }
 
     } else if (formType === "select_time_series_report") {
+        const prefill = formSchema.prefill || {};
+        const filterQuery = prefill.filter_query || "";
+        const filterSource = prefill.filter_source || "";
         dialog.classList.add("report-picker");
         dialog.innerHTML = `
             <form method="dialog" novalidate autocomplete="off">
                 <h3 style="margin-top:0">Select Report to Plot</h3>
-                <input id="rp-search" type="text" placeholder="Search by title, tag, or description…"
+                <input id="rp-search" type="text" placeholder="Search by title or description…"
                     autocomplete="off" autocapitalize="off" spellcheck="false" style="width:100%;box-sizing:border-box;">
                 <div id="rp-table-wrap" class="report-picker-wrap">
                     <table class="report-picker-table">
                         <thead>
-                            <tr><th>Title</th><th>From</th><th>To</th></tr>
+                            <tr><th>Title</th><th>Description</th><th>From</th><th>To</th></tr>
                         </thead>
                         <tbody id="rp-tbody"></tbody>
                     </table>
@@ -396,7 +420,6 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
         const editBtn      = dialog.querySelector("#editFormBtn");
         const deleteBtn    = dialog.querySelector("#deleteFormBtn");
         let selectedId     = null;
-        let debounceTimer  = null;
 
         const renderRows = (reports) => {
             tbody.innerHTML = "";
@@ -406,7 +429,7 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
                 tr.className = "report-picker-row";
                 tr.dataset.reportId = r.report_id;
                 const to   = r.time_range_to || "latest";
-                tr.innerHTML = `<td>${r.report_title}</td><td>${r.time_range_from}</td><td>${to}</td>`;
+                tr.innerHTML = `<td>${r.report_title}</td><td class="rp-desc">${r.report_description || ""}</td><td>${r.time_range_from}</td><td>${to}</td>`;
                 tr.addEventListener("click", () => {
                     tbody.querySelectorAll("tr").forEach(row => row.classList.remove("selected"));
                     tr.classList.add("selected");
@@ -419,26 +442,41 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
             }
         };
 
-        const fetchReports = async (q = "") => {
-            const url = q ? `/api/reports?q=${encodeURIComponent(q)}` : "/api/reports";
+        // Load reports once, pre-filtered by the request's content constraint
+        // (filter_query -> server-side metadata filter). The search box then narrows
+        // that set client-side by title/description — no extra requests, no LLM cost.
+        let allReports = [];
+
+        const applyTextFilter = () => {
+            const ql = searchInput.value.trim().toLowerCase();
+            renderRows(!ql ? allReports : allReports.filter(r =>
+                r.report_title.toLowerCase().includes(ql) ||
+                (r.report_description || "").toLowerCase().includes(ql)));
+        };
+
+        const loadReports = async () => {
+            const params = new URLSearchParams();
+            if (filterQuery) params.set("filter", filterQuery);
+            if (filterSource) params.set("source", filterSource);
+            const url = params.toString() ? `/api/reports?${params}` : "/api/reports";
             try {
                 const resp = await fetch(url);
                 if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-                renderRows(await resp.json());
+                allReports = await resp.json();
+                applyTextFilter();
             } catch (e) {
-                tbody.innerHTML = `<tr><td colspan="3" style="color:red">Failed to load reports: ${e.message}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="4" style="color:red">Failed to load reports: ${e.message}</td></tr>`;
             }
         };
 
-        fetchReports();
+        loadReports();
 
         searchInput.addEventListener("input", () => {
-            clearTimeout(debounceTimer);
             selectedId = null;
             submitBtn.disabled = true;
             editBtn.disabled = true;
             deleteBtn.disabled = true;
-            debounceTimer = setTimeout(() => fetchReports(searchInput.value.trim()), 250);
+            applyTextFilter();
         });
 
         const close = () => { sessionIdState.val = null; dialog.close(); dialog.remove(); };
@@ -459,6 +497,7 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
                 const data = await resp.json();
                 await prependResultCard(`Plot report: ${data.report_title}`, data.html);
                 fillLastCardMeta({ total_tokens: 0, input_tokens: 0, output_tokens: 0, cost_usd: 0 });
+                clearInput();  // request fulfilled — clear the textarea like the stream/resume paths
             } catch (e) {
                 await prependResultCard("Plot report", `Failed to plot report: ${e.message}`);
             }
@@ -549,7 +588,7 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
                 selectedId = null;
                 submitBtn.disabled = true;
                 editBtn.disabled = true;
-                fetchReports(searchInput.value.trim());
+                loadReports();
             });
         };
 
@@ -569,7 +608,7 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
             submitBtn.disabled = true;
             editBtn.disabled = true;
             deleteBtn.disabled = true;
-            fetchReports(searchInput.value.trim());
+            loadReports();
         });
 
         requestAnimationFrame(() => searchInput.focus());

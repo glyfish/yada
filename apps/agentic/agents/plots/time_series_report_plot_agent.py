@@ -5,6 +5,7 @@ import os
 import sys
 import uuid as _uuid
 from datetime import datetime
+from html import escape
 
 import numpy
 import matplotlib
@@ -77,6 +78,47 @@ def _load_series_by_cache_id(
         raise
 
 
+# The metadata field that best describes a series per source, shown in the legend table.
+_CATEGORY_FIELD = {"tiingo": "category", "fred": "category_name"}
+
+
+def _series_category(entry: dict) -> str:
+    """A concise category descriptor for a series (ETF category / FRED category_name)."""
+    source = str(entry.get("source") or "").strip().lower()
+    field = _CATEGORY_FIELD.get(source)
+    if not field:
+        return ""
+    values = ((entry.get("metadata") or {}).get(source) or {}).get(field)
+    return str(values[0]) if isinstance(values, list) and values else ""
+
+
+def _cell(value) -> str:
+    # Escape HTML, then encode '$' as an entity. The client renders this table through a
+    # markdown pipeline whose LaTeX pre-processor treats $...$ as math; two currency units
+    # like "Mil. of $" would otherwise make it swallow the table structure between them.
+    return escape(str(value)).replace("$", "&#36;")
+
+
+def _series_table_html(series: list[dict]) -> str:
+    """A legend key table (ID | Title | Description | Units) rendered above the plot, so
+    the plot legend can stay compact with just the series id."""
+    rows = "".join(
+        "<tr>"
+        f"<td><code>{_cell(s['native_id'])}</code></td>"
+        f"<td>{_cell(s['title'])}</td>"
+        f"<td>{_cell(s['description'])}</td>"
+        f"<td>{_cell(s['units'])}</td>"
+        "</tr>"
+        for s in series
+    )
+    return (
+        '<table class="report-series-table">'
+        "<thead><tr><th>ID</th><th>Title</th><th>Description</th><th>Units</th></tr></thead>"
+        f"<tbody>{rows}</tbody>"
+        "</table>"
+    )
+
+
 def _select_plot_type(units: list[str]) -> str:
     """
     Deterministic plot-type selection from series units — the same rules the plot
@@ -146,9 +188,15 @@ async def render_report_plot(report_id_or_title: str) -> dict:
             continue
         if not times:
             continue
+        units = str((e.get("metadata") or {}).get("units") or "")
+        native_id = e.get("native_id") or ""
         series.append({
-            "label": e.get("native_id") or e.get("title") or cache_id,
-            "units": str((e.get("metadata") or {}).get("units") or ""),
+            # Legend stays compact: just the id. The table above maps id -> title/units.
+            "label": native_id or e.get("title") or cache_id,
+            "native_id": native_id,
+            "title": str(e.get("title") or ""),
+            "description": _series_category(e),
+            "units": units,
             "time": numpy.array(times),
             "values": numpy.array(values),
         })
@@ -201,7 +249,7 @@ async def render_report_plot(report_id_or_title: str) -> dict:
         "report_title": title,
         "plot_type": plot_type,
         "series_count": len(series),
-        "html": f'<div class="time-series-plot"><img src="{file}"></div>',
+        "html": _series_table_html(series) + f'<div class="time-series-plot"><img src="{file}"></div>',
     }
 
 
