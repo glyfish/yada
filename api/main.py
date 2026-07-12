@@ -302,6 +302,23 @@ async def resume_request(req: ResumePayload):
         root_run_id = None
 
         try:
+            # A resume only makes sense against a thread paused at an interrupt.
+            # If the thread has no pending interrupt — its session was lost on a
+            # server restart, or the form was already submitted — resuming would
+            # start the graph from scratch with empty input and fail with a cryptic
+            # "at least one message is required" 400. Detect that and report clearly.
+            snapshot = await orchestrator.agent.aget_state(config)
+            if not snapshot.next:
+                logger.warning(f"Resume with no pending interrupt [{req.session_id}]; ignoring.")
+                yield {
+                    "event": "error",
+                    "data": json.dumps({
+                        "message": "This form is no longer active — its session was lost "
+                                   "(the server likely restarted). Please make the request again.",
+                    }),
+                }
+                return
+
             async for event in orchestrator.agent.astream_events(
                 Command(resume=req.form_data),
                 config,

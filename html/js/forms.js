@@ -213,11 +213,11 @@ function showSeriesSelectionTable(dialog, formSchema, sessionId, promptLabel) {
             return;
         }
 
-        // Default the report range to the union span of the selected series.
-        // ISO dates (YYYY-MM-DD) sort lexicographically, so string min/max = date min/max.
+        // Default the report start to the earliest of the selected series.
+        // ISO dates (YYYY-MM-DD) sort lexicographically, so string min = date min.
+        // Leave the end empty so the report tracks the latest data by default.
         const carried = { ...prefill, time_series_ids: cacheIds.join(", ") };
         if (starts.length) carried.time_range_from = starts.reduce((a, b) => (a < b ? a : b));
-        if (ends.length)   carried.time_range_to   = ends.reduce((a, b) => (a > b ? a : b));
 
         // Hand off to the create-report form, prefilled with the resolved cache_ids
         // and the derived time range.

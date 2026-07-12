@@ -331,7 +331,7 @@ dialog.modal.report-picker menu {
     border: 1px solid #ddd;
     border-radius: 8px;
     overflow-y: auto;
-    max-height: 320px;
+    max-height: min(820px, 80vh);
 }
 .report-picker-table {
     width: 100%;
