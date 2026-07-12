@@ -11,13 +11,13 @@ export function fillLastCardMeta(meta) {
     const footer = lastCard?.querySelector(".result-meta");
     if (!footer || !meta) return;
     const parts = [];
-    if (meta.total_tokens != null) {
+    if (meta.total_tokens > 0) {
         parts.push(
             `${meta.total_tokens.toLocaleString()} tokens ` +
             `(${meta.input_tokens.toLocaleString()} in / ${meta.output_tokens.toLocaleString()} out)`
         );
     }
-    if (meta.cost_usd != null) {
+    if (meta.cost_usd > 0) {
         parts.push(`$${meta.cost_usd.toPrecision(4)}`);
     }
     if (meta.trace_url) {
