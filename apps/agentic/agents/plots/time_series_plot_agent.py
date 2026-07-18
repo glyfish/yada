@@ -126,7 +126,7 @@ class TimeSeriesPlotAgent(ReactAgent):
         tool_node_name = "time_series_plot_tool_node"
 
         sys.path.append(os.path.abspath(os.path.join(os.getcwd(), '..')))
-        pyplot.style.use(config.glyfish_style)
+        pyplot.style.use(config.glyfish_web_style)
 
         super().__init__(tools, tool_node_name, mcp_tools=mcp_tools)
 

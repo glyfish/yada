@@ -318,7 +318,7 @@ class TimeSeriesReportPlotAgent(ReactAgent):
 
     def __init__(self, mcp_tools: list = []):
         sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..")))
-        pyplot.style.use(config.glyfish_style)
+        pyplot.style.use(config.glyfish_web_style)
 
         tools = [
             TimeSeriesReportPlotAgent.get_report_info,
