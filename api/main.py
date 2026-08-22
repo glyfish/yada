@@ -7,6 +7,13 @@ import uuid
 from contextlib import asynccontextmanager
 from typing import Any, Dict, Optional
 
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load .env before any app imports: the agent tree builds LLM clients at
+# import time and needs provider/API-key env vars already set.
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+
 import langsmith
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
@@ -30,11 +37,6 @@ from apps.agentic.core.agents.llm_filter_extractor import extract_etf_filters, e
 from apps.agentic.agents.data.series_fetch import fetch_series_into_cache, SERIES_SOURCE_SPECS
 from apps.agentic.agents.document.document_agent import search_series_rows
 from apps.agentic.core.pricing import estimate_cost
-from pathlib import Path
-from dotenv import load_dotenv
-
-load_dotenv(Path(__file__).resolve().parents[1] / ".env")
-
 from api.document_router import router as document_router
 
 # ---------------------------------------------------------------------------

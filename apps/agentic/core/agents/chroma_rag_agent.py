@@ -1,13 +1,12 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional, cast
 
-from langchain import hub
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import AIMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import StateGraph, START, END
-from langchain.prompts import PromptTemplate
-from langchain.tools.retriever import create_retriever_tool
+from langchain_core.prompts import PromptTemplate
+from langchain_core.tools import create_retriever_tool
 from pydantic import BaseModel, Field
 
 from apps.agentic.core.document_loaders.chroma_document_loader import ChromaDocumentLoader
@@ -76,7 +75,17 @@ class ChromaRAGAgent(ABC):
             document_separator="\n\n-----\n\n",)
         self._tools = [self._retriever_tool]
         self._tooled_llm = self._llm.bind_tools(self._tools)
-        self._generate_prompt = hub.pull("rlm/rag-prompt")
+        # Inline copy of the canonical hub prompt "rlm/rag-prompt": pulling public
+        # hub prompts is disabled by default (untrusted serialized objects) and the
+        # pull added a network dependency at agent-creation time.
+        self._generate_prompt = ChatPromptTemplate.from_messages([
+            ("human",
+             "You are an assistant for question-answering tasks. Use the following "
+             "pieces of retrieved context to answer the question. If you don't know "
+             "the answer, just say that you don't know. Use three sentences maximum "
+             "and keep the answer concise.\n"
+             "Question: {question} \nContext: {context} \nAnswer:"),
+        ])
         self._grader_llm = scoring_llm_model().with_structured_output(DocumentGrade)
         self._grade_prompt = ChatPromptTemplate.from_messages([
             ("system",

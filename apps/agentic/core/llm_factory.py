@@ -9,7 +9,7 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.language_models.chat_models import BaseChatModel
 from langgraph.graph import END
 from langchain_core.tracers.langchain import LangChainTracer
-from langchain.callbacks.manager import CallbackManager
+from langchain_core.callbacks import CallbackManager
 
 
 def _build_tracer():

@@ -1,8 +1,8 @@
 import os
 from pathlib import Path
 
-from langchain import hub
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_classic import hub
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from lib.logger import get_logger
 
 logger = get_logger("YADA")

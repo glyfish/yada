@@ -4,15 +4,18 @@ aiofiles
 jupyter
 matplotlib
 matplotlib-label-lines
-pandas
+pandas<3
 fastapi
 uvicorn[standard]
 langchain
+langchain-text-splitters
 langgraph
+langgraph-checkpoint-sqlite
 langchain-openai
 langchain-anthropic
 langchain_community
 langchain-tavily
+langsmith
 langchain_chroma
 chromadb
 statsmodels
@@ -28,7 +31,6 @@ debugpy
 gitdb
 GitPython
 markdown-it-py
-python-language-server[all]
 shortuuid
 tabulate
 mcp

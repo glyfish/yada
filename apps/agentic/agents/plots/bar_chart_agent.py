@@ -3,7 +3,7 @@ from typing import Dict, List
 import shortuuid
 
 from langgraph.graph import StateGraph, START, END
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from apps.agentic.core.tool_spec import PositiveExample, NegativeExample, ToolSpec, tool_spec
 from apps.agentic.core.agents.messages import WorkerState
 

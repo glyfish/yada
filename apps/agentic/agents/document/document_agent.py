@@ -3,7 +3,7 @@ from __future__ import annotations
 import shortuuid
 from typing import Annotated, Any, Dict, Optional
 
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph, START, END

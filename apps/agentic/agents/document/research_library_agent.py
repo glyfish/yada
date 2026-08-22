@@ -5,14 +5,13 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import Dict
 
-from langchain import hub
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import HumanMessage
 from langgraph.graph import StateGraph, START, END
-from langchain.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate
 from langchain_core.prompts import ChatPromptTemplate
 from langgraph.prebuilt import tools_condition
-from langchain.tools.retriever import create_retriever_tool
+from langchain_core.tools import create_retriever_tool
 from langgraph.prebuilt import ToolNode
 
 from apps.agentic.core.agents.file_chroma_rag_agent import FileChromaRAGAgent

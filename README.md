@@ -66,6 +66,7 @@ Supporting pieces:
 ```text
 api/                 FastAPI app (api.main:app) and routers
 apps/agentic/        Agent orchestrator, sub-agents, document loaders, DB cache models
+apps/backtrader/     Backtesting: strategies, indicators, backtest DB, dashboards (moved from navi)
 clients/fred/        FRED category/series data exports
 alembic/             Database migrations
 document_library/    Source documents for the RAG stores
@@ -77,7 +78,7 @@ requirements.in      Top-level deps (includes `-e ../navi`); compiled to require
 
 ## Prerequisites
 
-- **Python 3.11** (this repo pins `3.11.11`)
+- **Python 3.14** (this repo pins `3.14.7`)
 - **[`navi`](https://github.com/glyfish/navi)** cloned as a sibling directory (see above)
 - **PostgreSQL** for the time-series / report cache
 - The **[`meida`](https://github.com/glyfish/meida)** MCP server running — exposes FRED/Tiingo tools at `MCP_URL` (default `http://localhost:8080/sse`); also a sibling repo built on `navi`
@@ -90,7 +91,7 @@ requirements.in      Top-level deps (includes `-e ../navi`); compiled to require
 #    gly.fish/navi  and  gly.fish/yada  must be siblings
 git clone <navi-repo-url> ../navi
 
-# 2. Create and activate a Python 3.11 environment, then install.
+# 2. Create and activate a Python 3.14 environment, then install.
 #    This installs navi in editable mode via `-e ../navi`.
 pip install -r requirements.txt
 

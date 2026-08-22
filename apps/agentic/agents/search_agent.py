@@ -1,6 +1,6 @@
 from langchain_tavily import TavilySearch
 from langgraph.graph import StateGraph, START, END
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.prebuilt import ToolNode
 
 from apps.agentic.core.agents.react_agent import ReactAgent

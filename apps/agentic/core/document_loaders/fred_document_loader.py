@@ -7,7 +7,7 @@ import yaml
 from lib.logger import get_logger
 from git import Repo
 
-from langchain.text_splitter import RecursiveCharacterTextSplitter, MarkdownHeaderTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter, MarkdownHeaderTextSplitter
 from langchain_core.documents import Document
 
 from apps.agentic.core.document_loaders.chroma_document_loader import ChromaDocumentLoader

@@ -3,7 +3,7 @@ from __future__ import annotations
 import shortuuid
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from pydantic import BaseModel, Field
 
 from apps.agentic.core.agents.react_agent import ReactAgent

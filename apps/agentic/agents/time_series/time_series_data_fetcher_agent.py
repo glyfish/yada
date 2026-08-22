@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from apps.agentic.core.agents.linear_agent import LinearAgent
 from apps.agentic.core.llm_factory import router_llm_model

@@ -1,6 +1,6 @@
 from pathlib import Path
 from pydantic import BaseModel, Field
-from langchain.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate
 from langchain_core.prompts import ChatPromptTemplate
 
 from apps.agentic.core.constants import (PROGRAMMING_LANGUAGE_MAP)

@@ -8,7 +8,7 @@ from typing import Optional
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from apps.agentic.core.agents.react_agent import ReactAgent
 from apps.agentic.core.llm_factory import router_llm_model

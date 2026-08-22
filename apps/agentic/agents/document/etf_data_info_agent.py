@@ -1,5 +1,5 @@
 from langchain_core.messages import AIMessage, SystemMessage
-from langchain.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate
 from langgraph.graph import StateGraph, START, END
 
 from apps.agentic.core.agents.chroma_rag_agent import ChromaRAGAgent
