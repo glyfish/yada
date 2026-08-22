@@ -49,6 +49,8 @@ argon2-cffi-bindings==26.1.0
     # via argon2-cffi
 arrow==1.4.0
     # via isoduration
+astroid==4.0.4
+    # via pylint
 asttokens==3.0.2
     # via stack-data
 async-lru==2.3.0
@@ -58,6 +60,8 @@ attrs==26.1.0
     #   aiohttp
     #   jsonschema
     #   referencing
+autopep8==2.0.4
+    # via python-lsp-server
 babel==2.18.0
     # via jupyterlab-server
 backtrader==1.9.78.123
@@ -69,6 +73,8 @@ beautifulsoup4==4.15.0
     #   -r requirements.in
     #   nbconvert
     #   yfinance
+black==26.5.1
+    # via python-lsp-server
 bleach==6.4.0
     # via nbconvert
 build==1.5.0
@@ -96,6 +102,7 @@ chromadb==1.5.9
     #   langchain-chroma
 click==8.4.2
     # via
+    #   black
     #   huggingface-hub
     #   pip-tools
     #   uvicorn
@@ -123,12 +130,16 @@ debugpy==1.8.21
     #   ipykernel
 defusedxml==0.7.1
     # via nbconvert
+dill==0.4.1
+    # via pylint
 distro==1.9.0
     # via
     #   anthropic
     #   langsmith
 docstring-parser==0.18.0
     # via anthropic
+docstring-to-markdown==0.17
+    # via python-lsp-server
 durationpy==0.10
     # via kubernetes
 et-xmlfile==2.0.0
@@ -145,6 +156,8 @@ financedatabase==2.4.0
     # via -r requirements.in
 financetoolkit==2.1.4
     # via financedatabase
+flake8==7.1.2
+    # via python-lsp-server
 flatbuffers==25.12.19
     # via onnxruntime
 fonttools==4.63.0
@@ -211,6 +224,8 @@ idna==3.19
     #   jsonschema
     #   requests
     #   yarl
+importlib-metadata==9.0.0
+    # via docstring-to-markdown
 importlib-resources==7.1.0
     # via chromadb
 iniconfig==2.3.0
@@ -233,8 +248,12 @@ ipywidgets==8.1.9
     # via jupyter
 isoduration==20.11.0
     # via jsonschema
+isort==8.0.1
+    # via pylint
 jedi==0.20.0
-    # via ipython
+    # via
+    #   ipython
+    #   python-lsp-server
 jinja2==3.1.6
     # via
     #   jupyter-server
@@ -408,6 +427,11 @@ matplotlib-inline==0.2.2
     #   ipython
 matplotlib-label-lines==0.8.1
     # via -r requirements.in
+mccabe==0.7.0
+    # via
+    #   flake8
+    #   pylint
+    #   python-lsp-server
 mcp==1.29.0
     # via
     #   -r requirements.in
@@ -426,6 +450,8 @@ multidict==6.7.1
     #   yarl
 multitasking==0.0.13
     # via yfinance
+mypy-extensions==1.1.0
+    # via black
 narwhals==2.25.0
     # via scikit-learn
 nbclient==0.11.0
@@ -501,6 +527,7 @@ overrides==7.7.0
     # via chromadb
 packaging==26.3
     # via
+    #   black
     #   build
     #   huggingface-hub
     #   ipykernel
@@ -514,6 +541,7 @@ packaging==26.3
     #   nbconvert
     #   onnxruntime
     #   pytest
+    #   pytoolconfig
     #   statsmodels
     #   wheel
 pandas==2.3.3
@@ -526,6 +554,8 @@ pandocfilters==1.5.1
     # via nbconvert
 parso==0.8.7
     # via jedi
+pathspec==1.1.1
+    # via black
 patsy==1.0.2
     # via statsmodels
 peewee==4.3.0
@@ -538,10 +568,16 @@ pip-tools==7.6.1
     # via -r requirements.in
 platformdirs==4.11.3
     # via
+    #   black
     #   jupyter-core
+    #   pylint
+    #   pytoolconfig
+    #   yapf
     #   yfinance
 pluggy==1.6.0
-    # via pytest
+    # via
+    #   pytest
+    #   python-lsp-server
 prometheus-client==0.26.0
     # via jupyter-server
 prompt-toolkit==3.0.53
@@ -572,6 +608,11 @@ pure-eval==0.2.3
     # via stack-data
 pybase64==1.5.0
     # via chromadb
+pycodestyle==2.12.1
+    # via
+    #   autopep8
+    #   flake8
+    #   python-lsp-server
 pycparser==3.0
     # via cffi
 pydantic==2.13.4
@@ -586,7 +627,6 @@ pydantic==2.13.4
     #   langgraph
     #   langsmith
     #   mcp
-    #   mcp-types
     #   navi
     #   openai
     #   pydantic-settings
@@ -597,6 +637,12 @@ pydantic-settings==2.15.0
     #   chromadb
     #   langchain-community
     #   mcp
+pydocstyle==6.3.0
+    # via python-lsp-server
+pyflakes==3.2.0
+    # via
+    #   flake8
+    #   python-lsp-server
 pygments==2.21.0
     # via
     #   ipython
@@ -607,6 +653,8 @@ pygments==2.21.0
     #   rich
 pyjwt==2.13.0
     # via mcp
+pylint==4.0.7
+    # via python-lsp-server
 pyparsing==3.3.2
     # via matplotlib
 pypika==0.51.1
@@ -635,8 +683,16 @@ python-dotenv==1.2.3
     #   uvicorn
 python-json-logger==4.2.0
     # via jupyter-events
+python-lsp-jsonrpc==1.1.2
+    # via python-lsp-server
+python-lsp-server==1.15.0
+    # via -r requirements.in
 python-multipart==0.0.32
     # via mcp
+pytokens==0.4.1
+    # via black
+pytoolconfig==1.3.1
+    # via rope
 pytz==2026.3.post1
     # via
     #   pandas
@@ -695,6 +751,8 @@ rich==15.0.0
     # via
     #   chromadb
     #   typer
+rope==1.14.0
+    # via python-lsp-server
 rpds-py==2026.6.3
     # via
     #   jsonschema
@@ -723,6 +781,8 @@ sniffio==1.3.1
     #   anthropic
     #   langsmith
     #   openai
+snowballstemmer==3.1.1
+    # via pydocstyle
 soupsieve==2.9.2
     # via beautifulsoup4
 sqlalchemy==2.0.52
@@ -763,6 +823,8 @@ tinycss2==1.5.1
     # via bleach
 tokenizers==0.23.1
     # via chromadb
+tomlkit==0.15.1
+    # via pylint
 tornado==6.5.8
     # via
     #   ipykernel
@@ -803,6 +865,7 @@ typing-extensions==4.16.0
     #   anthropic
     #   beautifulsoup4
     #   chromadb
+    #   docstring-to-markdown
     #   fastapi
     #   grpcio
     #   huggingface-hub
@@ -812,7 +875,6 @@ typing-extensions==4.16.0
     #   langchain-protocol
     #   langsmith
     #   mcp
-    #   mcp-types
     #   openai
     #   opentelemetry-api
     #   opentelemetry-exporter-otlp-proto-grpc
@@ -832,6 +894,10 @@ tzdata==2026.3
     # via
     #   arrow
     #   pandas
+ujson==5.13.0
+    # via
+    #   python-lsp-jsonrpc
+    #   python-lsp-server
 uri-template==1.3.0
     # via jsonschema
 urllib3==2.7.0
@@ -869,6 +935,8 @@ websockets==16.1.1
     #   langsmith
     #   uvicorn
     #   yfinance
+whatthepatch==1.0.7
+    # via python-lsp-server
 wheel==0.48.0
     # via pip-tools
 widgetsnbextension==4.0.16
@@ -877,10 +945,14 @@ xxhash==4.0.1
     # via
     #   langgraph
     #   langsmith
+yapf==0.43.0
+    # via python-lsp-server
 yarl==1.24.5
     # via aiohttp
 yfinance==1.6.0
     # via financetoolkit
+zipp==4.1.0
+    # via importlib-metadata
 zstandard==0.25.0
     # via langsmith
 
