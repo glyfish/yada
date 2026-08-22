@@ -15,12 +15,8 @@
   `create_time_series_report`. Register it as a tool in `TimeSeriesReportAgent`. No changes
   needed to `create_time_series_report`, `SeriesCache`, `ReportCache`, or `CachingFredTool`.
 
-## Backtrader
+## Portfolios
 
-- **Move the backtest tables into the yada database.** `apps/backtrader/db/backtest_db.py`
-  still points at its own database (`postgresql://backtrader@localhost/backtest`) with its own
-  SQLAlchemy models (`backtests`, `orders`, `asset_prices`, `price_series`, `zscore_indicators`).
-  Fold these tables into the yada Postgres database (Alembic-managed, `YADA_DB_URL`) so one
-  database serves the whole app. **Review the design before implementing** — table naming,
-  whether to reuse the existing Alembic migration chain, and how run history should be carried
-  over (or dropped) are open questions.
+- **Portfolio tables.** Add them to the yada database in their own `portfolio` schema, following
+  the `backtest` schema pattern (alembic revision 0004): one database per environment
+  (`YADA_DB_URL`), one migration chain, domains separated by Postgres schema.

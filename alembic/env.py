@@ -1,4 +1,8 @@
+import os
 from logging.config import fileConfig
+from pathlib import Path
+
+from dotenv import load_dotenv
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
@@ -8,6 +12,14 @@ from alembic import context
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
+
+# The target database follows the environment (dev/prod): YADA_DB_URL, loaded from
+# .env like the app does, overrides the URL in alembic.ini. A value already in the
+# shell environment takes precedence over .env.
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+_db_url = os.getenv("YADA_DB_URL")
+if _db_url:
+    config.set_main_option("sqlalchemy.url", _db_url)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

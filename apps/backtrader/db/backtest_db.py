@@ -7,7 +7,7 @@ import pandas
 import os
 import numpy
 
-from sqlalchemy import create_engine, insert, String, Float, Date, Integer, ForeignKey, BigInteger, Boolean, DateTime
+from sqlalchemy import MetaData, create_engine, insert, String, Float, Date, Integer, ForeignKey, BigInteger, Boolean, DateTime
 from sqlalchemy.orm import Mapped, DeclarativeBase, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import JSONB
 
@@ -73,7 +73,8 @@ class TradeStatus(str, MappedEnum):
 
 
 class Base(DeclarativeBase):
-    pass
+    # All backtest tables live in their own schema inside the yada database.
+    metadata = MetaData(schema="backtest")
 
 
 class BackTest(Base):
@@ -135,7 +136,6 @@ class Trade(Base):
     barclose: Mapped[int]           = mapped_column(Integer, nullable=False)
     barlen: Mapped[int]             = mapped_column(Integer, nullable=False)
     is_long: Mapped[bool]           = mapped_column(Boolean, nullable=False)
-    pnlcomm: Mapped[float]          = mapped_column(Float, nullable=False)
 
 
 class Order(Base):
@@ -218,8 +218,9 @@ class BacktestDb:
     """
 
 
-    def __init__(self):
-        self.__db_url = "postgresql://backtrader@localhost/backtest"
+    def __init__(self, url: Optional[str] = None):
+        # The backtest tables live in the yada database (alembic revision 0004).
+        self.__db_url = url or os.getenv("YADA_DB_URL", "postgresql://yada@localhost/yada")
         self.engine = create_engine(self.__db_url, isolation_level="AUTOCOMMIT")
 
 
@@ -527,7 +528,7 @@ class BacktestDb:
                              "Adj Close": "adj_close_price", "Volume": "volume"}, inplace=True)
         data.index.names = ['date']
         data['ticker'] = numpy.full(len(data), ticker)
-        data.to_sql("price_series", self.engine, if_exists="append")
+        data.to_sql("price_series", self.engine, schema="backtest", if_exists="append")
 
 
     """
@@ -565,7 +566,7 @@ class BacktestDb:
                strategy,
                time_stamp,
                ensemble_id
-        FROM backtests WHERE run_id='{run_id}'
+        FROM backtest.backtests WHERE run_id='{run_id}'
         """
 
         return pandas.read_sql(query, self.engine)
@@ -587,7 +588,7 @@ class BacktestDb:
                ensemble_id,
                cash,
                value
-        FROM broker WHERE run_id='{run_id}'
+        FROM backtest.broker WHERE run_id='{run_id}'
         ORDER BY date ASC
         """
 
@@ -616,7 +617,7 @@ class BacktestDb:
                upclosed,
                upopened,
                updt
-        FROM positions WHERE run_id='{run_id}' 
+        FROM backtest.positions WHERE run_id='{run_id}' 
         ORDER BY date ASC
         """
 
@@ -652,7 +653,7 @@ class BacktestDb:
                 barclose,
                 barlen,
                 is_long
-        FROM trades WHERE run_id='{run_id}' 
+        FROM backtest.trades WHERE run_id='{run_id}' 
         ORDER BY date ASC
         """
 
@@ -678,7 +679,7 @@ class BacktestDb:
                 high_price,
                 low_price,
                 close_price
-        FROM asset_prices WHERE run_id='{run_id}' 
+        FROM backtest.asset_prices WHERE run_id='{run_id}' 
         ORDER BY date ASC
         """
 
@@ -704,7 +705,7 @@ class BacktestDb:
             Price series.
         """
 
-        query = f"SELECT * FROM price_series WHERE ticker='{ticker}'"
+        query = f"SELECT * FROM backtest.price_series WHERE ticker='{ticker}'"
         if start_date:
             query += f" AND date >= '{start_date}'"
         if end_date:
@@ -734,7 +735,7 @@ class BacktestDb:
                value->'zscore' zscore,
                params->'period' half_life,
                params->'stake_multiple' stake_multiple
-        FROM indicators WHERE run_id='{run_id}' 
+        FROM backtest.indicators WHERE run_id='{run_id}' 
             AND indicator='zscore'
         ORDER BY date ASC
         """
@@ -766,7 +767,7 @@ class BacktestDb:
                 commission,
                 pnl,
                 exec_type
-        FROM orders WHERE run_id='{run_id}' 
+        FROM backtest.orders WHERE run_id='{run_id}' 
         ORDER BY date ASC
         """
 
