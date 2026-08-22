@@ -1,5 +1,4 @@
 from typing import Type
-import numpy
 import os.path
 from datetime import datetime
 import random
