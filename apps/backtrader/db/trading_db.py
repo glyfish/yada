@@ -3,7 +3,7 @@ trading_db.py
 
 Persistence for strategy runs in every trading mode.
 
-One database per environment (``YADA_DB_URL``). Inside it the run-output tables
+One database per environment (selected by ``YADA_ENV``). Inside it the run-output tables
 (``runs``, ``orders``, ``trades``, ``positions``, ``broker``, ``analyzers``,
 ``indicators``, ``asset_prices``) exist once per *mode* -- ``backtest``, ``paper``,
 ``live`` -- each in its own Postgres schema with identical definitions, so the same
@@ -35,9 +35,9 @@ from sqlalchemy.dialects.postgresql import JSONB, insert as pg_insert
 import backtrader as bt
 
 from lib.utils import read_yahoo_data
+from apps.core.environment import db_url as environment_db_url
 
 
-DEFAULT_DB_URL = "postgresql://yada@localhost/yada"
 TRADING_SCHEMA = "trading"
 MODES = ("backtest", "paper", "live")
 MODE_TABLES = ("runs", "orders", "trades", "positions", "broker", "analyzers", "indicators", "asset_prices")
@@ -397,7 +397,7 @@ class TradingDb:
     mode : str
         ``backtest``, ``paper`` or ``live`` -- selects the schema written to.
     url : str, optional
-        Database URL; defaults to ``YADA_DB_URL`` (one database per environment).
+        Database URL; defaults to the current environment's (``YADA_ENV``, see apps/core/environment.py).
 
     Properties
     ----------
@@ -410,7 +410,7 @@ class TradingDb:
     def __init__(self, mode: str = Mode.Backtest.value, url: Optional[str] = None):
         self.mode = Mode(mode).value
         self.schema = self.mode
-        self.__db_url = url or os.getenv("YADA_DB_URL", DEFAULT_DB_URL)
+        self.__db_url = url or environment_db_url()
         self.engine = create_engine(self.__db_url, isolation_level="AUTOCOMMIT")
         self.metadata = build_metadata()
 

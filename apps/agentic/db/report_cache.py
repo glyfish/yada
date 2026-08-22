@@ -12,6 +12,7 @@ from sqlalchemy.engine import Engine
 
 from apps.agentic.db.metadata_filter import metadata_where
 from lib.logger import get_logger
+from apps.core.environment import db_url as environment_db_url
 
 logger = get_logger("YADA")
 
@@ -28,7 +29,7 @@ class ReportCache:
 
     @classmethod
     def initialize(cls, url: str | None = None) -> None:
-        db_url = url or os.getenv("YADA_DB_URL", "postgresql://yada@localhost/yada")
+        db_url = url or environment_db_url()
         cls._engine = create_engine(db_url, pool_pre_ping=True)
         with cls._engine.connect() as conn:
             conn.execute(text("SELECT 1"))

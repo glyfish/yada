@@ -37,6 +37,7 @@ from apps.agentic.core.agents.llm_filter_extractor import extract_etf_filters, e
 from apps.agentic.agents.data.series_fetch import fetch_series_into_cache, SERIES_SOURCE_SPECS
 from apps.agentic.agents.document.document_agent import search_series_rows
 from apps.agentic.core.pricing import estimate_cost
+from apps.core.environment import current_environment, verify_database
 from api.document_router import router as document_router
 
 # ---------------------------------------------------------------------------
@@ -77,8 +78,12 @@ logger = get_logger("YADA")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    SeriesCache.initialize()
-    ReportCache.initialize()
+    # Which database this process serves, checked before anything touches it: the
+    # schema must be at the code's alembic head (DatabaseStateError aborts startup).
+    environment = current_environment()
+    logger.info(f"Starting yada: {verify_database(environment)}")
+    SeriesCache.initialize(environment.db_url)
+    ReportCache.initialize(environment.db_url)
     await MCPToolRegistry.initialize(
         servers={"fred": {"transport": "sse", "url": MCP_URL}},
         required=["fred_series_observations"],

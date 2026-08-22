@@ -56,7 +56,7 @@ Supporting pieces:
 
 - **LLMs** via LangChain — OpenAI or Anthropic, selectable through env vars.
 - **Vector stores** — ChromaDB collections persisted under `.db/` (FRED, ETF, GitHub, research, PDF).
-- **Relational cache** — PostgreSQL (SQLAlchemy + Alembic) holding the time-series cache and saved reports (`public`), the strategy-config registry and promotion log (`trading`), and the run output of each trading mode (`backtest`, `paper`, `live` schemas). One database per environment (`yada`, `yada_dev`), selected by `YADA_DB_URL`.
+- **Relational cache** — PostgreSQL (SQLAlchemy + Alembic) holding the time-series cache and saved reports (`public`), the strategy-config registry and promotion log (`trading`), and the run output of each trading mode (`backtest`, `paper`, `live` schemas). One database per environment (`yada` for prod, `yada_dev` for dev), selected by `YADA_ENV`; the API verifies on startup that the database is migrated to the code's head.
 - **MCP** — the agents fetch live data through the [`meida`](https://github.com/glyfish/meida) MCP server (FastMCP, FRED/Tiingo tools over SSE).
 - **Web UI** — a static frontend in `html/`, served at `/`.
 - **Tracing** — optional LangSmith integration.
@@ -98,10 +98,10 @@ pip install -r requirements.txt
 # 3. Configure environment variables
 cp .env.example .env   # then edit (see Configuration below)
 
-# 4. Run database migrations. Alembic targets YADA_DB_URL from .env; override it to
-#    migrate another environment (e.g. the dev database).
+# 4. Run database migrations. Alembic targets the environment in .env (YADA_ENV,
+#    default dev -> yada_dev); set it explicitly to migrate production.
 alembic upgrade head
-YADA_DB_URL=postgresql://yada@localhost/yada_dev alembic upgrade head
+YADA_ENV=prod alembic upgrade head
 ```
 
 ## Running
@@ -146,7 +146,8 @@ Environment variables are loaded from `.env` at startup. The data-source keys (`
 | `BLS_API_KEY` | no | Bureau of Labor Statistics |
 | `TAVILY_API_KEY` | yes | Web search |
 | `GITHUB_API_KEY` | no | Loading GitHub repos into the code RAG store |
-| `YADA_DB_URL` | yes | PostgreSQL connection string; selects the environment (`.../yada` = prod, `.../yada_dev` = dev). Used by the app, `BacktestDb`, and Alembic |
+| `YADA_ENV` | no | Environment, `dev` (default) or `prod`; selects the database (`yada_dev` / `yada`) for the app, `TradingDb`, and Alembic |
+| `YADA_DB_URL` | no | Override of the database URL for non-default hosts/credentials; must agree with `YADA_ENV` |
 | `MCP_URL` | no | MCP server URL (default `http://localhost:8080/sse`) |
 | `RAG_SCORE_THRESHOLD` | no | Minimum similarity score for RAG retrieval |
 | `YADA_CHECKPOINT_DIR` | no | LangGraph checkpoint directory (default `.langgraph`) |
