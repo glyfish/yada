@@ -12,5 +12,6 @@
             "packageManager": "ms-python.python:pip"
         }
     ],
-    "python.defaultInterpreterPath": "/Users/troy/.pyenv/versions/yada-3.14.7/bin/python"
+    "python.defaultInterpreterPath": "/Users/troy/.pyenv/versions/yada-3.14.7/bin/python",
+    "python.terminal.useEnvFile": true
 }
