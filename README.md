@@ -56,7 +56,7 @@ Supporting pieces:
 
 - **LLMs** via LangChain — OpenAI or Anthropic, selectable through env vars.
 - **Vector stores** — ChromaDB collections persisted under `.db/` (FRED, ETF, GitHub, research, PDF).
-- **Relational cache** — PostgreSQL (SQLAlchemy + Alembic) holding the time-series cache, saved reports, and (in the `backtest` schema) backtest runs. One database per environment (`yada`, `yada_dev`), selected by `YADA_DB_URL`.
+- **Relational cache** — PostgreSQL (SQLAlchemy + Alembic) holding the time-series cache and saved reports (`public`), the strategy-config registry and promotion log (`trading`), and the run output of each trading mode (`backtest`, `paper`, `live` schemas). One database per environment (`yada`, `yada_dev`), selected by `YADA_DB_URL`.
 - **MCP** — the agents fetch live data through the [`meida`](https://github.com/glyfish/meida) MCP server (FastMCP, FRED/Tiingo tools over SSE).
 - **Web UI** — a static frontend in `html/`, served at `/`.
 - **Tracing** — optional LangSmith integration.
@@ -80,7 +80,7 @@ requirements.in      Top-level deps (includes `-e ../navi`); compiled to require
 
 - **Python 3.14** (this repo pins `3.14.7`)
 - **[`navi`](https://github.com/glyfish/navi)** cloned as a sibling directory (see above)
-- **PostgreSQL** — one database per environment (`yada` for prod, `yada_dev` for dev) holding the cache, reports, and backtest tables
+- **PostgreSQL** — one database per environment (`yada` for prod, `yada_dev` for dev) holding the cache, reports, and trading tables
 - The **[`meida`](https://github.com/glyfish/meida)** MCP server running — exposes FRED/Tiingo tools at `MCP_URL` (default `http://localhost:8080/sse`); also a sibling repo built on `navi`
 - API keys (see [Configuration](#configuration))
 

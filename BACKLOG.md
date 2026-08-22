@@ -20,3 +20,14 @@
 - **Portfolio tables.** Add them to the yada database in their own `portfolio` schema, following
   the `backtest` schema pattern (alembic revision 0004): one database per environment
   (`YADA_DB_URL`), one migration chain, domains separated by Postgres schema.
+
+## Trading
+
+- **Promotion actions.** `TradingDb.promote()` records a stage change; what is missing is the
+  surface that drives it -- a CLI (`promote <config_id> paper --evidence <run_id>`) and/or an
+  agent tool + API endpoint -- with validation of allowed transitions
+  (`exploratory -> paper -> live -> retired`) and a listing of candidates per stage.
+- **Production reruns.** Scheduled re-validation backtests (`tier=production`) of every config
+  in `paper`/`live`, so drift from the reference backtest is visible.
+- **Purge exploratory runs.** Retention for `tier=exploratory` runs (deleting a `runs` row
+  cascades to its output tables).

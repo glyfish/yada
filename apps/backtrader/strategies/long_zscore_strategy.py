@@ -7,12 +7,10 @@ import sys
 import random
 
 import backtrader as bt
-import shortuuid
 
 from apps.backtrader.metrics.indicators import ZScore
 from apps.backtrader.strategies.strategy import GlyfishStrategy
 
-ensemble_id = GlyfishStrategy.create_ensemble_id()
 
 class LongZScore(GlyfishStrategy):
     """
@@ -35,7 +33,7 @@ class LongZScore(GlyfishStrategy):
     )
 
     def __init__(self):
-        super().__init__(ensemble_id)
+        super().__init__()
 
         # Add a ZScore indicator
         self.zscore = ZScore(self.datas[0], period=self.params.half_life)
@@ -49,8 +47,8 @@ class LongZScore(GlyfishStrategy):
 
         super().next()
 
-        self.db.insert_zscore_indicator(self.run_id, self.current_date(), self.datas[0]._name, 
-                                        self.zscore[0], self.params.half_life, self.params.stake_multiple, ensemble_id)
+        self.db.insert_zscore_indicator(self.run_id, self.current_ts(), self.ticker(),
+                                        self.zscore[0], self.params.half_life, self.params.stake_multiple)
 
         if self.order:
             return
@@ -68,7 +66,7 @@ class LongZScore(GlyfishStrategy):
                 self.log(f"BUY CREATE, {self.dataclose[0]:.3f}, Z-Score {self.zscore[0]:.3f}, Size {size}")
                 self.order = self.buy(size=size, tradeid=self.get_tradeid())
         else:
-            self.db.insert_position(self.run_id, self.current_date(), self.datas[0]._name, self.position, ensemble_id)
+            self.db.insert_position(self.run_id, self.current_ts(), self.ticker(), self.position)
             # If zscore < 0.0 buy or sell what is needed to obtain a multiple of the negative z-score value.
             if self.zscore[0] < 0.0:
                 delta = size - self.position.size
@@ -93,6 +91,7 @@ if __name__ == '__main__':
                                                    datetime(2007, 7, 23), 
                                                    datetime(2012, 3, 28))
 
+    ensemble_id = GlyfishStrategy.create_ensemble_id()
     cerebro = GlyfishStrategy.backtest(data, LongZScore, ensemble_id=ensemble_id)
     cerebro.plot()
 

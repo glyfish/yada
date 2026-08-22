@@ -1,23 +1,36 @@
 from typing import Type
 import os.path
-from datetime import datetime
+from datetime import datetime, UTC
 import random
-
-from lib.trading.metrics import std, zscore
-from lib.utils import get_param_default_if_missing
 
 import backtrader as bt
 import shortuuid
 
-from apps.backtrader.db.backtest_db import BacktestDb
+from apps.backtrader.db.trading_db import TradingDb, RUN_PARAMS, jsonable
 
 
 class GlyfishStrategy(bt.Strategy):
     """
-    The GlyfishStrategy is a container for reusable elements in Strategies
+    The GlyfishStrategy is a container for reusable elements in Strategies.
+
+    Every run registers the strategy config it executes -- derived from the strategy's
+    actual backtrader params and the data feeds it trades -- and records its output in
+    the tables of the mode it runs in (backtest, paper, live). The run-level params
+    below describe the run, not the strategy, and are not part of the config identity.
     """
 
-    def __init__(self, ensemble_id: str):
+    params = (
+        # Identifier grouping related runs (e.g. a parameter sweep)
+        ('ensemble_id', None),
+        # Where this run executes: backtest, paper or live (selects the schema written to)
+        ('mode', 'backtest'),
+        # exploratory runs are disposable; production runs back a promoted config
+        ('tier', 'exploratory'),
+        # Broker account for paper/live runs
+        ('broker_account', None),
+    )
+
+    def __init__(self):
         # Keep a reference to the "close" line in the data[0] dataseries
         self.dataclose = self.datas[0].close
 
@@ -26,18 +39,25 @@ class GlyfishStrategy(bt.Strategy):
         self.buyprice = None
         self.buycomm = None
 
-        # Add database interface
-        self.db = BacktestDb()
+        # Add database interface for the mode this run executes in
+        self.db = TradingDb(self.p.mode)
 
         # Create run identifier
         self.run_id = shortuuid.ShortUUID().random(length=12)
-        self.ensemble_id = ensemble_id
-        self.time_stamp = datetime.utcnow()
+        self.ensemble_id = self.p.ensemble_id
+        self.time_stamp = datetime.now(UTC)
 
         # Maintain trade ID
         self.tradeid = None
-        self.db.insert_backtest(self.run_id, self.__class__.__name__, self.time_stamp, ensemble_id)
-        self.log(f"Run ID={self.run_id}, Ensemble ID={ensemble_id}")
+
+        # Register the strategy config this run executes and the run itself
+        strategy_params = {k: v for k, v in self.p._getkwargs().items() if k not in RUN_PARAMS}
+        universe = [d._name for d in self.datas]
+        self.config_id = self.db.ensure_strategy_config(self.__class__.__name__, jsonable(strategy_params), universe)
+        self.db.insert_run(self.run_id, self.config_id, ensemble_id=self.ensemble_id, tier=self.p.tier,
+                           started_at=self.time_stamp, broker_account=self.p.broker_account)
+        self.log(f"Run ID={self.run_id}, Config ID={self.config_id}, Ensemble ID={self.ensemble_id}, Mode={self.p.mode}",
+                 dt=self.time_stamp)
 
 
     def get_tradeid(self):
@@ -69,15 +89,26 @@ class GlyfishStrategy(bt.Strategy):
 
     def current_date(self):
         """
-        Get the current date.
-
-        Returns
-        -------
-        date
-            The current date.
+        Get the current bar date.
         """
 
         return self.datas[0].datetime.date(0)
+
+
+    def current_ts(self):
+        """
+        Get the current bar timestamp.
+        """
+
+        return self.datas[0].datetime.datetime(0)
+
+
+    def ticker(self):
+        """
+        Get the name of the primary data feed.
+        """
+
+        return self.datas[0]._name
 
 
     def notify_cashvalue(self, cash, value):
@@ -94,7 +125,7 @@ class GlyfishStrategy(bt.Strategy):
             The trade that has changed state.
         """
         
-        self.db.insert_trade(self.run_id, self.current_date(), self.datas[0]._name, trade, self.ensemble_id)
+        self.db.insert_trade(self.run_id, self.current_ts(), self.ticker(), trade)
         
         if not trade.isclosed:
             return
@@ -113,7 +144,7 @@ class GlyfishStrategy(bt.Strategy):
             The order that has changed state.
         """
         
-        self.db.insert_order(self.run_id, self.current_date(), self.datas[0]._name, order, self.ensemble_id)    
+        self.db.insert_order(self.run_id, self.current_ts(), self.ticker(), order)
 
         if order.status in [order.Submitted, order.Accepted]:
             return
@@ -146,8 +177,16 @@ class GlyfishStrategy(bt.Strategy):
         self.log(f"Close {self.dataclose[0]:.2f}")
 
         # Insert broker and asset price data into database
-        self.db.insert_broker(self.run_id, self.current_date(), self.broker, self.ensemble_id)
-        self.db.insert_yahoo_asset_price(self.run_id, self.datas[0], self.ensemble_id)
+        self.db.insert_broker(self.run_id, self.current_ts(), self.broker)
+        self.db.insert_asset_price(self.run_id, self.datas[0])
+
+
+    def stop(self):
+        """
+        Called when the run ends.
+        """
+
+        self.db.finish_run(self.run_id)
 
 
     @staticmethod
@@ -167,13 +206,14 @@ class GlyfishStrategy(bt.Strategy):
     
 
     @staticmethod
-    def backtest(data, strategy: Type[bt.Strategy], ensemble_id: str, cash: float = 1000.0, commission: float = 0.0):
+    def backtest(data, strategy: Type[bt.Strategy], ensemble_id: str, cash: float = 1000.0, commission: float = 0.0,
+                 tier: str = 'exploratory', mode: str = 'backtest'):
         cerebro = bt.Cerebro()
         # Add the Data Feed to Cerebro
         cerebro.adddata(data)
 
-        # Add a strategy
-        cerebro.addstrategy(strategy)
+        # Add a strategy, with the run-level params
+        cerebro.addstrategy(strategy, ensemble_id=ensemble_id, mode=mode, tier=tier)
 
         # Set cash start
         cerebro.broker.setcash(cash)
@@ -195,14 +235,19 @@ class GlyfishStrategy(bt.Strategy):
 
         # Run over everything
         strats = cerebro.run()
+        strat = strats[0]
+
+        # Persist the analyzer results with the run
+        for name, analyzer in strat.analyzers.getitems():
+            strat.db.insert_analyzer(strat.run_id, name, analyzer.get_analysis())
 
         # Print out the final result
-        print(f"Final Portfolio Value: {cerebro.broker.getvalue():.2f}, Run ID: {strats[0].run_id}, Ensemble ID: {ensemble_id}")
-        print(f"Sharp Ratio: {strats[0].analyzers.sharpe.get_analysis()}")
-        print(f"Annualized Sharp Ratio: {strats[0].analyzers.sharpe_a.get_analysis()}")
-        print(f"Annual Return: {strats[0].analyzers.annual_return.get_analysis()}")
-        print(f"Returns: {strats[0].analyzers.returns.get_analysis()}")
-        print(f"Variable Weight Ratio: {strats[0].analyzers.vwr.get_analysis()}")
+        print(f"Final Portfolio Value: {cerebro.broker.getvalue():.2f}, Run ID: {strat.run_id}, "
+              f"Config ID: {strat.config_id}, Ensemble ID: {ensemble_id}")
+        print(f"Sharp Ratio: {strat.analyzers.sharpe.get_analysis()}")
+        print(f"Annualized Sharp Ratio: {strat.analyzers.sharpe_a.get_analysis()}")
+        print(f"Annual Return: {strat.analyzers.annual_return.get_analysis()}")
+        print(f"Returns: {strat.analyzers.returns.get_analysis()}")
+        print(f"Variable Weight Ratio: {strat.analyzers.vwr.get_analysis()}")
 
         return cerebro
-    
