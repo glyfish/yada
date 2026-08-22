@@ -1,8 +1,3 @@
-
-// Use IntelliSense to learn about possible attributes.
-// Hover to view descriptions of existing attributes.
-// For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
-
 {
   "version": "0.2.0",
   "configurations": [
@@ -14,10 +9,14 @@
       "args": [
         "api.main:app",
         "--reload",
-        "--reload-dir", "api",
-        "--reload-dir", "apps",
-        "--host", "0.0.0.0",
-        "--port", "8000"
+        "--reload-dir",
+        "api",
+        "--reload-dir",
+        "apps",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000"
       ],
       "cwd": "${workspaceFolder}",
       "envFile": "${workspaceFolder}/.env",
@@ -26,7 +25,8 @@
         "USER_AGENT": "yada/0.1 (contact@example.com)"
       },
       "console": "integratedTerminal",
-      "justMyCode": true
+      "justMyCode": true,
+      "python": "/Users/troy/.pyenv/versions/yada-3.14.7/bin/python"
     },
     {
       "name": "Python: Current File",
@@ -35,7 +35,8 @@
       "program": "${file}",
       "console": "integratedTerminal",
       "cwd": "${workspaceFolder}",
-      "justMyCode": true
+      "justMyCode": true,
+      "python": "/Users/troy/.pyenv/versions/yada-3.14.7/bin/python"
     },
     {
       "name": "FRED Loader",
@@ -48,7 +49,8 @@
       ],
       "console": "integratedTerminal",
       "cwd": "${workspaceFolder}",
-      "justMyCode": true
+      "justMyCode": true,
+      "python": "/Users/troy/.pyenv/versions/yada-3.14.7/bin/python"
     },
     {
       "name": "Unit Tests",
@@ -65,7 +67,8 @@
         "TOKENIZERS_PARALLELISM": "false"
       },
       "console": "integratedTerminal",
-      "justMyCode": false
+      "justMyCode": false,
+      "python": "/Users/troy/.pyenv/versions/yada-3.14.7/bin/python"
     }
   ]
 }
