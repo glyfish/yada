@@ -1,3 +1,6 @@
+# pyright: reportAttributeAccessIssue=false, reportCallIssue=false
+# backtrader builds `params`/`lines` attributes and indicator signatures at runtime via
+# metaclasses; static analysis cannot see them.
 from datetime import datetime
 import os.path
 import sys

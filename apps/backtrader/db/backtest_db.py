@@ -1,12 +1,13 @@
 from typing import List, Tuple, Optional
 from enum import Enum
 
+import datetime as _dt
 from datetime import datetime
 import pandas
 import os
 import numpy
 
-from sqlalchemy import create_engine, String, Float, Date, Integer, ForeignKey, BigInteger, Boolean, DateTime
+from sqlalchemy import create_engine, insert, String, Float, Date, Integer, ForeignKey, BigInteger, Boolean, DateTime
 from sqlalchemy.orm import Mapped, DeclarativeBase, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import JSONB
 
@@ -89,7 +90,7 @@ class Broker(Base):
 
     run_id: Mapped[str]          = mapped_column(String(256), primary_key=True)
     time_stamp: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    date: Mapped[datetime.date]  = mapped_column(Date, primary_key=True)
+    date: Mapped[_dt.date]  = mapped_column(Date, primary_key=True)
     ensemble_id: Mapped[str]     = mapped_column(String(256), nullable=False)
     strategy: Mapped[str]        = mapped_column(String(256), primary_key=False)
     cash: Mapped[float]          = mapped_column(Float, nullable=False)
@@ -100,7 +101,7 @@ class Position(Base):
     __tablename__ = "positions"
 
     run_id: Mapped[str]          = mapped_column(String(256), primary_key=True)
-    date: Mapped[datetime.date]  = mapped_column(Date, primary_key=True)
+    date: Mapped[_dt.date]  = mapped_column(Date, primary_key=True)
     ticker: Mapped[str]          = mapped_column(String(256), nullable=False)
     ensemble_id: Mapped[str]     = mapped_column(String(256), nullable=False)
     adjbase: Mapped[float]       = mapped_column(Float, nullable=False)
@@ -109,7 +110,7 @@ class Position(Base):
     size: Mapped[int]            = mapped_column(Integer, nullable=False)
     upclosed: Mapped[float]      = mapped_column(Float, nullable=False)
     upopened: Mapped[float]      = mapped_column(Float, nullable=False)
-    updt: Mapped[datetime.date]  = mapped_column(Date, nullable=False)
+    updt: Mapped[_dt.date]  = mapped_column(Date, nullable=False)
 
 
 class Trade(Base):
@@ -117,7 +118,7 @@ class Trade(Base):
 
     run_id: Mapped[str]             = mapped_column(String(256), primary_key=True)
     ref: Mapped[str]                = mapped_column(Integer)
-    date: Mapped[datetime.date]     = mapped_column(Date, primary_key=True)
+    date: Mapped[_dt.date]     = mapped_column(Date, primary_key=True)
     ensemble_id: Mapped[str]        = mapped_column(String(256), nullable=False)
     ticker: Mapped[str]             = mapped_column(String(256), nullable=False)
     status: Mapped[str]             = mapped_column(String(256), nullable=False)
@@ -128,8 +129,8 @@ class Trade(Base):
     commission: Mapped[float]       = mapped_column(Float, nullable=False)
     pnl: Mapped[float]              = mapped_column(Float, nullable=False)
     pnlcomm: Mapped[float]          = mapped_column(Float, nullable=False)
-    dtclose: Mapped[datetime.date]  = mapped_column(Date, nullable=False)
-    dtopen: Mapped[datetime.date]   = mapped_column(Date, nullable=False)
+    dtclose: Mapped[_dt.date]  = mapped_column(Date, nullable=False)
+    dtopen: Mapped[_dt.date]   = mapped_column(Date, nullable=False)
     baropen: Mapped[int]            = mapped_column(Integer, nullable=False)
     barclose: Mapped[int]           = mapped_column(Integer, nullable=False)
     barlen: Mapped[int]             = mapped_column(Integer, nullable=False)
@@ -141,7 +142,7 @@ class Order(Base):
     __tablename__ = "orders"
 
     run_id: Mapped[str]         = mapped_column(String(256), primary_key=True)
-    date: Mapped[datetime.date] = mapped_column(Date, primary_key=True)
+    date: Mapped[_dt.date] = mapped_column(Date, primary_key=True)
     ensemble_id: Mapped[str]    = mapped_column(String(256), nullable=False)
     ticker: Mapped[str]         = mapped_column(String(256), nullable=False)
     order_status: Mapped[str]   = mapped_column(String(256), nullable=False)
@@ -159,7 +160,7 @@ class Analyzer(Base):
     __tablename__ = "analyzers"
 
     run_id: Mapped[str]                 = mapped_column(String(256), primary_key=True)
-    date: Mapped[datetime.date]         = mapped_column(Date, primary_key=True)
+    date: Mapped[_dt.date]         = mapped_column(Date, primary_key=True)
     ensemble_id: Mapped[str]            = mapped_column(String(256), nullable=False)
     ticker: Mapped[str]                 = mapped_column(String(256))
     analyzer: Mapped[str]               = mapped_column(String(256), nullable=False)
@@ -171,7 +172,7 @@ class Indicator(Base):
     __tablename__ = "indicators"
 
     run_id: Mapped[str]                = mapped_column(String(256), primary_key=True)
-    date: Mapped[datetime.date]        = mapped_column(Date, primary_key=True)
+    date: Mapped[_dt.date]        = mapped_column(Date, primary_key=True)
     ensemble_id: Mapped[str]           = mapped_column(String(256), nullable=False)
     ticker: Mapped[str]                = mapped_column(String(256))
     indicator: Mapped[str]             = mapped_column(String(256), nullable=False)
@@ -183,7 +184,7 @@ class AssetPrice(Base):
     __tablename__ = "asset_prices"
 
     run_id: Mapped[str]          = mapped_column(String(256), primary_key=True)
-    date: Mapped[datetime.date]  = mapped_column(Date, primary_key=True)
+    date: Mapped[_dt.date]  = mapped_column(Date, primary_key=True)
     ensemble_id: Mapped[str]     = mapped_column(String(256), nullable=False)
     ticker: Mapped[str]          = mapped_column(String(256))
     open_price: Mapped[float]    = mapped_column(Float, nullable=False)
@@ -196,7 +197,7 @@ class PriceSeries(Base):
     __tablename__ = "price_series"
 
     ticker: Mapped[str]              = mapped_column(String(256), primary_key=True)
-    date: Mapped[datetime.date]      = mapped_column(Date, nullable=False, primary_key=True)
+    date: Mapped[_dt.date]      = mapped_column(Date, nullable=False, primary_key=True)
     open_price: Mapped[float]        = mapped_column(Float, nullable=False)
     high_price: Mapped[float]        = mapped_column(Float, nullable=False)
     low_price: Mapped[float]         = mapped_column(Float, nullable=False)
@@ -227,23 +228,23 @@ class BacktestDb:
 
     Methods
     -------
-    insert_backtest(run_id: str, date: datetime.date, strategy: str, broker: bt.BrokerBase, ensemble_id: str = None)
+    insert_backtest(run_id: str, date: _dt.date, strategy: str, broker: bt.BrokerBase, ensemble_id: Optional[str] = None)
         Insert current backtest financials into the database.
-    insert_broker(run_id: str, date: datetime.date, broker: bt.BrokerBase, ensemble_id: str = None)
+    insert_broker(run_id: str, date: _dt.date, broker: bt.BrokerBase, ensemble_id: Optional[str] = None)
         Insert current broker state into the database.
-    insert_position(run_id: str, date: datetime.date, ticker: str, position: bt.Position, ensemble_id: str = None)
+    insert_position(run_id: str, date: _dt.date, ticker: str, position: bt.Position, ensemble_id: Optional[str] = None)
         Insert current position into the database.
-    insert_trade(run_id: str, date: datetime.date, ticker: str, trade: bt.Trade, ensemble_id: str = None)
+    insert_trade(run_id: str, date: _dt.date, ticker: str, trade: bt.Trade, ensemble_id: Optional[str] = None)
         Insert current trade into the database.
-    insert_order(run_id: str, date: datetime.date, ticker: str, order: bt.Order, ensemble_id: str = None)
+    insert_order(run_id: str, date: _dt.date, ticker: str, order: bt.Order, ensemble_id: Optional[str] = None)
         Insert current order into the database.
-    insert_yahoo_asset_price(run_id: str, datas, ensemble_id: str = None)
+    insert_yahoo_asset_price(run_id: str, datas, ensemble_id: Optional[str] = None)
         Insert current position into the database from a yahoo CSV input feed.
-    insert_price_series(ticker: str, date: datetime.date, open_price: float, high_price: float, low_price: float, close_price: float, 
+    insert_price_series(ticker: str, date: _dt.date, open_price: float, high_price: float, low_price: float, close_price: float, 
                         adj_close_price: float, volume: float, open_interest: float)
         Insert current price series into the database.
     """
-    def insert_backtest(self, run_id: str, strategy: str, time_stamp: datetime, ensemble_id: str = None):
+    def insert_backtest(self, run_id: str, strategy: str, time_stamp: datetime, ensemble_id: Optional[str] = None):
         """
         Insert backtest info.
 
@@ -260,7 +261,7 @@ class BacktestDb:
         """
 
         with self.engine.connect() as connection:
-            connection.execute(BackTest.__table__.insert().values(
+            connection.execute(insert(BackTest).values(
                 run_id=run_id, 
                 time_stamp=time_stamp,
                 ensemble_id=ensemble_id,
@@ -268,7 +269,7 @@ class BacktestDb:
             ))
 
 
-    def insert_broker(self, run_id: str, date: datetime.date, broker: bt.BrokerBase, ensemble_id: str = None):
+    def insert_broker(self, run_id: str, date: _dt.date, broker: bt.BrokerBase, ensemble_id: Optional[str] = None):
         """
         Insert broker state.
 
@@ -276,7 +277,7 @@ class BacktestDb:
         ----------
         run_id : str
             Unique identifier for the backtest.
-        date : datetime.date 
+        date : _dt.date 
             Date of the indicator.
         broker : bt.BrokerBase
             backtrader broker
@@ -287,7 +288,7 @@ class BacktestDb:
         """
 
         with self.engine.connect() as connection:
-            connection.execute(Broker.__table__.insert().values(
+            connection.execute(insert(Broker).values(
                 run_id=run_id, 
                 ensemble_id=ensemble_id,
                 date=date, 
@@ -296,7 +297,7 @@ class BacktestDb:
             ))
 
 
-    def insert_position(self, run_id: str, date: datetime.date, ticker: str, position: bt.Position, ensemble_id: str = None):
+    def insert_position(self, run_id: str, date: _dt.date, ticker: str, position: bt.Position, ensemble_id: Optional[str] = None):
         """
         Insert current position into the database.
 
@@ -304,7 +305,7 @@ class BacktestDb:
         ----------
         run_id : str
             Unique identifier for the backtest.
-        date : datetime.date 
+        date : _dt.date 
             Date of the indicator.
         ticker : str
             Ticker symbol.
@@ -315,7 +316,7 @@ class BacktestDb:
         """
 
         with self.engine.connect() as connection:
-            connection.execute(Position.__table__.insert().values(
+            connection.execute(insert(Position).values(
                 run_id=run_id, 
                 date=date,
                 ticker=ticker,
@@ -330,7 +331,7 @@ class BacktestDb:
             ))
 
 
-    def insert_trade(self, run_id: str, date: datetime.date, ticker: str, trade: bt.Trade, ensemble_id: str = None):
+    def insert_trade(self, run_id: str, date: _dt.date, ticker: str, trade: bt.Trade, ensemble_id: Optional[str] = None):
         """
         Insert current trade into the database.
 
@@ -338,7 +339,7 @@ class BacktestDb:
         ----------
         run_id : str
             Unique identifier for the backtest.
-        date : datetime.date 
+        date : _dt.date 
             Date of the indicator.
         ticker : str
             Ticker symbol.
@@ -353,7 +354,7 @@ class BacktestDb:
         trade_status = TradeStatus.list()[trade.status]
 
         with self.engine.connect() as connection:
-            connection.execute(Trade.__table__.insert().values(
+            connection.execute(insert(Trade).values(
                 ref=trade.ref,
                 run_id=run_id, 
                 date=date,
@@ -376,7 +377,7 @@ class BacktestDb:
             ))
         
 
-    def insert_order(self, run_id: str, date: datetime.date, ticker: str, order: bt.Order, ensemble_id: str = None):
+    def insert_order(self, run_id: str, date: _dt.date, ticker: str, order: bt.Order, ensemble_id: Optional[str] = None):
         """
         Insert current order into the database.
 
@@ -384,7 +385,7 @@ class BacktestDb:
         ----------
         run_id : str
             Unique identifier for the backtest.
-        date : datetime.date 
+        date : _dt.date 
             Date of the indicator.
         ticker : str
             Ticker symbol.
@@ -407,7 +408,7 @@ class BacktestDb:
         tradeid = order.tradeid
 
         with self.engine.connect() as connection:
-            connection.execute(Order.__table__.insert().values(
+            connection.execute(insert(Order).values(
                 run_id=run_id, 
                 date=date,
                 ticker=ticker,
@@ -424,7 +425,7 @@ class BacktestDb:
             ))
 
 
-    def insert_yahoo_asset_price(self, run_id: str, datas, ensemble_id: str = None):
+    def insert_yahoo_asset_price(self, run_id: str, datas, ensemble_id: Optional[str] = None):
         """
         Insert current position into the database from a yahoo CSV input feed.
 
@@ -442,7 +443,7 @@ class BacktestDb:
                                  datas.high[0], datas.low[0], datas.close[0], ensemble_id)
 
 
-    def insert_price_series(self, ticker: str, date: datetime.date, open_price: float, high_price: float, low_price: float, 
+    def insert_price_series(self, ticker: str, date: _dt.date, open_price: float, high_price: float, low_price: float, 
                            close_price: float, adj_close_price: float, volume: float, open_interest: float):
         """
         Insert current price series into the database.
@@ -451,7 +452,7 @@ class BacktestDb:
         ----------
         ticker: str
             Ticker symbol.
-        date: datetime.date
+        date: _dt.date
             Date of the indicator.
         open_price: float
             Opening price.
@@ -470,7 +471,7 @@ class BacktestDb:
         """        
 
         with self.engine.connect() as connection:
-            connection.execute(PriceSeries.__table__.insert().values(
+            connection.execute(insert(PriceSeries).values(
                 ticker=ticker, 
                 date=date, 
                 open_price=open_price, 
@@ -483,7 +484,7 @@ class BacktestDb:
             ))
 
     
-    def insert_zscore_indicator(self, run_id: str, date: datetime.date, ticker: str, zscore: float, period: int, stake_multiple: float, ensemble_id: str = None):
+    def insert_zscore_indicator(self, run_id: str, date: _dt.date, ticker: str, zscore: float, period: int, stake_multiple: float, ensemble_id: Optional[str] = None):
         """
         Insert current Z-score indicator value into the database.
 
@@ -491,7 +492,7 @@ class BacktestDb:
         ----------
         run_id : str
             Unique identifier for the backtest.
-        date : datetime.date 
+        date : _dt.date 
             Date of the indicator.
         indicator : str
             Name of the indicator.
@@ -534,19 +535,19 @@ class BacktestDb:
     
     Methods
     -------
-    fetch_price_series(ticker: str, start_date: str=None, end_date: str=None) -> pandas.DataFrame
+    fetch_price_series(ticker: str, start_date: Optional[str] = None, end_date: Optional[str] = None) -> pandas.DataFrame
         Fetch price series from the backtest database.
-    fetch_zscore_indicator(run_id: str, ensemble: str=None) -> pandas.DataFrame
+    fetch_zscore_indicator(run_id: str, ensemble: Optional[str] = None) -> pandas.DataFrame
         Fetch Z-score indicator.
-    fetch_asset_prices(run_id: str, ensemble: str=None) -> pandas.DataFrame
+    fetch_asset_prices(run_id: str, ensemble: Optional[str] = None) -> pandas.DataFrame
         Fetch asset prices backtrader output.
-    fetch_trades(run_id: str, ensemble: str=None) -> pandas.DataFrame
+    fetch_trades(run_id: str, ensemble: Optional[str] = None) -> pandas.DataFrame
         Fetch trades.
-    fetch_position(run_id: str, ensemble: str=None) -> pandas.DataFrame
+    fetch_position(run_id: str, ensemble: Optional[str] = None) -> pandas.DataFrame
         Fetch position.
-    fetch_backtest(run_id: str, ensemble: str=None) -> pandas.DataFrame
+    fetch_backtest(run_id: str, ensemble: Optional[str] = None) -> pandas.DataFrame
         Fetch backtest objects.
-    fetch_orders(run_id: str, ensemble: str=None) -> pandas.DataFrame
+    fetch_orders(run_id: str, ensemble: Optional[str] = None) -> pandas.DataFrame
         Fetch orders.
     """
     def fetch_backtest(self, run_id: str) -> pandas.DataFrame:
@@ -684,7 +685,7 @@ class BacktestDb:
         return pandas.read_sql(query, self.engine)
     
 
-    def fetch_price_series(self, ticker: str, start_date: str=None, end_date: str=None) -> pandas.DataFrame:
+    def fetch_price_series(self, ticker: str, start_date: Optional[str] = None, end_date: Optional[str] = None) -> pandas.DataFrame:
         """
         Fetch price series from the backtest database.
 
@@ -777,17 +778,17 @@ class BacktestDb:
 
     Methods
     -------
-    __insert_asset_price(run_id: str, date: datetime.date, ticker: str, open_price: float, high_price: float, 
+    __insert_asset_price(run_id: str, date: _dt.date, ticker: str, open_price: float, high_price: float, 
                          low_price: float, close_price: float, ensemble_id: str)
         Insert current position into the database.
-    __insert_analyzer(run_id: str, date: datetime.date, analyzer: str, value: float)
+    __insert_analyzer(run_id: str, date: _dt.date, analyzer: str, value: float)
         Insert current analyzer value into the database.
-    __insert_indicator(run_id: str, date: datetime.date, ticker: str, indicator: str, value: str, 
-                      params: str = None, ensemble_id: str = None)
+    __insert_indicator(run_id: str, date: _dt.date, ticker: str, indicator: str, value: str, 
+                      params: Optional[str] = None, ensemble_id: Optional[str] = None)
         Insert current indicator value into the database.
     """
-    def __insert_asset_price(self, run_id: str, date: datetime.date, ticker: str, open_price: float, 
-                             high_price: float, low_price: float, close_price: float, ensemble_id: str):
+    def __insert_asset_price(self, run_id: str, date: _dt.date, ticker: str, open_price: float, 
+                             high_price: float, low_price: float, close_price: float, ensemble_id: Optional[str]):
         """
         Insert current position into the database.
 
@@ -795,7 +796,7 @@ class BacktestDb:
         ----------
         run_id : str
             Unique identifier for the backtest.
-        date : datetime.date 
+        date : _dt.date 
             Date of the indicator.
         ticker : str
             Ticker symbol.
@@ -812,7 +813,7 @@ class BacktestDb:
         """
 
         with self.engine.connect() as connection:
-            connection.execute(AssetPrice.__table__.insert().values(
+            connection.execute(insert(AssetPrice).values(
                 run_id=run_id, 
                 date=date, 
                 ticker=ticker, 
@@ -824,7 +825,7 @@ class BacktestDb:
             ))
 
 
-    def __insert_analyzer(self, run_id: str, date: datetime.date, analyzer: str, value: float):
+    def __insert_analyzer(self, run_id: str, date: _dt.date, analyzer: str, value: float):
         """
         Insert current analyzer value into the database.
 
@@ -832,7 +833,7 @@ class BacktestDb:
         ----------
         run_id : str
             Unique identifier for the backtest.
-        date : datetime.date 
+        date : _dt.date 
             Date of the indicator.
         analyzer : str
             Name of the analyzer.
@@ -841,7 +842,7 @@ class BacktestDb:
         """
 
         with self.engine.connect() as connection:
-            connection.execute(Analyzer.__table__.insert().values(
+            connection.execute(insert(Analyzer).values(
                 run_id=run_id, 
                 date=date, 
                 analyzer=analyzer, 
@@ -849,8 +850,8 @@ class BacktestDb:
             ))
 
 
-    def __insert_indicator(self, run_id: str, date: datetime.date, ticker: str, indicator: str, value: str, 
-                          params: str = None, ensemble_id: str = None):
+    def __insert_indicator(self, run_id: str, date: _dt.date, ticker: str, indicator: str, value: dict, 
+                          params: Optional[dict] = None, ensemble_id: Optional[str] = None):
         """
         Insert current indicator value into the database.
 
@@ -858,7 +859,7 @@ class BacktestDb:
         ----------
         run_id : str
             Unique identifier for the backtest.
-        date : datetime.date 
+        date : _dt.date 
             Date of the indicator.
         indicator : str
             Name of the indicator.
@@ -869,7 +870,7 @@ class BacktestDb:
         """
 
         with self.engine.connect() as connection:
-            connection.execute(Indicator.__table__.insert().values(
+            connection.execute(insert(Indicator).values(
                 run_id=run_id, 
                 date=date,
                 indicator=indicator, 

@@ -1,3 +1,6 @@
+# pyright: reportAttributeAccessIssue=false, reportCallIssue=false
+# backtrader builds `params`/`lines` attributes and indicator signatures at runtime via
+# metaclasses; static analysis cannot see them.
 import numpy
 
 from lib.trading.metrics import std, zscore

@@ -7,7 +7,7 @@ from pandas import DataFrame
 
 from lib.utils import get_param_default_if_missing
 from lib.plots import comp
-from typing import Callable
+from typing import Any, Callable
 from lib.data import stats
 from apps.backtrader.metrics.metrics import compute_sharpe_ratio, compute_rate_of_return, compute_daily_rate_of_return
 
@@ -129,7 +129,7 @@ def position(data: DataFrame, **kwargs):
 
     figsize    = get_param_default_if_missing("figsize", (10,6), **kwargs)
     lw         = get_param_default_if_missing("lw", 2, **kwargs)
-    legend_loc = get_param_default_if_missing("legend_loc", "best", **kwargs)
+    legend_loc: Any = get_param_default_if_missing("legend_loc", "best", **kwargs)
     alpha      = get_param_default_if_missing("alpha", 0.5, **kwargs)
 
     _, axis = pyplot.subplots(2, figsize=figsize, sharex=True, sharey=False)
@@ -454,11 +454,11 @@ def zscore_backtest(broker: DataFrame, zscore_indicator: DataFrame, position: Da
     __order_value(ax5, orders)
     __zscore_indicator_position(ax6, zscore_indicator, position)
 
-    ax1.set_xlabel(None)
-    ax2.set_xlabel(None)
-    ax3.set_xlabel(None)
-    ax4.set_xlabel(None)
-    ax5.set_xlabel(None)
+    ax1.set_xlabel("")
+    ax2.set_xlabel("")
+    ax3.set_xlabel("")
+    ax4.set_xlabel("")
+    ax5.set_xlabel("")
 
     pyplot.setp(ax1.get_xticklabels(), visible=False)
     pyplot.setp(ax2.get_xticklabels(), visible=False)
@@ -513,9 +513,9 @@ def metrics(backtest: DataFrame, orders: DataFrame, **kwargs):
     __returns(ax3, orders)
     __sharpe_ratio(ax4, orders)
 
-    ax1.set_xlabel(None)
-    ax2.set_xlabel(None)
-    ax3.set_xlabel(None)
+    ax1.set_xlabel("")
+    ax2.set_xlabel("")
+    ax3.set_xlabel("")
 
     pyplot.setp(ax1.get_xticklabels(), visible=False)
     pyplot.setp(ax2.get_xticklabels(), visible=False)
@@ -594,7 +594,7 @@ def __zscore_indicator_position(axis: axes.Axes, zscore_data: DataFrame, positio
 
     title            = get_param_default_if_missing("title", None, **kwargs)
     lw               = get_param_default_if_missing("lw", 1, **kwargs)
-    legend_loc       = get_param_default_if_missing("legend_loc", "upper center", **kwargs)
+    legend_loc: Any = get_param_default_if_missing("legend_loc", "upper center", **kwargs)
     alpha            = get_param_default_if_missing("alpha", 0.25, **kwargs)
 
     bar_colors = ( '#007700', '#770000')
@@ -672,7 +672,7 @@ def __pnl(axis: axes.Axes, data: DataFrame, **kwargs):
     title            = get_param_default_if_missing("title", None, **kwargs)
     colors           = get_param_default_if_missing("colors", ('#006600', '#990000'), **kwargs)
     lw               = get_param_default_if_missing("lw", 1, **kwargs)
-    legend_loc       = get_param_default_if_missing("legend_loc", "lower left", **kwargs)
+    legend_loc: Any = get_param_default_if_missing("legend_loc", "lower left", **kwargs)
     alpha            = get_param_default_if_missing("alpha", 0.5, **kwargs)
 
     pnl = data.pnl.to_numpy()
@@ -731,7 +731,7 @@ def __returns(axis: axes.Axes, orders: DataFrame, **kwargs):
     title            = get_param_default_if_missing("title", None, **kwargs)
     colors           = get_param_default_if_missing("colors", ('#006600', '#990000'), **kwargs)
     lw               = get_param_default_if_missing("lw", 1, **kwargs)
-    legend_loc       = get_param_default_if_missing("legend_loc", "lower left", **kwargs)
+    legend_loc: Any = get_param_default_if_missing("legend_loc", "lower left", **kwargs)
     alpha            = get_param_default_if_missing("alpha", 0.5, **kwargs)
 
     completed_orders = orders.query('order_status == "Completed"')
@@ -868,7 +868,7 @@ def __order_value(axis: axes.Axes, data: DataFrame, **kwargs):
     title            = get_param_default_if_missing("title", None, **kwargs)
     colors           = get_param_default_if_missing("colors", ('#006600', '#990000'), **kwargs)
     lw               = get_param_default_if_missing("lw", 1, **kwargs)
-    legend_loc       = get_param_default_if_missing("legend_loc", "best", **kwargs)
+    legend_loc: Any = get_param_default_if_missing("legend_loc", "best", **kwargs)
     alpha            = get_param_default_if_missing("alpha", 0.5, **kwargs)
 
     completed_orders = data.query('order_status == "Completed"')
@@ -962,7 +962,7 @@ def __position_value(axis: axes.Axes, data: DataFrame, **kwargs):
     """
 
     alpha      = get_param_default_if_missing("alpha", 0.4, **kwargs)
-    legend_loc = get_param_default_if_missing("legend_loc", "best", **kwargs)
+    legend_loc: Any = get_param_default_if_missing("legend_loc", "best", **kwargs)
     title      = get_param_default_if_missing("title", None, **kwargs)
 
     position = data['size'].to_numpy()

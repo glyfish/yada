@@ -52,7 +52,7 @@ class GlyfishStrategy(bt.Strategy):
         return self.tradeid
     
 
-    def log(self, txt: str, dt: datetime=None):
+    def log(self, txt: str, dt: datetime | None=None):
         """
         Logging function for strategy.
 
@@ -152,7 +152,7 @@ class GlyfishStrategy(bt.Strategy):
 
 
     @staticmethod
-    def ensemble_id():
+    def create_ensemble_id():
         return shortuuid.ShortUUID().random(length=12)
     
 

@@ -1,4 +1,11 @@
 {
-  "include": ["."],
-  "extraPaths": ["../navi"]
+  "include": [
+    "."
+  ],
+  "extraPaths": [
+    "../navi"
+  ],
+  "venvPath": "/Users/troy/.pyenv/versions",
+  "venv": "yada-3.14.7",
+  "pythonVersion": "3.14"
 }

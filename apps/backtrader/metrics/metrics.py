@@ -6,16 +6,17 @@ Metrics computed from backtrader backtest order output.
 """
 
 import numpy
+from pandas import DataFrame
 
 
-def compute_sharpe_ratio(orders: numpy.ndarray[float], risk_free_return: float=0.0) -> float:
+def compute_sharpe_ratio(orders: DataFrame, risk_free_return: float=0.0) -> float:
     """
     Calculate the Sharpe ratio for a time series using a rolling window. The order of the
     time series is assumed oldest data to most recent data.
 
     Parameters
     ----------
-    orders : numpy.ndarray[float]
+    orders : DataFrame
         Orders DataFrame.
     risk_free_return: float
         The risk-free return.
@@ -34,13 +35,13 @@ def compute_sharpe_ratio(orders: numpy.ndarray[float], risk_free_return: float=0
     return numpy.mean(daily_return) / numpy.std(daily_return)
 
 
-def compute_rate_of_return(orders: numpy.ndarray[float]) -> float:
+def compute_rate_of_return(orders: DataFrame) -> float:
     """
     Calculate the rate of return.
 
     Parameters
     ----------
-    orders : numpy.ndarray[float]
+    orders : DataFrame
         Orders DataFrame.
 
     Returns
@@ -57,19 +58,19 @@ def compute_rate_of_return(orders: numpy.ndarray[float]) -> float:
     return 100.0 * numpy.sum(pnl) / numpy.sum(cost)
 
 
-def compute_daily_rate_of_return(orders: numpy.ndarray[float]) -> float:
+def compute_daily_rate_of_return(orders: DataFrame) -> tuple[numpy.ndarray, numpy.ndarray]:
     """
     Calculate the daily rate of return.
 
     Parameters
     ----------
-    orders : numpy.ndarray[float]
+    orders : DataFrame
         Orders DataFrame.
 
     Returns
     -------
-    float
-        The daily rate of return.
+    tuple[numpy.ndarray, numpy.ndarray]
+        Order dates and the per-order daily rate of return.
     """
 
     completed_orders = orders.query('order_status == "Completed"')

@@ -1,3 +1,6 @@
+# pyright: reportAttributeAccessIssue=false, reportCallIssue=false
+# backtrader builds `params`/`lines` attributes and indicator signatures at runtime via
+# metaclasses; static analysis cannot see them.
 from datetime import datetime, date
 import os.path
 import sys
@@ -7,10 +10,9 @@ import backtrader as bt
 import shortuuid
 
 from apps.backtrader.metrics.indicators import ZScore
-from apps.backtrader.db.backtest_db import BacktestDb
 from apps.backtrader.strategies.strategy import GlyfishStrategy
 
-ensemble_id = GlyfishStrategy.ensemble_id()
+ensemble_id = GlyfishStrategy.create_ensemble_id()
 
 class LongZScore(GlyfishStrategy):
     """
