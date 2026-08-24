@@ -1003,7 +1003,7 @@ def __daily_returns_distribution(axis: axes.Axes, orders: DataFrame, **kwargs):
 
     _, daily_returns = compute_daily_rate_of_return(orders)
 
-    pdf, bins = stats.compute_pdf_hist(daily_returns, nbins=nbins)
+    bins, pdf = stats.compute_pdf_hist(daily_returns, nbins=nbins)
     pdf = pdf / numpy.sum(pdf)
 
     comp.bar(axis, pdf, bins, title=title, xlabel="Daily Returns (%)", ylabel="Frequency", bar_width=0.85, alpha=1.0)
