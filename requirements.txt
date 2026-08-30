@@ -122,8 +122,8 @@ curl-cffi==0.16.1
     #   yfinance
 cycler==0.12.1
     # via
-    #   -r requirements.in
     #   matplotlib
+    #   navi
 debugpy==1.8.21
     # via
     #   -r requirements.in
@@ -162,6 +162,8 @@ flatbuffers==25.12.19
     # via onnxruntime
 fonttools==4.63.0
     # via matplotlib
+formulaic==1.2.2
+    # via statsmodels
 fqdn==1.5.1
     # via jsonschema
 frozenlist==1.8.0
@@ -230,6 +232,8 @@ importlib-resources==7.1.0
     # via chromadb
 iniconfig==2.3.0
     # via pytest
+interface-meta==2.0.1
+    # via formulaic
 ipykernel==7.3.0
     # via
     #   -r requirements.in
@@ -419,14 +423,14 @@ markupsafe==3.0.3
     #   nbconvert
 matplotlib==3.11.1
     # via
-    #   -r requirements.in
     #   matplotlib-label-lines
+    #   navi
 matplotlib-inline==0.2.2
     # via
     #   ipykernel
     #   ipython
 matplotlib-label-lines==0.8.1
-    # via -r requirements.in
+    # via navi
 mccabe==0.7.0
     # via
     #   flake8
@@ -453,7 +457,9 @@ multitasking==0.0.13
 mypy-extensions==1.1.0
     # via black
 narwhals==2.25.0
-    # via scikit-learn
+    # via
+    #   formulaic
+    #   scikit-learn
 nbclient==0.11.0
     # via nbconvert
 nbconvert==7.17.1
@@ -477,10 +483,12 @@ numpy==2.5.2
     # via
     #   chromadb
     #   contourpy
+    #   formulaic
     #   langchain-chroma
     #   langchain-community
     #   matplotlib
     #   matplotlib-label-lines
+    #   navi
     #   onnxruntime
     #   pandas
     #   patsy
@@ -548,6 +556,8 @@ pandas==2.3.3
     # via
     #   -r requirements.in
     #   financetoolkit
+    #   formulaic
+    #   navi
     #   statsmodels
     #   yfinance
 pandocfilters==1.5.1
@@ -761,6 +771,8 @@ scikit-learn==1.9.0
     # via financetoolkit
 scipy==1.18.1
     # via
+    #   formulaic
+    #   navi
     #   scikit-learn
     #   statsmodels
 send2trash==2.1.0
@@ -768,7 +780,7 @@ send2trash==2.1.0
 shellingham==1.5.4
     # via typer
 shortuuid==1.0.13
-    # via -r requirements.in
+    # via navi
 six==1.17.0
     # via
     #   kubernetes
@@ -802,10 +814,10 @@ starlette==1.6.0
     #   fastapi
     #   mcp
     #   sse-starlette
-statsmodels==0.14.6
-    # via -r requirements.in
+statsmodels==0.15.0
+    # via navi
 tabulate==0.10.0
-    # via -r requirements.in
+    # via navi
 tenacity==9.1.4
     # via
     #   chromadb
@@ -867,6 +879,7 @@ typing-extensions==4.16.0
     #   chromadb
     #   docstring-to-markdown
     #   fastapi
+    #   formulaic
     #   grpcio
     #   huggingface-hub
     #   jupyter-client
@@ -941,6 +954,8 @@ wheel==0.48.0
     # via pip-tools
 widgetsnbextension==4.0.16
     # via ipywidgets
+wrapt==2.4.0
+    # via formulaic
 xxhash==4.0.1
     # via
     #   langgraph
