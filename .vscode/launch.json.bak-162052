@@ -1,0 +1,74 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "yada",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": [
+        "api.main:app",
+        "--reload",
+        "--reload-dir",
+        "api",
+        "--reload-dir",
+        "apps",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000"
+      ],
+      "cwd": "${workspaceFolder}",
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "TOKENIZERS_PARALLELISM": "false",
+        "USER_AGENT": "yada/0.1 (contact@example.com)"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "python": "/Users/troy/.pyenv/versions/yada-3.14.7/bin/python"
+    },
+    {
+      "name": "Python: Current File",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${file}",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "justMyCode": true,
+      "python": "/Users/troy/.pyenv/versions/yada-3.14.7/bin/python"
+    },
+    {
+      "name": "FRED Loader",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/clients/bin/fred.py",
+      "args": [
+        "--db-path",
+        "${workspaceFolder}/.db"
+      ],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "justMyCode": true,
+      "python": "/Users/troy/.pyenv/versions/yada-3.14.7/bin/python"
+    },
+    {
+      "name": "Unit Tests",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": [
+        "tests/unit",
+        "-v"
+      ],
+      "cwd": "${workspaceFolder}",
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "TOKENIZERS_PARALLELISM": "false"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "python": "/Users/troy/.pyenv/versions/yada-3.14.7/bin/python"
+    }
+  ]
+}

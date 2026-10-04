@@ -6,6 +6,7 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from pydantic import BaseModel, Field
 
+from apps.agentic.core.agents.messages import WorkerState
 from apps.agentic.core.agents.react_agent import ReactAgent
 from apps.agentic.core.llm_factory import router_llm_model
 from apps.agentic.core.tool_spec import PositiveExample, NegativeExample, ToolSpec, tool_spec
@@ -45,7 +46,7 @@ class SubagentRequest(BaseModel):
     ),
 )
 async def delegate_to_bar_chart_agent(request: str) -> str:
-    state = {"messages": [HumanMessage(content=request)]}
+    state: WorkerState = {"messages": [HumanMessage(content=request)]}
     config = RunnableConfig(configurable={"thread_id": shortuuid.uuid()}, recursion_limit=50)
     result = await _bar_chart_agent.agent.ainvoke(state, config)
     return result["messages"][-1].content
@@ -77,7 +78,7 @@ async def delegate_to_bar_chart_agent(request: str) -> str:
     ),
 )
 async def delegate_to_time_series_plot_agent(request: str) -> str:
-    state = {"messages": [HumanMessage(content=request)]}
+    state: WorkerState = {"messages": [HumanMessage(content=request)]}
     config = RunnableConfig(configurable={"thread_id": shortuuid.uuid()}, recursion_limit=50)
     result = await _time_series_plot_agent.agent.ainvoke(state, config)
     return result["messages"][-1].content
