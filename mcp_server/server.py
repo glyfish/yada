@@ -9,8 +9,9 @@ Design rules this server follows, from §5.3 and §5.4 of that plan:
 
 * **Id-passing.** Tools take ids and return rendered artifacts. The model never
   holds series values, so it cannot paraphrase or interpolate them.
-* **Tool results, not MCP Apps.** A chart is static output, so it goes back as an
-  ``ImageContent`` block. MCP Apps are reserved for interactive UI.
+* **The chart is shown by an App.** A tool result means the *client* decides how
+  output appears, and Goose collapses images behind an expander. An App means yada
+  decides, and it is the only component that can read ``hostContext.theme``.
 * **Thin shell.** Everything SDK-specific lives in this module; tool bodies
   delegate immediately into existing app code — which is what kept the
   ``FastMCP`` → ``MCPServer`` move to three edits.
@@ -70,8 +71,11 @@ load_dotenv(ROOT / ".env")
 os.environ.setdefault("YADA_CHECKPOINT_DIR", str(ROOT / ".langgraph"))
 
 import base64  # noqa: E402
+import hashlib  # noqa: E402
 import re  # noqa: E402
+from importlib.metadata import version as _pkg_version  # noqa: E402
 
+from mcp.server.apps import Apps  # noqa: E402
 from mcp.server.mcpserver import MCPServer  # noqa: E402
 from mcp.types import ImageContent, TextContent  # noqa: E402
 
@@ -84,6 +88,8 @@ from apps.agentic.core.agents.messages import WorkerState  # noqa: E402
 from apps.agentic.db.report_cache import ReportCache  # noqa: E402
 from apps.agentic.db.series_cache import SeriesCache  # noqa: E402
 from apps.core.environment import current_environment, verify_database  # noqa: E402
+from mcp_server.plot_app import HTML as PLOT_APP_HTML, meta_for  # noqa: E402
+
 from lib.logger import get_logger  # noqa: E402
 
 logger = get_logger("YADA")
@@ -112,7 +118,33 @@ JSON_RESPONSE = os.getenv("YADA_MCP_JSON_RESPONSE", "1") not in ("0", "false", "
 #: mcp 2.x took the transport knobs off the constructor -- host, port and
 #: json_response are run()/app-factory keywords now, and the factories do NOT fall
 #: back to anything set here. They must be passed at the call site in run().
-server = MCPServer("yada", version="0.1.0")
+#: Reported in serverInfo and in the startup log. The SDK version goes alongside
+#: it because an SDK mismatch is invisible otherwise -- mcp 2.3.0 sat in this env
+#: for a week against 1.x code before anyone noticed.
+VERSION = "0.1.0"
+MCP_VERSION = _pkg_version("mcp")
+
+#: The chart is shown by an App rather than returned as a bare image block, so
+#: yada controls the presentation (Goose collapses tool-result images behind an
+#: expander) and so the app can read hostContext.theme. See plan §5.4.
+PLOT_URI = "ui://yada/plot"
+
+apps = Apps()
+#: Stamped into the page so a stale build is visible at a glance rather than
+#: mistaken for a code bug: the client caches nothing, but the SERVER must be
+#: restarted for an edit to plot_app.py to take effect.
+APP_BUILD = hashlib.sha256(PLOT_APP_HTML.encode()).hexdigest()[:6]
+
+apps.add_html_resource(
+    PLOT_URI,
+    PLOT_APP_HTML.replace("__BUILD__", APP_BUILD),
+    name="yada-plot",
+    title="yada chart",
+    description="Displays a chart returned by the plot tools.",
+)
+
+# `server` is constructed AFTER the tool definitions below: MCPServer collects an
+# extension's tools at construction, so decorators that run later are invisible to it.
 
 #: The plotting code writes the PNG under html/plots/ but hands back a URL-shaped
 #: "./plots/<name>.png" for the static mount in api/main.py. Only the <img src>
@@ -151,6 +183,13 @@ def _split_html(output: str) -> tuple[str, list[Path]]:
         else:
             logger.warning(f"agent referenced a missing plot file: {src}")
     text = re.sub(r'<div class="[^"]*">\s*<img src="[^"]+">\s*</div>', "", output)
+    # The plot agents' model intermittently echoes the wrapper's class name as a
+    # pseudo-tag -- a stray "</bar-chart>" on its own line. It survives the rule
+    # above (no <img> inside) and renders as literal text in the app, which escapes
+    # HTML. Strip the known wrapper names, and any tag left alone on a line.
+    text = re.sub(r"</?(?:bar-chart|multi-bar-chart|time-series-plot)>", "", text)
+    text = re.sub(r"^\s*</?[A-Za-z][\w-]*\s*/?>\s*$", "", text, flags=re.MULTILINE)
+    text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip(), files
 
 
@@ -172,7 +211,10 @@ def _initialize() -> None:
 _plot_agent = None
 
 
-@server.tool(
+@apps.tool(
+    resource_uri=PLOT_URI,
+    visibility=["model", "app"],
+    meta=meta_for(PLOT_URI, ["model", "app"]),
     name="plot",
     description=(
         "Create a chart from data supplied in the request and return it as an image. "
@@ -224,7 +266,10 @@ async def plot(request: str) -> list[TextContent | ImageContent]:
     return content
 
 
-@server.tool(
+@apps.tool(
+    resource_uri=PLOT_URI,
+    visibility=["model", "app"],
+    meta=meta_for(PLOT_URI, ["model", "app"]),
     name="plot_report",
     description=(
         "Render a stored time series report as a chart and return it as an image. "
@@ -260,6 +305,9 @@ async def plot_report(report_id_or_title: str) -> list[TextContent | ImageConten
     return [TextContent(type="text", text=summary), _as_image(plot_file)]
 
 
+server = MCPServer("yada", version=VERSION, extensions=[apps])
+
+
 def run() -> None:
     """Start the server on the transport named by YADA_MCP_TRANSPORT.
 
@@ -270,12 +318,12 @@ def run() -> None:
     both are supported by this SDK version.
     """
     if TRANSPORT == "stdio":
-        logger.info("Starting yada MCP server (transport=stdio)")
+        logger.info(f"Starting yada MCP server {VERSION} (mcp {MCP_VERSION}, transport=stdio)")
     else:
         path = "/mcp" if TRANSPORT == "streamable-http" else "/sse"
         logger.info(
-            f"Starting yada MCP server on http://{HOST}:{PORT}{path} "
-            f"(transport={TRANSPORT})"
+            f"Starting yada MCP server {VERSION} (mcp {MCP_VERSION}) on "
+            f"http://{HOST}:{PORT}{path} (transport={TRANSPORT})"
         )
         if HOST not in ("127.0.0.1", "localhost", "::1"):
             logger.warning(
