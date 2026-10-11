@@ -29,8 +29,11 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parents[2]
 
 ENVIRONMENTS = {
-    "dev": "postgresql://yada@localhost/yada_dev",
-    "prod": "postgresql://yada@localhost/yada",
+    # Name the driver explicitly: SQLAlchemy 2.1 changed the default postgresql
+    # dialect from psycopg2 to psycopg (v3), so a bare "postgresql://" now looks
+    # for a driver this project does not install.
+    "dev": "postgresql+psycopg2://yada@localhost/yada_dev",
+    "prod": "postgresql+psycopg2://yada@localhost/yada",
 }
 DEFAULT_ENVIRONMENT = "dev"
 

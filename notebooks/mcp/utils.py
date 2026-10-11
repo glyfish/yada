@@ -28,7 +28,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from mcp import ClientSession
-from mcp.client.streamable_http import streamablehttp_client
+from mcp.client.streamable_http import streamable_http_client
 from mcp.types import CallToolResult
 
 from lib.utils import print_json_vertical
@@ -40,7 +40,7 @@ async def _with_session(fn: Callable[[ClientSession], Awaitable[Any]]) -> Any:
     """Run ``fn`` against a freshly connected session, then close it.
 
     The whole exchange stays inside one ``async with`` chain in a single task.
-    That is not style: ``streamablehttp_client`` and ``ClientSession`` open anyio
+    That is not style: ``streamable_http_client`` and ``ClientSession`` open anyio
     **cancel scopes**, which must be entered and exited in the same task. Holding
     the context managers open across awaits — e.g. driving ``__aenter__`` from a
     wrapper class — raises ``CancelledError: Cancelled via cancel scope`` under
@@ -50,7 +50,8 @@ async def _with_session(fn: Callable[[ClientSession], Awaitable[Any]]) -> Any:
     connects for the call. That is cheap because the server is already running;
     with stdio every call would re-import yada's agent tree.
     """
-    async with streamablehttp_client(MCP_URL) as (read, write, _):
+    # 2.x yields (read, write); 1.x yielded a third get_session_id callable.
+    async with streamable_http_client(MCP_URL) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
             return await fn(session)
@@ -85,7 +86,7 @@ async def show_tool_schema(tool_name: str, raw: bool = False) -> dict[str, Any]:
     tools = {tool.name: tool for tool in listed.tools}
     if tool_name not in tools:
         raise RuntimeError(f"no tool {tool_name!r} on the server. Available: {sorted(tools)}")
-    schema = dict(tools[tool_name].inputSchema or {})
+    schema = dict(tools[tool_name].input_schema or {})
     if raw:
         print_json_vertical(schema)
         return schema
@@ -113,14 +114,14 @@ def show_result(result: CallToolResult) -> None:
     """
     from IPython.display import Image, Markdown, display
 
-    if result.isError:
-        print("isError: True")
+    if result.is_error:
+        print("is_error: True")
     for block in result.content:
         if block.type == "text":
             display(Markdown(block.text))
         elif block.type == "image":
             raw = base64.b64decode(block.data)
-            print(f"[{block.mimeType}] {len(raw):,} bytes "
+            print(f"[{block.mime_type}] {len(raw):,} bytes "
                   f"({len(block.data):,} base64 chars)")
             display(Image(data=raw))
         else:

@@ -15,7 +15,7 @@ from apps.backtrader.db.trading_db import (
 )
 from apps.backtrader.db.backtest_db import BacktestDb
 
-URL = "postgresql://nobody@localhost/unused"
+URL = "postgresql+psycopg2://nobody@localhost/unused"
 
 
 def test_config_id_is_stable_and_order_independent():

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from langchain_core.tools import BaseTool
-from langchain_mcp_adapters.client import MultiServerMCPClient
+# langchain's in-tree MCP bridge, from the `mcp` extra (-> fastmcp). It replaces
+# langchain-mcp-adapters, which is deprecated and pinned mcp<2. Still beta, so it
+# warns once on import; the API may move.
+from langchain.mcp import MCPAdapter
 
 from lib.logger import get_logger
 
@@ -29,13 +32,22 @@ class MCPToolRegistry:
         servers : dict
             MCP server connection configs keyed by server name.
             e.g. {"fred": {"transport": "sse", "url": "http://localhost:8080/sse"}}
+
+            Passed to MCPAdapter unchanged: fastmcp's MCPConfig wraps root-level
+            server configs itself, and accepts transport="sse" with a url.
+
+            NOTE: with a SECOND server, fastmcp prefixes every tool name
+            `{server_name}_{tool_name}`. The old adapter never did, so `required`
+            and every `_mcp_tool_names` list would silently stop matching.
         required : list[str]
             Tool names that must be present. Logs a warning if any are missing
             (does not crash app startup).
         """
         try:
-            client = MultiServerMCPClient(servers)
-            discovered = {t.name: t for t in await client.get_tools()}
+            # MCPAdapter opens and closes the client itself, and the tools it
+            # returns stay callable afterwards — each reopens the reentrant
+            # client per call. That is what keeps this connect-once registry valid.
+            discovered = {t.name: t for t in await MCPAdapter(servers).list_tools()}
         except Exception as exc:
             logger.warning(
                 f"MCPToolRegistry: could not connect to MCP server(s) — "

@@ -12,10 +12,11 @@ Design rules this server follows, from §5.3 and §5.4 of that plan:
 * **Tool results, not MCP Apps.** A chart is static output, so it goes back as an
   ``ImageContent`` block. MCP Apps are reserved for interactive UI.
 * **Thin shell.** Everything SDK-specific lives in this module; tool bodies
-  delegate immediately into existing app code. That keeps a later
-  ``FastMCP`` → ``MCPServer`` move to a handful of lines.
+  delegate immediately into existing app code — which is what kept the
+  ``FastMCP`` → ``MCPServer`` move to three edits.
 
-Runs on the ``mcp<2`` line, matching meida.
+Runs on the ``mcp>=2`` line. SSE is still supported there; what 2.0 changed
+was the class name and where the transport knobs live.
 """
 from __future__ import annotations
 
@@ -71,7 +72,7 @@ os.environ.setdefault("YADA_CHECKPOINT_DIR", str(ROOT / ".langgraph"))
 import base64  # noqa: E402
 import re  # noqa: E402
 
-from mcp.server.fastmcp import FastMCP  # noqa: E402
+from mcp.server.mcpserver import MCPServer  # noqa: E402
 from mcp.types import ImageContent, TextContent  # noqa: E402
 
 import shortuuid  # noqa: E402
@@ -108,7 +109,10 @@ PORT = int(os.getenv("YADA_MCP_PORT", "8081"))  # 8000 is the yada API, 8080 is 
 #: We send no progress notifications, so nothing needs the stream.
 JSON_RESPONSE = os.getenv("YADA_MCP_JSON_RESPONSE", "1") not in ("0", "false", "False")
 
-server = FastMCP("yada", host=HOST, port=PORT, json_response=JSON_RESPONSE)
+#: mcp 2.x took the transport knobs off the constructor -- host, port and
+#: json_response are run()/app-factory keywords now, and the factories do NOT fall
+#: back to anything set here. They must be passed at the call site in run().
+server = MCPServer("yada", version="0.1.0")
 
 #: The plotting code writes the PNG under html/plots/ but hands back a URL-shaped
 #: "./plots/<name>.png" for the static mount in api/main.py. Only the <img src>
@@ -129,7 +133,7 @@ def _plot_file(html: str) -> Path | None:
 def _as_image(path: Path) -> ImageContent:
     data = base64.b64encode(path.read_bytes()).decode()
     logger.info(f"returning {path.name} ({path.stat().st_size} bytes)")
-    return ImageContent(type="image", data=data, mimeType="image/png")
+    return ImageContent(type="image", data=data, mime_type="image/png")
 
 
 def _split_html(output: str) -> tuple[str, list[Path]]:
@@ -277,7 +281,18 @@ def run() -> None:
             logger.warning(
                 f"yada MCP server is bound to {HOST} with no authentication configured"
             )
-    server.run(transport=TRANSPORT)  # type: ignore[arg-type]
+
+    # Each transport takes its own keywords in 2.x, so dispatch rather than pass
+    # one bag. json_response is load-bearing for Goose (see its note above) and is
+    # NOT inherited from anywhere — omitting it here silently restores SSE framing
+    # and the 406 it causes.
+    if TRANSPORT == "streamable-http":
+        server.run(transport="streamable-http", host=HOST, port=PORT,
+                   json_response=JSON_RESPONSE)
+    elif TRANSPORT == "sse":
+        server.run(transport="sse", host=HOST, port=PORT)
+    else:
+        server.run(transport="stdio")
 
 
 if __name__ == "__main__":

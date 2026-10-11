@@ -10,7 +10,7 @@ python-lsp-server[all]   # language server behind jupyter-lsp (successor of pyth
 pandas<3
 fastapi
 uvicorn[standard]
-langchain
+langchain[mcp]>=1.4.0   # [mcp] extra -> fastmcp; replaces langchain-mcp-adapters
 langchain-text-splitters
 langgraph
 langgraph-checkpoint-sqlite
@@ -32,8 +32,7 @@ debugpy
 gitdb
 GitPython
 markdown-it-py
-mcp
-langchain-mcp-adapters
+mcp>=2,<3
 pip-tools
 psycopg2
 financedatabase
