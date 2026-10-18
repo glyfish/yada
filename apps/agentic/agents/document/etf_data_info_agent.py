@@ -1,5 +1,4 @@
 from langchain_core.messages import AIMessage, SystemMessage
-from langchain_core.prompts import PromptTemplate
 from langgraph.graph import StateGraph, START, END
 
 from apps.agentic.core.agents.chroma_rag_agent import ChromaRAGAgent
@@ -49,25 +48,11 @@ class ETFDataInfoAgent(ChromaRAGAgent):
                         currency, and investment strategy description.
         """
 
-        document_prompt_template = """
-            You are an expert in retrieving information about ETFs and mutual funds.
-            The documents describe funds sourced from the FinanceDatabase package.
-            Following is a description of the document metadata.
-            - ticker: {{metadata[ticker]}} Fund ticker symbol.
-            - name: {{metadata[name]}} Fund name.
-            - family: {{metadata[family]}} Fund family or asset manager.
-            - category_group: {{metadata[category_group]}} Broad asset class.
-            - category: {{metadata[category]}} Specific fund category.
-            - exchange: {{metadata[exchange]}} Exchange code.
-            - currency: {{metadata[currency]}} Fund currency.
-            - isin: {{metadata[isin]}} ISIN code.
-            ---
-            {page_content}
-        """
+        # No document_prompt here: this agent overrides _retrieve to project
+        # metadata rows directly from d.metadata (see below), so the retriever
+        # tool and its template were never on the live path. Removed 2026-10-17.
 
-        document_prompt = PromptTemplate.from_template(template=document_prompt_template)
-
-        super().__init__(tool_name, tool_description, document_prompt, FinanceDatabaseLoader(), query,
+        super().__init__(tool_name, tool_description, FinanceDatabaseLoader(), query,
                          retriever_k=100, retriever_fetch_k=200)
 
 

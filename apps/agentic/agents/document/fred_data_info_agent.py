@@ -1,5 +1,4 @@
 from langchain_core.messages import AIMessage, SystemMessage
-from langchain_core.prompts import PromptTemplate
 from langgraph.graph import StateGraph, START, END
 
 from apps.agentic.core.agents.chroma_rag_agent import ChromaRAGAgent
@@ -29,31 +28,11 @@ class FredDataInfoAgent(ChromaRAGAgent):
                         data about time series from the FRED (Federal Reserve Economic Data) website.
         """
 
-        document_prompt_template = """
-            You are an expert in retrieving information about time series from the FRED (Federal Reserve Economic Data)
-            website based on the contents of documents describing the data. The time series data is organized in a
-            hierarchy of categories that describe the type of data contained in each time series. The categories are described
-            in the markdown documents contained in the document store. The categories form a hierarchy from broad to specific.
-            Following is a description of the document metadata.
-            - category_id : {{metadata[category_id]}} Time series category identifier.
-            - category_name: {{metadata[category_name]}} Time series category name.
-            - category_path: {{metadata[category_path]}} Hierarchy path of the time series category.
-            - filename: {{metadata[filename]}} name of document file.
-            - frequency: {{metadata[frequency]}} time frequency of data observations.
-            - observation_end: {{metadata[observation_end]}} End date of time series observations.
-            - observation_start: {{metadata[observation_start]}} Start date of time series observations.
-            - popularity: {{metadata[popularity]}} Popularity score of the time series.
-            - seasonal_adjustment: {{metadata[seasonal_adjustment]}} Indicates if data is seasonally adjusted.
-            - series_id: {{metadata[series_id]}} Time series identifier.
-            - series_title: {{metadata[series_title]}} Title of the time series.
-            - units: {{metadata[units]}} Units of measurement for the time series data.
-            ---
-            {page_content}
-        """
+        # No document_prompt here: this agent overrides _retrieve to project
+        # metadata rows directly from d.metadata (see below), so the retriever
+        # tool and its template were never on the live path. Removed 2026-10-17.
 
-        document_prompt = PromptTemplate.from_template(template=document_prompt_template)
-
-        super().__init__(tool_name, tool_description, document_prompt, FREDChromaDocumentLoader(), query,
+        super().__init__(tool_name, tool_description, FREDChromaDocumentLoader(), query,
                          retriever_k=50, retriever_fetch_k=200)
 
 

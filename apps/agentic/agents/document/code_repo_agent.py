@@ -1,6 +1,5 @@
 from pathlib import Path
 from pydantic import BaseModel, Field
-from langchain_core.prompts import PromptTemplate
 from langchain_core.prompts import ChatPromptTemplate
 
 from apps.agentic.core.constants import (PROGRAMMING_LANGUAGE_MAP)
@@ -17,6 +16,18 @@ class CodeRepoAgent(FileChromaRAGAgent):
     It is designed to handle queries related to code, repositories, files, functions, and classes
     stored in the indexed GitHub repositories.
     """
+
+    # Prepended to every retrieved chunk so the grader and the generating model can
+    # see which file a chunk came from -- the _generate prompt below instructs the
+    # model to cite exactly these, and until now none of them reached it. `commit` is
+    # on 99.87% of chunks rather than 100%; missing keys are skipped, not an error.
+    DOCUMENT_HEADER_KEYS = (
+        ("repo", "Repository"),
+        ("file_path", "File path"),
+        ("branch", "Branch"),
+        ("ext", "Extension"),
+        ("commit", "Commit"),
+    )
 
     QUERY_FILTERS =  """
         **code_repository_search Query Filters**
@@ -49,29 +60,13 @@ class CodeRepoAgent(FileChromaRAGAgent):
             "Use this for any query about 'my code', 'my repo(s)', or requests for specific files/functions."
         )
 
-        document_prompt_template = (
-            "You are searching Troy Stribling’s code (i.e. my code) in his indexed GitHub repositories vector store to answer "
-            "requests about his code. Information about the code can be found in the metadata attached to each file. "
-            "Following is a description of the metadata. The programming language should be deduced from the file extension."
-            "- GitHub account: {metadata[account]}"
-            "- Repository name: {metadata[repo]}"
-            "- Git branch name: {metadata[branch]}"
-            "- File path: {metadata[path]}"
-            "- File extension: {metadata[ext]}"
-            "- Programming language: {programming_language}"
-            "- Latest Commit: {metadata[commit]}"
-            "---"
-            "{page_content}"
-        )
-
-        document_prompt = PromptTemplate.from_template(template=document_prompt_template)
-
-        super().__init__(tool_name, tool_description, document_prompt, GitHubChromaDocumentLoader(), query)
+        super().__init__(tool_name, tool_description, GitHubChromaDocumentLoader(), query)
 
         self._generate_prompt = ChatPromptTemplate.from_messages([("human", """                                                                   
         You are an expert assistant answering questions about Troy Stribling's code repositories.
-        Use the retrieved context below to answer the question. Each chunk includes metadata such as
-        repository name, file path, programming language, branch, and commit hash.
+        Use the retrieved context below to answer the question. Each chunk is preceded by a header
+        carrying its Repository, File path, Branch, Extension and Commit. Deduce the programming
+        language from the file extension.
 
         When answering:
         - Reference the file path and repository name when discussing specific code

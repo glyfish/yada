@@ -164,6 +164,17 @@ class GitHubChromaDocumentLoader(ChromaDocumentLoader):
         Load the GitHub repositories into the ChromaDB collection.
         """
 
+        # GITHUB_LOCAL_PATH is relative (".repos"), and GitLoader resolves each file
+        # against that same relative prefix when it asks git whether the file is
+        # ignored. For every clone but one that is harmless. For glyfish/yada it is
+        # not: that repo's own .gitignore line 2 is ".repos", so the probe path
+        # ".repos/glyfish/yada/README.md" self-matches, git reports every file as
+        # ignored, and the repo indexes to ZERO chunks. Absolute paths cannot
+        # self-match, so resolve before handing the path to GitLoader.
+        #   git check-ignore -v ".repos/glyfish/yada/README.md"  -> .gitignore:2:.repos
+        #   git check-ignore -v "README.md"                      -> (not ignored)
+        path = os.path.abspath(path)
+
         account = os.path.basename(os.path.dirname(path.rstrip("/")))
         repo_name = os.path.basename(path.rstrip("/"))
         self._delete_repo(account, repo_name)

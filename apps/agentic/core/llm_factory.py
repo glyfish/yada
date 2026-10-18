@@ -175,8 +175,8 @@ def register_llm_factory(factory: LangsmithLLMFactory) -> None:
 
 
 def build_llm(
-    provider: str = "openai",
-    model: str = "gpt-4.1",
+    provider: str = "anthropic",
+    model: str = "claude-haiku-4-5",
     temperature: float = 0.7,
     thinking: bool = False,
     effort: str | None = None,
@@ -201,8 +201,8 @@ def build_llm(
 
 
 def agent_llm_model(**kwargs):
-    provider = os.getenv("LLM_MODEL_PROVIDER", "openai")
-    model = os.getenv("AGENT_LLM_MODEL", "gpt-4.1")
+    provider = os.getenv("LLM_MODEL_PROVIDER", "anthropic")
+    model = os.getenv("AGENT_LLM_MODEL", "claude-opus-4-8")
     return build_llm(
         provider=provider,
         model=model,
@@ -215,20 +215,32 @@ def agent_llm_model(**kwargs):
 
 
 def scoring_llm_model(**kwargs):
-    provider = os.getenv("LLM_MODEL_PROVIDER", "openai")
-    model = os.getenv("SCORING_LLM_MODEL", "gpt-4.1-mini")
+    provider = os.getenv("LLM_MODEL_PROVIDER", "anthropic")
+    model = os.getenv("SCORING_LLM_MODEL", "claude-haiku-4-5")
     return build_llm(
         provider=provider,
         model=model,
-        temperature=_env_float("LLM_TEMPERATURE", 0.7),
+        # Grading is a classifier, not a generator: the same chunks must grade the
+        # same way twice. This used to share LLM_TEMPERATURE with agent_llm_model,
+        # which put it at 0.7. Measured on claude-haiku-4-5, 8 runs over one fixed
+        # 8-chunk context (github/zgomot, "Which file handles MIDI output?"):
+        #     temp 0.7 -> kept [6,5,5,7,6,5,6,5]   {5:4, 6:3, 7:1}
+        #     temp 0.0 -> kept [5,5,5,5,5,5,5,5]   deterministic
+        # That spread is the "it worked yesterday" intermittency. Own knob at 0.0,
+        # as filter/router already do.
+        #
+        # Measure this with load_dotenv(".env"), never set_chatgpt_env(".keys") --
+        # the latter leaves LLM_MODEL_PROVIDER unset, and a harness that did so
+        # benchmarked gpt-4.1-mini and reached the opposite conclusion.
+        temperature=_env_float("SCORING_LLM_TEMPERATURE", 0.0),
         max_tokens=_env_int("LLM_MAX_TOKENS"),
         **kwargs,
     )
 
 
 def filter_llm_model(**kwargs):
-    provider = os.getenv("LLM_MODEL_PROVIDER", "openai")
-    model = os.getenv("FILTER_LLM_MODEL", os.getenv("SCORING_LLM_MODEL", "gpt-4.1-mini"))
+    provider = os.getenv("LLM_MODEL_PROVIDER", "anthropic")
+    model = os.getenv("FILTER_LLM_MODEL", os.getenv("SCORING_LLM_MODEL", "claude-haiku-4-5"))
     # Filter extraction is deterministic classification, not generation — run it at
     # temperature 0 so the same query yields the same where-filter every time. At the
     # shared 0.7 default the model intermittently dropped fields (e.g. observation_end).
@@ -245,8 +257,8 @@ def router_llm_model(**kwargs):
     # Pure routing/dispatch agents pick a tool from a described list — classification,
     # not generation — so a small model at temperature 0 is both cheaper and adequate.
     # Generation agents keep agent_llm_model. Falls back to the scoring/mini model.
-    provider = os.getenv("LLM_MODEL_PROVIDER", "openai")
-    model = os.getenv("ROUTER_LLM_MODEL", os.getenv("SCORING_LLM_MODEL", "gpt-4.1-mini"))
+    provider = os.getenv("LLM_MODEL_PROVIDER", "anthropic")
+    model = os.getenv("ROUTER_LLM_MODEL", os.getenv("SCORING_LLM_MODEL", "claude-haiku-4-5"))
     return build_llm(
         provider=provider,
         model=model,

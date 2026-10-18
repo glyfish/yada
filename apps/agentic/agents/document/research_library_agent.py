@@ -8,11 +8,7 @@ from typing import Dict
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import HumanMessage
 from langgraph.graph import StateGraph, START, END
-from langchain_core.prompts import PromptTemplate
 from langchain_core.prompts import ChatPromptTemplate
-from langgraph.prebuilt import tools_condition
-from langchain_core.tools import create_retriever_tool
-from langgraph.prebuilt import ToolNode
 
 from apps.agentic.core.agents.file_chroma_rag_agent import FileChromaRAGAgent
 from apps.agentic.core.document_loaders.research_library_document_loader import ResearchLibraryChromaDocumentLoader
@@ -27,20 +23,54 @@ class ResearchLibraryAgent(FileChromaRAGAgent):
     It is designed to handle queries related to research notes, topics, authors, dates, and tags
     """
     
+    # Prepended to every retrieved chunk so the grader and the generating model can
+    # see which document a chunk came from -- the _generate prompt instructs the model
+    # to cite title and section, and until now neither reached it. `topic` is
+    # deliberately excluded: its values are whole prose sentences, which belong in
+    # info-style output, not on every chunk of search context.
+    DOCUMENT_HEADER_KEYS = (
+        ("title", "Title"),
+        ("authors", "Authors"),
+        ("shelf", "Shelf"),
+        ("section", "Section"),
+        ("path", "Path"),
+    )
+
+    # Every qualifier here is an EXACT, case-sensitive equality match on a metadata
+    # value -- not a substring and not fuzzy. A near-miss returns zero documents, not
+    # fewer documents, so only advertise qualifiers whose exact values the model can
+    # realistically produce. Verified against the live store 2026-10-17.
+    #
+    # Deliberately NOT advertised:
+    #   author:  -- the field is `authors`; `author:` parses to nothing
+    #   date:    -- no such qualifier and no date metadata key (`published_date`
+    #               exists on 97.5% but no qualifier is wired to it)
+    #   notes:   -- adds {"source": "research_notes"}; there is no `source` key on
+    #               this store, so it forces every query to zero results
+    #   topic:   -- the key exists on 99% of chunks, but its values are whole prose
+    #               sentences ("Fundamentals of fractional Brownian motion."), which
+    #               no equality match will ever hit
     QUERY_FILTERS =  """
         **research_library_search Query Filters**
-        The agent supports the following query filters to refine searches:
-        - author: Author name (e.g., author:Troy Stribling)
-        - topic: Research topic (e.g., topic:AI)
-        - shelf: Tag used to identify document groups
-        - date: Date of work on the research note (e.g., date:2023-01-01)
+        Optional. Each filter is an EXACT match -- a value that is close but not
+        identical returns nothing at all. When unsure of the exact value, omit the
+        filter and search with words alone; that always degrades gracefully.
+
+        - title:"..."   One of 64 document titles, matched in full.
+                        e.g. title:"Fractional Brownian Motion", title:Thermodynamics
+        - authors:"..." The document's FULL author string, exactly as stored. Multi-author
+                        papers are stored as one comma-joined string, so a single name
+                        will NOT match one of them.
+                        e.g. authors:"Troy Stribling, William H. Matthaeus"
+                        but NOT authors:"William H. Matthaeus"
+        - shelf:<name>  One of exactly: notes, posts, publications, jaynes, reading_list
+        - section:<n>   Section number, or a range section:<lo>-<hi>
 
         Example Queries:
         - title:Thermodynamics Look in my research notes for the definition of a Carnot Cycle.
-        - author:Troy Stribling What research notes discuss Thermodynamics?
-        - date:2023-01-01 What research notes discuss Thermodynamics??
         - shelf:publications What research notes discuss statistical mechanics applied to MHD?
-        - notes: What algorithm are used for generating fractional brownian motion?
+        - authors:"E. T. Jaynes" What is said about maximum entropy?
+        - What algorithms are used for generating fractional brownian motion?
     """
 
     @classmethod
@@ -58,38 +88,16 @@ class ResearchLibraryAgent(FileChromaRAGAgent):
             research documents.
             """
 
-        document_prompt_template = """
-            You are searching Troy Stribling’s research notes in his indexed library vector store to answer
-            requests about his research. Information about the note can be found in the metadata attached to each file.
-            Following is a description of the metadata.
-            - Research Note filename: {{metadata[filename]}}
-            - Research Note file path: {{metadata[path]}}
-            - Research Note title: {{metadata[title]}}
-            - Research Note start date: {{metadata[start_date]}}
-            - Research Note author: {{metadata[author]}}
-            - Research Note topic description: {{metadata[topic]}}
-            - Research Note tags: {{metadata[tags]}}
-            - File extension: {{metadata[ext]}}
-            - Image URLs in the note: {{metadata[images]}}
-            - h2 section titles: {{metadata[h2]}}
-            - Section number: {{metadata[section]}}
-            - Section character offset: {{metadata[section_char_offset]}}
-            ---
-            {page_content}
-        """
-        
-        document_prompt = PromptTemplate.from_template(template=document_prompt_template)
-
-        super().__init__(tool_name, tool_description, document_prompt, ResearchLibraryChromaDocumentLoader(), query)
+        super().__init__(tool_name, tool_description, ResearchLibraryChromaDocumentLoader(), query)
 
         self._generate_prompt = ChatPromptTemplate.from_messages([("human", """
             You are an expert assistant answering questions about Troy Stribling's research library.
-            Use the retrieved context below to answer the question. Each chunk includes metadata such as
-            title, author, topic, tags, section headings, and date.
+            Use the retrieved context below to answer the question. Each chunk is preceded by a
+            header carrying its Title, Authors, Shelf, Section and Path.
 
             When answering:
             - Cite the research document title and section when summarizing findings
-            - Reference the author and start date when relevant
+            - Reference the authors when relevant
             - If multiple documents are relevant, address each one separately
             - If you don't know the answer from the context, say so clearly
 

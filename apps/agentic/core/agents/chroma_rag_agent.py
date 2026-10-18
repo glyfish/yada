@@ -5,8 +5,6 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import AIMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import StateGraph, START, END
-from langchain_core.prompts import PromptTemplate
-from langchain_core.tools import create_retriever_tool
 from pydantic import BaseModel, Field
 
 from apps.agentic.core.document_loaders.chroma_document_loader import ChromaDocumentLoader
@@ -15,7 +13,6 @@ from apps.agentic.core.llm_factory import agent_llm_model, scoring_llm_model
 from apps.agentic.core.checkpointer import checkpointer
 from apps.agentic.core.constants import RAG_SCORE_THRESHOLD
 from apps.agentic.core.output_style import OUTPUT_STYLE
-from langsmith.run_helpers import traceable
 
 from lib.logger import get_logger
 
@@ -44,7 +41,22 @@ class DocumentGrade(BaseModel):
 
 class ChromaRAGAgent(ABC):
 
-    def __init__(self, retriever_tool_name: str, retriever_tool_description: str, document_prompt: PromptTemplate,
+    #: (metadata key, label) pairs prepended to every retrieved chunk, for the keys
+    #: that store actually carries. Both the grader and the generating model read
+    #: this header, so it is what lets them tell *where* a chunk came from.
+    #:
+    #: History worth knowing: a header like this existed from 78a446b (2025-09-14)
+    #: and was deleted by a two-line edit in 9573310 (2025-11-30, "added metadata to
+    #: file when document is added" -- added at index time, removed at read time).
+    #: Nothing replaced it, and ef53ff5 (2026-03-01) then pointed the grader at the
+    #: stripped text. Measured cost on one file-location query: the grader kept 2/8
+    #: chunks without the header and 4/8 with it, and the model, told by its own
+    #: prompt to "cite the commit hash or branch", guessed file paths instead.
+    #:
+    #: Missing keys are skipped, so partial-coverage fields are safe to list.
+    DOCUMENT_HEADER_KEYS: tuple[tuple[str, str], ...] = ()
+
+    def __init__(self, retriever_tool_name: str, retriever_tool_description: str,
                  doc_loader: ChromaDocumentLoader, query: Optional[Dict[str, Any]] = None, retriever_k=8, retriever_fetch_k=40,
                  score_threshold: Optional[float]=RAG_SCORE_THRESHOLD):
         self.retriever_tool_name = retriever_tool_name
@@ -67,14 +79,22 @@ class ChromaRAGAgent(ABC):
             search_kwargs=search_kwargs
         )
 
-        self._retriever_tool = create_retriever_tool(
-            self._retriever,
-            retriever_tool_name,
-            retriever_tool_description,
-            document_prompt=document_prompt,
-            document_separator="\n\n-----\n\n",)
-        self._tools = [self._retriever_tool]
-        self._tooled_llm = self._llm.bind_tools(self._tools)
+        # Chroma metadata filters are exact equality, so a filter that is merely
+        # close matches NOTHING rather than matching less -- authors:"W. H. Matthaeus"
+        # against a store holding only comma-joined full author strings returns 0 of
+        # 4,875, while the same query unfiltered puts the right paper at rank 1. The
+        # agent then reports "no relevant documents", which the user cannot tell apart
+        # from an empty corpus. Keep an unfiltered retriever so _retrieve can degrade
+        # instead of failing closed.
+        self._unfiltered_retriever = (
+            self._vectorstore.as_retriever(
+                search_type="mmr",
+                search_kwargs={k: v for k, v in search_kwargs.items() if k != "filter"},
+            )
+            if normalized_query is not None
+            else None
+        )
+
         # Inline copy of the canonical hub prompt "rlm/rag-prompt": pulling public
         # hub prompts is disabled by default (untrusted serialized objects) and the
         # pull added a network dependency at agent-creation time.
@@ -149,15 +169,6 @@ class ChromaRAGAgent(ABC):
 
 
     @property
-    def tooled_llm(self):
-        """
-        Get the language model bound with tools.
-        """
-
-        return self._tooled_llm
-
-
-    @property
     def query(self):
         """
         Get the query filter used by the agent.
@@ -205,10 +216,29 @@ class ChromaRAGAgent(ABC):
 
         logger.info(f"Retrieved {len(hits)} documents for query: {question}")
 
+        def header_for(metadata: dict) -> str:
+            fields = [f"{label}: {metadata.get(key)}"
+                      for key, label in self.DOCUMENT_HEADER_KEYS
+                      if metadata.get(key) not in (None, "")]
+            return " | ".join(fields)
+
+        if not hits and self._unfiltered_retriever is not None:
+            logger.warning(
+                f"Filter matched nothing ({self._query!r}); retrying unfiltered."
+            )
+            try:
+                hits = self._unfiltered_retriever.invoke(question)
+            except Exception as e:
+                logger.error(f"Unfiltered retry error: {e}")
+            else:
+                logger.info(f"Unfiltered retry retrieved {len(hits)} documents.")
+
         sep = "\n\n-----\n\n"
         parts = []
         for i, d in enumerate(hits, 1):
-            parts.append(f"Document {i}:\n{d.page_content}")
+            header = header_for(d.metadata or {})
+            parts.append(f"Document {i}:\n{header}\n---\n{d.page_content}"
+                         if header else f"Document {i}:\n{d.page_content}")
 
         context = sep.join(parts) if parts else "(no results)"
         return {"messages": [SystemMessage(content=context)]}
@@ -277,17 +307,3 @@ class ChromaRAGAgent(ABC):
         return graph.compile(checkpointer=checkpointer)
 
 
-    @traceable(run_type="chain", name="ChromaRAGAgent._invoke_model")
-    async def _invoke_model(self, state: WorkerState, config=None) -> dict[str, Any]:
-        """
-        Invoke the agent with the current state.
-        """
-
-        messages = state["messages"]
-
-        try:
-            result = await self.tooled_llm.ainvoke(messages)
-            return {"messages": [result]}
-        except Exception as e:
-            logger.error(f"Error invoking model: {e}")
-            return {"messages": [f"Error: {e}"]}

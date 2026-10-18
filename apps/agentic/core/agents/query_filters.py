@@ -10,16 +10,31 @@ Supported qualifiers (case-insensitive):
   repo:<name>       | repo:<owner/name>
   ext:<ext>         # normalized to leading dot (e.g., '.rb', '.md')
 
-  # Time (applies to ALL sources via unified metadata 'ts_unix')
+  # Time -- GITHUB ONLY. These filter on metadata 'ts_unix', which is present on
+  # 100% of github chunks and on 0% of research_library, fred and etf (verified
+  # 2026-10-17). Used against those three they match nothing and silently zero
+  # the result set.
   after:YYYY-MM-DD
   before:YYYY-MM-DD
 
   # Research Notes
-  notes:            # optional switch; also adds {"source":"research_notes"}
-  title:"..."       | title:<word>
-  authors:"..."     | authors:<word>, csv list of authors, matches substring
-  topic:"..."       | topic:<word>
-  shelf:<word>      # matches the shelf/group name stored with the document
+  # NOTE: every qualifier below builds an EXACT equality condition. Nothing here
+  # matches substrings, and matching is case-sensitive.
+  notes:            # BROKEN -- adds {"source":"research_notes"}, but the research
+                    # library store has no 'source' key at all, so this forces any
+                    # query using it to zero results.
+  title:"..."       | title:<word>   # one of 64 titles, matched in full
+  authors:"..."     | authors:<word>
+                    # EXACT match on the whole stored string. Multi-author documents
+                    # store one comma-joined value ("Troy Stribling, W. H. Matthaeus"),
+                    # so a single contributor's name matches none of them.
+  topic:<word>      # ACCEPTED AND IGNORED. `topic` is an info field, not a search
+                    # filter: present on 99% of chunks, but its values are whole
+                    # prose sentences, so equality never matches. It is stripped
+                    # from the query so it cannot pollute the embedding, and no
+                    # condition is built. Topic is surfaced by the info agents,
+                    # which project metadata rows and show no content.
+  shelf:<word>      # exactly one of: notes, posts, publications, jaynes, reading_list
   section:<n>
   section:<lo>-<hi>
 
@@ -165,9 +180,14 @@ def build_filter_and_query(q: str) -> Tuple[str, Optional[Dict[str, Any]]]:
         conditions.append({"authors": _pick(m)})
         q = QUAL_AUTHORS.sub("", q).strip()
 
+    # `topic` is an INFO field, not a search filter. Its values are whole prose
+    # sentences ("Fundamentals of fractional Brownian motion."), so the equality
+    # match this used to build could never hit -- it only ever zeroed the result
+    # set. Where topic belongs is the info agents, which project metadata rows and
+    # show no content at all. The qualifier is still stripped here so a stray
+    # "topic:..." does not end up embedded in the semantic query.
     m = QUAL_TOPIC.search(q)
     if m:
-        conditions.append({"topic": _pick(m)})
         q = QUAL_TOPIC.sub("", q).strip()
 
     m = QUAL_SHELF.search(q)
