@@ -43,8 +43,15 @@ class ResearchLibraryAgent(FileChromaRAGAgent):
     #
     # Deliberately NOT advertised:
     #   author:  -- the field is `authors`; `author:` parses to nothing
-    #   date:    -- no such qualifier and no date metadata key (`published_date`
-    #               exists on 97.5% but no qualifier is wired to it)
+    #   date:    -- no such qualifier, and the date metadata cannot support one as it
+    #               stands. There are TWO mutually exclusive fields that partition the
+    #               corpus: `published_date` (4,752 chunks) and `document_date` (123,
+    #               only "What is Fragility?" and "Probability as Logic"); no chunk has
+    #               both and none has neither. Worse, `published_date`'s 52 distinct
+    #               values span five formats -- ISO 2010-05-01, "Dec 19, 2020",
+    #               "Feb. 19, 2017", "July 18, 2021", and 11/12/2018, which is
+    #               genuinely ambiguous (Nov 12 or Dec 11 is unknowable). Wiring a
+    #               date filter requires normalising at load time first.
     #   notes:   -- adds {"source": "research_notes"}; there is no `source` key on
     #               this store, so it forces every query to zero results
     #   topic:   -- the key exists on 99% of chunks, but its values are whole prose
