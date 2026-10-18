@@ -1,10 +1,23 @@
 # GITHUB constants
 import os
+from pathlib import Path
 
 # RAG retrieval constants
 _raw_threshold = os.environ.get("RAG_SCORE_THRESHOLD")
 RAG_SCORE_THRESHOLD = float(_raw_threshold) if _raw_threshold is not None else None
-DB_PATH = ".db"
+
+# Anchored to the repo root, not the working directory. This was ".db", and the
+# agents construct their loaders with no path argument -- CodeRepoAgent does
+# GitHubChromaDocumentLoader() -- so the store resolved against whatever cwd the
+# process happened to have. Run from anywhere but the repo root, Chroma does not
+# error: it CREATES an empty store there and every query returns zero hits. A
+# notebook under notebooks/documents/ did exactly that, and notebooks/data/.db/fred
+# is older debris from the same mistake. Silent emptiness is the worst failure mode
+# this codebase has (cf. GITHUB_LOCAL_PATH, which self-matched yada's .gitignore and
+# indexed 0 of 415,006 chunks), so resolve it once, here.
+# Override with YADA_DB_PATH when a different store is genuinely wanted.
+_ROOT = Path(__file__).resolve().parents[3]
+DB_PATH = os.environ.get("YADA_DB_PATH") or str(_ROOT / ".db")
 
 GITHUB_ACCOUNTS = ["troystribling", "glyfish"]
 GITHUB_EXCLUDED_REPOS = ["3dmodels"]
@@ -12,7 +25,7 @@ GITHUB_EXCLUDED_REPOS = ["3dmodels"]
 GITHUB_API = "https://api.github.com"
 GITHUB_DB_NAME = "github"
 GITHUB_COLLECTION_NAME = "github-repos"
-GITHUB_LOCAL_PATH = ".repos"
+GITHUB_LOCAL_PATH = str(_ROOT / ".repos")
 
 # ChromaDB constants
 CHROMA_DB_MAX_BATCH_SIZE = 1000
@@ -20,13 +33,13 @@ CHROMA_DB_MAX_BATCH_SIZE = 1000
 # Research note constants
 RESEARCH_LIBRARY_DB_NAME = "research_library"
 RESEARCH_LIBRARY_COLLECTION_NAME = "research-library"
-RESEARCH_LIBRARY_LOCAL_PATH = "./research_library"
+RESEARCH_LIBRARY_LOCAL_PATH = str(_ROOT / "research_library")
 RESEARCH_DOCUMENTS_METADATA_FILE = os.path.join(RESEARCH_LIBRARY_LOCAL_PATH, "research_documents.yml")
 
 # FRED API metadata
 FRED_DB_NAME = "fred"
 FRED_COLLECTION_NAME = "fred"
-FRED_LOCAL_PATH = "./clients/fred"
+FRED_LOCAL_PATH = str(_ROOT / "clients" / "fred")
 
 # ETF document store constants
 ETF_DB_NAME = "etf"
