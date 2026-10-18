@@ -266,7 +266,7 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
                 <label for="rn-authors">Authors:</label>
                 <input id="rn-authors" name="authors" type="text" placeholder="Troy Stribling" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
 
-                <label for="rn-published-date">Date:</label>
+                <label for="rn-published-date">Published Date:</label>
                 <input id="rn-published-date" name="published_date" type="date" autocomplete="off" required>
 
                 <label for="rn-topic">Topic:</label>
