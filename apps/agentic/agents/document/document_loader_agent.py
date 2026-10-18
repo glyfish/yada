@@ -36,7 +36,7 @@ class LoadResearchDocumentInput(BaseModel):
     path: str = Field(..., description="Full file path to the document.")
     title: str = Field(..., description="Document title.")
     authors: str = Field(..., description="Document authors.")
-    document_date: str = Field(..., description="Publication or document date.")
+    published_date: str = Field(..., description="Publication or document date, as YYYY-MM-DD.")
     topic: str = Field(..., description="Topic or subject area.")
     shelf: str = Field(..., description="Library shelf to assign the document to.")
 
@@ -65,7 +65,7 @@ def _append_research_document_metadata(meta_data: dict) -> None:
         "path": meta_data.get("path"),
         "title": meta_data.get("title"),
         "authors": meta_data.get("authors"),
-        "published_date": meta_data.get("document_date") or "",
+        "published_date": meta_data.get("published_date") or "",
         "topic": meta_data.get("topic"),
         "shelf": meta_data.get("shelf") or "",
     }
@@ -179,7 +179,7 @@ class DocumentLoaderAgent(ReactAgent):
         path: str,
         title: str,
         authors: str,
-        document_date: str,
+        published_date: str,
         topic: str,
         shelf: str,
     ) -> str:
@@ -192,7 +192,7 @@ class DocumentLoaderAgent(ReactAgent):
             "path": path,
             "title": title,
             "authors": authors,
-            "document_date": document_date,
+            "published_date": published_date,
             "topic": topic,
             "shelf": shelf,
         }

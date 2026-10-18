@@ -266,8 +266,8 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
                 <label for="rn-authors">Authors:</label>
                 <input id="rn-authors" name="authors" type="text" placeholder="Troy Stribling" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" required>
 
-                <label for="rn-document-date">Date:</label>
-                <input id="rn-document-date" name="document_date" type="date" autocomplete="off" required>
+                <label for="rn-published-date">Date:</label>
+                <input id="rn-published-date" name="published_date" type="date" autocomplete="off" required>
 
                 <label for="rn-topic">Topic:</label>
                 <textarea id="rn-topic" name="topic" rows="3" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="e.g., Signal Processing" required></textarea>
@@ -288,7 +288,7 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
         const pathInput     = dialog.querySelector("input[name='path']");
         const titleInput    = dialog.querySelector("input[name='title']");
         const authorsInput  = dialog.querySelector("input[name='authors']");
-        const dateInput     = dialog.querySelector("input[name='document_date']");
+        const dateInput     = dialog.querySelector("input[name='published_date']");
         const topicInput    = dialog.querySelector("textarea[name='topic']");
         const shelfInput    = dialog.querySelector("input[name='shelf']");
 
@@ -306,7 +306,7 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
                 path:          pathInput.value.trim(),
                 title:         titleInput.value.trim(),
                 authors:       authorsInput.value.trim(),
-                document_date: dateInput.value,
+                published_date: dateInput.value,
                 topic:         topicInput.value.trim(),
                 shelf:         shelfInput.value.trim(),
             }, promptLabel);

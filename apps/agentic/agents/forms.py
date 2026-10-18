@@ -25,9 +25,9 @@ class LoadResearchDocumentForm(BaseModel):
         ...,
         description="Document authors.",
     )
-    document_date: str = Field(
+    published_date: str = Field(
         ...,
-        description="Publication or document date.",
+        description="Publication or document date, as YYYY-MM-DD.",
     )
     topic: str = Field(
         ...,
