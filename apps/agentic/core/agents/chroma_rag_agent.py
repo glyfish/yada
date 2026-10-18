@@ -34,9 +34,15 @@ def _normalize_chroma_filter(query: Optional[Dict[str, Any]]) -> Optional[Dict[s
     return query
 
 
-class DocumentGrade(BaseModel):
-    """Binary relevance score for a retrieved document chunk."""
-    relevant: bool = Field(description="True if the document is relevant to the question")
+class ChunkScore(BaseModel):
+    """Relevance of one retrieved chunk, scored relative to the others in the batch."""
+    index: int = Field(description="The document's number, exactly as labelled 'Document N:' in the context")
+    score: float = Field(description="Relevance from 0.0 (unrelated) to 1.0 (directly answers the question)")
+
+
+class ChunkRanking(BaseModel):
+    """Scores for every chunk in one batch, so they can be compared against each other."""
+    scores: list[ChunkScore] = Field(description="One entry per document, in any order")
 
 
 class ChromaRAGAgent(ABC):
@@ -49,12 +55,31 @@ class ChromaRAGAgent(ABC):
     #: and was deleted by a two-line edit in 9573310 (2025-11-30, "added metadata to
     #: file when document is added" -- added at index time, removed at read time).
     #: Nothing replaced it, and ef53ff5 (2026-03-01) then pointed the grader at the
-    #: stripped text. Measured cost on one file-location query: the grader kept 2/8
-    #: chunks without the header and 4/8 with it, and the model, told by its own
-    #: prompt to "cite the commit hash or branch", guessed file paths instead.
+    #: stripped text. Measured on claude-haiku-4-5 with one file-location query: the
+    #: ranker scored 5/8 chunks through without the header and 6/8 with it (gaining
+    #: lib/zgomot/midi/note.rb, losing nothing), and the model, told by its own prompt
+    #: to "cite the commit hash or branch", guessed file paths instead of citing them.
     #:
     #: Missing keys are skipped, so partial-coverage fields are safe to list.
     DOCUMENT_HEADER_KEYS: tuple[tuple[str, str], ...] = ()
+
+    #: Keep chunks scoring at least this fraction of the best score in the batch.
+    #: Relative, never absolute -- see the note in _grade_documents. 1.0 would keep
+    #: only ties with the best; 0.0 keeps everything the ranker saw.
+    grade_relative_floor: float = 0.5
+
+    #: Hard cap on chunks passed to the generating model, applied after the floor.
+    grade_top_n: int = 8
+
+    #: If even the best chunk scores below this, nothing retrieved is relevant and
+    #: the honest answer is to return nothing. This one IS absolute, and that is not
+    #: a contradiction of the relative floor above: "how many of these candidates
+    #: are worth keeping" is a comparative question, "is any of this about the
+    #: question at all" is not. Unlike RAG_SCORE_THRESHOLD -- an absolute cutoff on
+    #: cosine distance, whose observed band is a narrow ~0.51-0.65 -- this applies
+    #: to an LLM-assigned 0-1 relevance score, where 0.0 means the model was asked
+    #: about Kubernetes and shown Ruby MIDI code.
+    grade_min_score: float = 0.15
 
     def __init__(self, retriever_tool_name: str, retriever_tool_description: str,
                  doc_loader: ChromaDocumentLoader, query: Optional[Dict[str, Any]] = None, retriever_k=8, retriever_fetch_k=40,
@@ -106,14 +131,23 @@ class ChromaRAGAgent(ABC):
              "and keep the answer concise.\n"
              "Question: {question} \nContext: {context} \nAnswer:"),
         ])
-        self._grader_llm = scoring_llm_model().with_structured_output(DocumentGrade)
+        # One call that sees every chunk at once, rather than one yes/no call per
+        # chunk. The old design asked "is this useful?" of each chunk in isolation,
+        # which cannot compare them: it could reject the best chunk available, and
+        # could reject all of them, which is the confident-empty answer users hit.
+        # It also cost one LLM call per chunk.
+        self._grader_llm = scoring_llm_model().with_structured_output(ChunkRanking)
         self._grade_prompt = ChatPromptTemplate.from_messages([
             ("system",
-             "You are a relevance grader. Assess whether the retrieved document contains "
-             "information that is useful for answering the question. "
-             "Keyword or semantic relevance is sufficient — the document does not need to fully answer the question. "
-             "Set relevant=true if the document is useful, relevant=false otherwise."),
-            ("human", "Question: {question}\n\nDocument:\n{document}"),
+             "You rank retrieved documents by how well they help answer a question. "
+             "You will be given every candidate at once; score them against each other, "
+             "not against an absolute standard. Each document is labelled 'Document N:' "
+             "and begins with a metadata header giving its source — a document's origin "
+             "is evidence of relevance, so weigh it alongside the text. "
+             "Score 1.0 for a document that directly answers the question, around 0.5 for "
+             "one that is related but incidental, and near 0.0 for one that is unrelated. "
+             "Return exactly one score for every document you are given, using its N."),
+            ("human", "Question: {question}\n\nDocuments:\n{documents}"),
         ])
         self._agent = self._create_agent()
 
@@ -266,19 +300,46 @@ class ChromaRAGAgent(ABC):
         if not chunks:
             return {"messages": [SystemMessage(content="(no results)")]}
 
-        grader = self._grade_prompt | self._grader_llm
-        relevant = []
-        for chunk in chunks:
-            try:
-                result = cast(DocumentGrade, grader.invoke({"question": question, "document": chunk}))
-                if result.relevant:
-                    relevant.append(chunk)
-            except Exception as e:
-                logger.warning(f"Grading error, keeping chunk: {e}")
-                relevant.append(chunk)
+        try:
+            ranking = cast(ChunkRanking, (self._grade_prompt | self._grader_llm).invoke(
+                {"question": question, "documents": docs_content}))
+            scored = {s.index: s.score for s in ranking.scores if 1 <= s.index <= len(chunks)}
+        except Exception as e:
+            # Ranking is an optimisation, not a gate. If it fails, hand the model
+            # everything retrieved rather than nothing.
+            logger.warning(f"Ranking failed, passing all {len(chunks)} chunks: {e}")
+            return {"messages": [SystemMessage(content=sep.join(chunks))]}
 
-        logger.info(f"Document grading: {len(relevant)}/{len(chunks)} chunks passed")
-        context = sep.join(relevant) if relevant else "(no relevant results found)"
+        # A chunk the ranker omitted scores 0.0 rather than being silently dropped.
+        ranked = sorted(((scored.get(i, 0.0), i, c) for i, c in enumerate(chunks, 1)),
+                        key=lambda t: (-t[0], t[1]))
+
+        # Relative floor, deliberately not absolute. RAG_SCORE_THRESHOLD is an
+        # absolute cutoff and is unusable for exactly this reason: the observed
+        # relevance band is narrow (~0.51-0.65), so 0.50 admits everything and 0.52
+        # empties a working query. Keeping everything within a fraction of the BEST
+        # observed score adapts to whatever the distribution happens to be, and
+        # cannot return nothing -- the top chunk always clears its own floor. That
+        # is the property the old binary gate lacked: it answered N independent
+        # yes/no questions and could answer "no" to all of them.
+        best = ranked[0][0]
+        if best < self.grade_min_score:
+            logger.info(
+                f"Document ranking: nothing relevant (best={best:.2f} < "
+                f"{self.grade_min_score}); returning no results for: {question}")
+            return {"messages": [SystemMessage(content="(no relevant results found)")]}
+
+        floor = best * self.grade_relative_floor
+        keep = [(s, i, c) for s, i, c in ranked if s >= floor][:self.grade_top_n]
+
+        logger.info(
+            f"Document ranking: kept {len(keep)}/{len(chunks)} "
+            f"(best={best:.2f}, floor={floor:.2f}, scores="
+            f"{[round(s, 2) for s, _, _ in ranked]})")
+
+        # The score travels with the chunk: the generating model can weigh a weak
+        # hit accordingly, and it is the per-result score structured MCP output needs.
+        context = sep.join(f"{c}\n[relevance: {s:.2f}]" for s, _, c in keep)
         return {"messages": [SystemMessage(content=context)]}
 
 
