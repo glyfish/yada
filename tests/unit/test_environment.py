@@ -48,5 +48,10 @@ def test_describe_redacts_credentials():
     assert "user:***@" in env.describe()
 
 
-def test_code_head_is_the_rolled_up_initial_schema():
-    assert alembic_head() == "0001"
+def test_code_head_is_the_newest_migration():
+    """
+    Bump with each migration. The literal is the point: it catches a revision file that
+    fails to chain onto the head, which otherwise shows up only as verify_database
+    refusing to start against a database that is in fact migrated.
+    """
+    assert alembic_head() == "0002"
