@@ -9,7 +9,9 @@ from langsmith.run_helpers import traceable
 from pydantic import BaseModel, Field
 
 from apps.agentic.core.agents.query_filters import build_filter_and_query
+from apps.agentic.core.constants import GITHUB_DB_NAME, RESEARCH_LIBRARY_DB_NAME
 from apps.agentic.core.llm_factory import filter_llm_model
+from apps.agentic.db.vocabulary import ResolvedFilters, Vocabulary
 from lib.logger import get_logger
 
 logger = get_logger("YADA")
@@ -266,30 +268,9 @@ class CodeRepoFilters(BaseModel):
     repo: Optional[str] = Field(
         None,
         description="""
-        GitHub repository name as stored in the database. Must be one of these exact strings:
-        'BAP3', 'BLEBond', 'BlueBeacon', 'BlueCap', 'BlueCap-ObjC',
-        'CBPeripheralManager-Demo', 'DetectPencil', 'Financial-Models-Numerical-Methods',
-        'FutureLocation', 'GPUImage', 'HueSwitch-ObjC', 'LRResty', 'LocationTest',
-        'MCMC', 'MailCore', 'MemoryMappedFileObjC', 'MemoryMappedFileSwift',
-        'NN', 'NestPWN', 'PID', 'PracticeSessions', 'Principia', 'PyMC',
-        'Robinhood', 'RobinhoodShell', 'Rpi_StartKit', 'Rpi_StartKit_Swift',
-        'Sano', 'SimpleFutures', 'Stochastic.jl', 'Studium', 'Studium-ObjC',
-        'Swift-Errors', 'WaitTime', 'acts_as_aln', 'aethyr', 'aethyr_agent',
-        'agent_linux', 'agent_xmpp', 'agent_xmpp_orig', 'agentic', 'alef',
-        'alpaca', 'alpaca-backtrader-api', 'alpaca-trade-api-python',
-        'arduino-examples', 'autobahn-python', 'backtrader', 'bluecap-arduino',
-        'bluecap-arduino-examples', 'cpp-ethereum', 'cryptocoins', 'data_examples',
-        'data_sink', 'dotfiles', 'ejabberd', 'enstrophy', 'entropy',
-        'ep-chan-book-algo-trading', 'evma_xmlpushparser', 'exempli', 'fbm',
-        'gnosus-xmpp', 'hackerrank', 'has_ancestor', 'hue-switch-arduino', 'huebi',
-        'iCircuitModels', 'iOSPorts', 'imaginaryProducts', 'imaginaryProductsSite',
-        'ios-alethzero', 'ios-etherium', 'kinect_machine', 'libetpan', 'meida',
-        'navi', 'neural_net', 'nordic-ble-sdk-examples', 'nordic-nrf8001', 'photio',
-        'planb_site', 'prime_challenge', 'pyalgotrade', 'pylivetrader', 'route-me',
-        'ruby-freenect', 'seeker1', 'shade', 'solidity_examples', 'streethak',
-        'studium_ruby', 'troystribling.github.io', 'truffle_examples',
-        'twitter_analysis', 'utils-arduino', 'virtadm', 'web3_examples',
-        'website', 'zgomot', 'zipline'.
+        Repository name. The stored values are listed under STORED VALUES in the system
+        prompt, with their sizes — use the spelling shown there. An account name is also
+        accepted and resolves to everything under it.
         Only set when the user names a specific repository. Return None otherwise.
         """,
     )
@@ -321,7 +302,7 @@ class ResearchLibraryFilters(BaseModel):
     shelf: Optional[str] = Field(
         None,
         description="""
-        Library shelf identifier. Must be exactly one of:
+        Library shelf identifier, one of the values listed under STORED VALUES:
         'jaynes' (papers by E. T. Jaynes),
         'notes' (research notes by Troy Stribling),
         'posts' (blog posts by Troy Stribling),
@@ -345,11 +326,12 @@ class ResearchLibraryFilters(BaseModel):
     authors: Optional[str] = Field(
         None,
         description="""
-        Author name with spelling corrected.
-        Only set when the user explicitly names an author.
-        Correct obvious misspellings (e.g. 'Janes' → 'E. T. Jaynes',
-        'Troy Stripling' → 'Troy Stribling').
-        Return None if no author is mentioned.
+        Author name. A surname alone is enough and is preferred: it reaches every
+        spelling of that person's name, and every paper they contributed to rather than
+        only the ones they wrote alone.
+        Check the spelling against STORED VALUES in the system prompt and use what is
+        there (e.g. 'Janes' → 'Jaynes', 'Mathaeus' → 'Matthaeus').
+        Only set when the user explicitly names an author. Return None otherwise.
         """,
     )
     cleaned_query: str = Field(
@@ -416,26 +398,57 @@ def fred_filters_to_where(f: FredFilters) -> Optional[dict]:
     return conditions or None
 
 
+def resolve_code_repo_filters(f: CodeRepoFilters) -> ResolvedFilters:
+    """
+    Resolve what the model extracted against the stored vocabulary.
+
+    The model emits a plausible spelling, not a stored one -- observed: `'Matthaeus'`
+    against a store whose values are whole author lists. Equality on that returns zero
+    with no error, which is the failure this whole path exists to remove, so nothing
+    the model produces reaches Chroma unresolved.
+
+    `account` is still accepted because the model may emit it, but a bare name needs no
+    classification: `repo` resolves an account name to `{"account": ...}` on its own.
+    """
+    return Vocabulary.resolve_filters(GITHUB_DB_NAME, {
+        "repo": f.repo or f.account,
+        "ext": f.ext,
+    })
+
+
+def resolve_research_library_filters(f: ResearchLibraryFilters) -> ResolvedFilters:
+    return Vocabulary.resolve_filters(RESEARCH_LIBRARY_DB_NAME, {
+        "shelf": f.shelf,
+        "title": f.title,
+        "authors": f.authors,
+    })
+
+
+def _log_resolution(label: str, resolved: ResolvedFilters, query: str) -> None:
+    """
+    Record how each proposed value resolved, loudly when one matched nothing.
+
+    An unresolvable value leaves `where` empty, so the search runs unfiltered and
+    returns documents the filter was meant to exclude -- plausible output from a filter
+    that did not apply. These callers return a bare `where`, with nowhere to report
+    that, so the log is the only place it surfaces. The MCP tools short-circuit instead.
+    """
+    if resolved.unresolvable:
+        dead = ", ".join(f"{r.field}={r.proposed!r}" for r in resolved.unresolvable)
+        logger.warning(
+            f"{label} filters: {dead} matched no stored value -- searching UNFILTERED, "
+            f"so results will not respect it. resolved={resolved.resolved}")
+    else:
+        logger.info(f"{label} filters (llm): where={resolved.where} "
+                    f"resolved={resolved.resolved} query={query!r}")
+
+
 def code_repo_filters_to_where(f: CodeRepoFilters) -> Optional[dict]:
-    conditions: dict = {}
-    if f.account:
-        conditions["account"] = f.account
-    if f.repo:
-        conditions["repo"] = f.repo
-    if f.ext:
-        conditions["ext"] = f.ext
-    return conditions or None
+    return resolve_code_repo_filters(f).where
 
 
 def research_library_filters_to_where(f: ResearchLibraryFilters) -> Optional[dict]:
-    conditions: dict = {}
-    if f.shelf:
-        conditions["shelf"] = f.shelf
-    if f.title:
-        conditions["title"] = f.title
-    if f.authors:
-        conditions["authors"] = f.authors
-    return conditions or None
+    return resolve_research_library_filters(f).where
 
 
 # ---------- extraction prompts ----------
@@ -525,6 +538,34 @@ def _make_prompt(system: str) -> ChatPromptTemplate:
     ])
 
 
+def _with_stored_values(system: str, store: str, fields: tuple[str, ...]) -> str:
+    """
+    Append the store's real values to a system prompt.
+
+    Generated rather than written into the field descriptions, where a 101-repository
+    list was already drifting from the store it described. A hand-maintained list is
+    wrong the first time a repository is added, and wrong silently -- the model proposes
+    a name that no longer exists and the filter matches nothing.
+
+    Degrades to the bare prompt if the vocabulary is unavailable: a less-informed
+    extraction still works, and resolution catches what it gets wrong.
+    """
+    try:
+        block = Vocabulary.prompt_block(store, fields)
+    except Exception as e:
+        logger.warning(f"Stored values unavailable for {store}, extracting without them: {e}")
+        return system
+    if not block:
+        return system
+    return (
+        f"{system}\n"
+        "STORED VALUES — the values actually in this store, with how many chunks each\n"
+        "covers. Use these spellings. If what the user said is not here and is not an\n"
+        "obvious misspelling of something that is, return null rather than guessing.\n"
+        f"{block}\n"
+    )
+
+
 # ---------- async extraction functions ----------
 @traceable(run_type="chain", name="extract_etf_filters")
 async def extract_etf_filters(request: str) -> tuple[Optional[dict], str]:
@@ -574,11 +615,14 @@ async def extract_code_repo_filters(request: str) -> tuple[Optional[dict], str]:
 
     try:
         llm = filter_llm_model().with_structured_output(CodeRepoFilters)
-        prompt = _make_prompt(_CODE_SYSTEM)
+        # repo and account only. ext is 190 values and carries its own language
+        # mapping; listing it would cost more than resolution does to fix.
+        prompt = _make_prompt(
+            _with_stored_values(_CODE_SYSTEM, GITHUB_DB_NAME, ("account", "repo")))
         result = cast(CodeRepoFilters, await (prompt | llm).ainvoke({"request": request}))
-        where = code_repo_filters_to_where(result)
-        logger.info(f"Code repo filters (llm): where={where} query={result.cleaned_query!r}")
-        return where, result.cleaned_query
+        resolved = resolve_code_repo_filters(result)
+        _log_resolution("Code repo", resolved, result.cleaned_query)
+        return resolved.where, result.cleaned_query
     except Exception as e:
         logger.warning(f"extract_code_repo_filters failed: {e}")
         return None, request
@@ -593,11 +637,12 @@ async def extract_research_library_filters(request: str) -> tuple[Optional[dict]
 
     try:
         llm = filter_llm_model().with_structured_output(ResearchLibraryFilters)
-        prompt = _make_prompt(_RESEARCH_SYSTEM)
+        prompt = _make_prompt(_with_stored_values(
+            _RESEARCH_SYSTEM, RESEARCH_LIBRARY_DB_NAME, ("shelf", "authors", "title")))
         result = cast(ResearchLibraryFilters, await (prompt | llm).ainvoke({"request": request}))
-        where = research_library_filters_to_where(result)
-        logger.info(f"Research library filters (llm): where={where} query={result.cleaned_query!r}")
-        return where, result.cleaned_query
+        resolved = resolve_research_library_filters(result)
+        _log_resolution("Research library", resolved, result.cleaned_query)
+        return resolved.where, result.cleaned_query
     except Exception as e:
         logger.warning(f"extract_research_library_filters failed: {e}")
         return None, request

@@ -87,6 +87,7 @@ from apps.agentic.agents.plots.time_series_report_plot_agent import render_repor
 from apps.agentic.core.agents.messages import WorkerState  # noqa: E402
 from apps.agentic.db.report_cache import ReportCache  # noqa: E402
 from apps.agentic.db.series_cache import SeriesCache  # noqa: E402
+from apps.agentic.db.vocabulary import Vocabulary  # noqa: E402
 from apps.core.environment import current_environment, verify_database  # noqa: E402
 from mcp_server.plot_app import HTML as PLOT_APP_HTML, meta_for  # noqa: E402
 
@@ -205,6 +206,10 @@ def _initialize() -> None:
     logger.info(f"Starting yada MCP server: {verify_database(environment)}")
     SeriesCache.initialize(environment.db_url)
     ReportCache.initialize(environment.db_url)
+    # Rows only -- no Chroma scan. Rebuilding here would add 34 s to every boot of
+    # a server that stays up for days, and even verifying costs 3.8 s on the code
+    # store, so staleness is checked lazily on first use instead.
+    Vocabulary.initialize(environment.db_url)
     _initialized = True
 
 

@@ -107,13 +107,21 @@ def test_account_reaches_its_repositories():
     r = Vocabulary.resolve("github", "repo", "glyfish")
     assert r.kind == "alias"
     assert r.alias_kind == "account"        # the tool layer refuses this for enumeration
-    assert r.values == ("bokeh", "zgomot")
+    assert r.values == ("bokeh", "zgomot")  # named, so a refusal can list them
+
+
+def test_account_is_queried_as_an_account_not_as_its_repositories():
+    """One equality beats an $in over everything the account holds."""
+    r = Vocabulary.resolve("github", "repo", "glyfish")
+    assert r.where() == {"account": "glyfish"}
+    assert r.describe() == "account 'glyfish' -> 2 repositories"
 
 
 def test_truncated_repository_resolves_by_substring():
     r = Vocabulary.resolve("github", "repo", "zgom")
     assert r.kind == "substring"
     assert r.values == ("zgomot",)
+    assert r.describe() == "substring, 1 of 3"     # breadth of the widening, reported
 
 
 def test_unknown_value_resolves_to_nothing():
@@ -157,3 +165,40 @@ def test_available_orders_by_size_and_names_the_blank():
 
 def test_where_is_none_when_nothing_matched():
     assert Resolution("repo", "x", (), "none").where() is None
+
+
+# ----------------------------------------------------------------- filter sets
+
+def test_filters_conjoin():
+    f = Vocabulary.resolve_filters("github", {"repo": "zgom", "ext": "py"})
+    assert f.where == {"$and": [{"repo": "zgomot"}, {"ext": ".py"}]}
+    assert not f.unresolvable
+    assert f.requested == {"repo": "zgom", "ext": "py"}
+    assert f.applied == {"repo": "zgomot", "ext": ".py"}
+
+
+def test_a_single_filter_needs_no_conjunction():
+    assert Vocabulary.resolve_filters("github", {"repo": "zgomot"}).where == {"repo": "zgomot"}
+
+
+def test_none_is_omission_not_a_value():
+    """JSON distinguishes null from "" and so must this: null searches everything."""
+    assert Vocabulary.resolve_filters("github", {"repo": None, "ext": None}).where is None
+    assert Vocabulary.resolve_filters("github", {"ext": ""}).where == {"ext": ""}
+
+
+def test_one_unresolvable_value_blocks_the_whole_search():
+    """
+    The conjunction is left unbuilt. Building it minus the dead term would search
+    unfiltered and return documents the filter existed to exclude -- plausible output
+    from a filter that never applied.
+    """
+    f = Vocabulary.resolve_filters("github", {"repo": "zgomot", "ext": "nonesuch"})
+    assert f.where is None
+    assert [r.field for r in f.unresolvable] == ["ext"]
+    assert f.resolved == {"repo": "exact", "ext": "no match"}
+
+
+def test_account_and_extension_conjoin_on_different_fields():
+    f = Vocabulary.resolve_filters("github", {"repo": "glyfish", "ext": ".py"})
+    assert f.where == {"$and": [{"account": "glyfish"}, {"ext": ".py"}]}

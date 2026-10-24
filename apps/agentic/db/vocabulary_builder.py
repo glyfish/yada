@@ -33,11 +33,13 @@ logger = get_logger("YADA")
 #: a larger page raises "too many SQL variables" rather than returning fewer rows.
 _PAGE = 20_000
 
-#: The fields each store exposes as filters, and so the only ones worth indexing. Adding
-#: a field here without adding the matching tool parameter builds a vocabulary nothing
-#: reads; adding the parameter without the field leaves it unresolvable.
+#: The fields worth indexing. Every published filter must be here or it cannot be
+#: resolved -- but the reverse does not hold. ``account`` is indexed and deliberately
+#: NOT a parameter: a name is either an account or a repository and never both, so the
+#: server classifies it. Indexing it is what lets a refusal say how much an account
+#: holds, and what ``repo="glyfish"`` is ultimately applied against.
 STORE_FIELDS: dict[str, tuple[str, ...]] = {
-    GITHUB_DB_NAME: ("repo", "ext"),
+    GITHUB_DB_NAME: ("repo", "ext", "account"),
     RESEARCH_LIBRARY_DB_NAME: ("authors", "title", "shelf"),
 }
 

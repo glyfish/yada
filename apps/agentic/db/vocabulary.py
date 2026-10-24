@@ -26,7 +26,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Iterable, Literal, Mapping
+from typing import Any, Iterable, Literal, Mapping, Sequence
 
 from sqlalchemy import MetaData, Table, create_engine, delete, select, text
 from sqlalchemy.dialects.postgresql import insert
@@ -54,6 +54,8 @@ class Resolution:
 
     field: str
     proposed: str
+    #: The stored values this reaches, for reporting. For an account alias these are the
+    #: repositories it holds -- which is what an enumerating tool's refusal has to list.
     values: tuple[str, ...]
     kind: ResolutionKind
     #: Which kind of alias matched, when ``kind == "alias"``. Carried because resolution
@@ -61,6 +63,13 @@ class Resolution:
     #: right answer for a search and the wrong one for an enumeration, against a median
     #: repository of 41 files. The tool layer decides; the resolver reports.
     alias_kind: str | None = None
+    #: Set when resolution moves to a different field. An account name is not a repo
+    #: value, so ``repo="glyfish"`` queries ``{"account": "glyfish"}`` -- one equality
+    #: rather than a 22-value ``$in`` over the repositories it covers.
+    applied_field: str | None = None
+    applied_values: tuple[str, ...] = ()
+    #: Distinct values the field holds, so a widening can report its breadth.
+    field_total: int = 0
 
     @property
     def matched(self) -> bool:
@@ -68,21 +77,61 @@ class Resolution:
 
     def where(self) -> dict[str, Any] | None:
         """The Chroma ``where`` fragment, or None when nothing matched."""
-        if not self.values:
+        field = self.applied_field or self.field
+        values = self.applied_values or self.values
+        if not values:
             return None
-        if len(self.values) == 1:
-            return {self.field: self.values[0]}
-        return {self.field: {"$in": list(self.values)}}
+        if len(values) == 1:
+            return {field: values[0]}
+        return {field: {"$in": list(values)}}
 
     def describe(self) -> str:
         """One line for the result's ``filters_resolved``, so a caller sees the decision."""
         if self.kind == "exact":
             return "exact"
         if self.kind == "empty":
-            return f"{self.proposed!r} -> files with no extension"
+            return "files with no extension"
         if self.kind == "none":
             return "no match"
-        return f"{self.kind}, {len(self.values)} value(s)"
+        if self.alias_kind == "account":
+            return f"account '{self.proposed}' -> {len(self.values)} repositories"
+        return f"{self.kind}, {len(self.values)} of {self.field_total}"
+
+
+@dataclass(frozen=True)
+class ResolvedFilters:
+    """
+    A whole filter set resolved at once, shaped for the result contract.
+
+    The three ``filters_*`` views are what a caller needs to see the difference between
+    what it asked for and what ran -- the distinction whose absence let a filter match
+    nothing and the search quietly return someone else's documents.
+    """
+
+    resolutions: tuple[Resolution, ...]
+    where: dict[str, Any] | None
+
+    @property
+    def unresolvable(self) -> tuple[Resolution, ...]:
+        """Values that match nothing. Any of these means: answer now, do not search."""
+        return tuple(r for r in self.resolutions if not r.matched)
+
+    @property
+    def requested(self) -> dict[str, str]:
+        return {r.field: r.proposed for r in self.resolutions}
+
+    @property
+    def applied(self) -> dict[str, Any]:
+        out: dict[str, Any] = {}
+        for r in self.resolutions:
+            fragment = r.where()
+            if fragment:
+                out.update(fragment)
+        return out
+
+    @property
+    def resolved(self) -> dict[str, str]:
+        return {r.field: r.describe() for r in self.resolutions}
 
 
 def surname(name: str) -> str:
@@ -228,12 +277,14 @@ class Vocabulary:
         is silent and the second is reportable.
         """
         values = cls.values(store, field)
+        total = len(values)
 
         if field == "ext" and proposed in ("", NO_EXTENSION):
-            return Resolution(field, proposed, ("",) if "" in values else (), "empty")
+            return Resolution(field, proposed, ("",) if "" in values else (), "empty",
+                              field_total=total)
 
         if proposed in values:
-            return Resolution(field, proposed, (proposed,), "exact")
+            return Resolution(field, proposed, (proposed,), "exact", field_total=total)
 
         # The leading dot and the case are spelling, not meaning: "py" and "PY" each name
         # one extension, and letting either fall through to substring widens it to
@@ -244,18 +295,52 @@ class Vocabulary:
             folded = folded if folded.startswith(".") else f".{folded}"
             matches = tuple(sorted(v for v in values if v.casefold() == folded))
             if matches:
-                return Resolution(field, proposed, matches, "exact")
+                return Resolution(field, proposed, matches, "exact", field_total=total)
 
         aliased = cls.aliases(store, field).get(proposed)
         if aliased:
-            return Resolution(field, proposed, aliased[0], "alias", aliased[1])
+            reached, alias_kind = aliased
+            # An account is a field of its own, so query it directly rather than listing
+            # the repositories under it. The repositories stay in `values` because a
+            # refusal has to name them.
+            applied = ("account", (proposed,)) if alias_kind == "account" else (None, ())
+            return Resolution(field, proposed, reached, "alias", alias_kind,
+                              applied[0], applied[1], total)
 
         needle = proposed.casefold()
         hits = tuple(sorted(v for v in values if needle in v.casefold()))
         if hits:
-            return Resolution(field, proposed, hits, "substring")
+            return Resolution(field, proposed, hits, "substring", field_total=total)
 
-        return Resolution(field, proposed, (), "none")
+        return Resolution(field, proposed, (), "none", field_total=total)
+
+    @classmethod
+    def resolve_filters(cls, store: str, proposed: Mapping[str, str | None]) -> ResolvedFilters:
+        """
+        Resolve a whole filter set. ``None`` values are omissions and are skipped.
+
+        When any value resolves to nothing the conjunction is left unbuilt: a filter that
+        matches no stored value makes the whole result empty, so the honest answer is to
+        say which value is unknown rather than to run a search that cannot succeed. That
+        costs microseconds against the 3.0 s the search would have taken to return the
+        wrong thing.
+        """
+        resolutions = tuple(
+            cls.resolve(store, field, value)
+            for field, value in proposed.items()
+            if value is not None
+        )
+        if any(not r.matched for r in resolutions):
+            return ResolvedFilters(resolutions, None)
+
+        fragments = [f for f in (r.where() for r in resolutions) if f]
+        if not fragments:
+            where = None
+        elif len(fragments) == 1:
+            where = fragments[0]
+        else:
+            where = {"$and": fragments}
+        return ResolvedFilters(resolutions, where)
 
     @classmethod
     def available(cls, store: str, field: str, limit: int = 40) -> list[str]:
@@ -263,6 +348,44 @@ class Vocabulary:
         values = cls.values(store, field)
         ordered = sorted(values, key=lambda v: (-values[v], v))
         return [NO_EXTENSION if v == "" else v for v in ordered[:limit]]
+
+    @classmethod
+    def prompt_block(cls, store: str, fields: Sequence[str], max_values: int = 120) -> str:
+        """
+        The real stored values, for an extraction prompt.
+
+        This is the most direct lever there is on extraction accuracy. A model choosing
+        a filter blind produces a plausible spelling -- observed: ``{'authors':
+        'Matthaeus'}`` against a store where that matches nothing. Shown the values, it
+        emits one that exists; shown the counts, it can tell which reading of an
+        ambiguous request is plausible, since ``Stribling 3455`` against ``Bates 11``
+        says which is likelier meant.
+
+        Ordered by size so a truncated field keeps the values worth naming.
+        """
+        lines = []
+        for field in fields:
+            values = cls.values(store, field)
+            if not values:
+                continue
+            ordered = sorted(values.items(), key=lambda kv: (-kv[1], kv[0]))
+            shown = ordered[:max_values]
+            rendered = ", ".join(
+                f"{NO_EXTENSION if v == '' else v} ({n:,})" for v, n in shown)
+            more = f", and {len(ordered) - len(shown)} more" if len(ordered) > len(shown) else ""
+            lines.append(f"{field} -- {len(ordered)} stored values: {rendered}{more}")
+
+            # Surnames earn their place here: the stored values are whole author lists,
+            # so the name a user says is never one of them. Without this the model has
+            # to infer that naming one contributor is allowed, from values that all
+            # show several. Accounts are left out -- they are listed as a field already.
+            surnames = sorted(a for a, (_, kind) in cls.aliases(store, field).items()
+                              if kind == "surname")
+            if surnames:
+                lines.append(
+                    f"{field} -- a surname alone also works, and reaches every spelling "
+                    f"and every co-authored document: {', '.join(surnames)}")
+        return "\n".join(lines)
 
     # ------------------------------------------------------------------ writes
 
