@@ -66,7 +66,20 @@ class ChromaRAGAgent(ABC):
     #: Keep chunks scoring at least this fraction of the best score in the batch.
     #: Relative, never absolute -- see the note in _grade_documents. 1.0 would keep
     #: only ties with the best; 0.0 keeps everything the ranker saw.
-    grade_relative_floor: float = 0.5
+    #:
+    #: FITTED 2026-10-24, not guessed. 63 labelled research_library queries (each
+    #: document's `topic` description as the query, that document as ground truth),
+    #: scored by F2 -- recall weighted over precision, because dropping a needed chunk
+    #: costs more than admitting a spare one. 0.55 is a genuine local maximum:
+    #:     floor  0.45   0.50   0.55   0.60   0.65
+    #:     F2     0.796  0.802  0.815  0.801  0.779
+    #: 24 of 63 queries keep a different set at 0.55 than at 0.50, and 0.55 wins in
+    #: 97.0% of 2,000 bootstrap resamples. Alternatives measured on the same vectors:
+    #: elbow/largest-gap 0.745, top-5 0.717, absolute-0.5 0.805.
+    #:
+    #: The set is synthetic -- topic sentences are curator-written, not how anyone asks --
+    #: so this is a first fit. Revalidate against real queries in §1.4.
+    grade_relative_floor: float = 0.55
 
     #: Hard cap on chunks passed to the generating model, applied after the floor.
     grade_top_n: int = 8
