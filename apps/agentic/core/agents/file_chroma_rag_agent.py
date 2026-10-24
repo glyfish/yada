@@ -1,5 +1,6 @@
 from abc import abstractmethod
 
+from langchain_core.documents import Document
 from langchain_core.messages import AIMessage
 from langchain_core.output_parsers import StrOutputParser
 
@@ -31,23 +32,27 @@ class FileChromaRAGAgent(ChromaRAGAgent):
         question = messages[0].content
         docs = messages[-1].content
 
-        # Build full-file section from the top retrieved file(s)
+        # Append the full text of the best-ranked file.
+        #
+        # This re-ran the retriever and took its top result, which is a different
+        # question from the one the graph just answered: the retriever ranks by
+        # embedding distance, the grader by relevance to the question. So the file
+        # stapled onto the answer could be -- and sometimes was -- one the grader had
+        # already rejected. The graded chunks are in the state now, so take the top of
+        # those instead: same file in the ordinary case, the right file in the case
+        # where they disagree, and one fewer query either way.
         files_section = ""
         try:
-            hits = self.retriever.invoke(question)
-
-            # Deduplicate by file path and pick the top one
             seen, top_files = set(), []
-            for d in hits:
-                path = d.metadata.get("path")
-                if not path or path in seen:
+            for chunk in state.get("hits") or []:
+                if not chunk.path or chunk.path in seen:
                     continue
-                seen.add(path)
-                top_files.append(d)
+                seen.add(chunk.path)
+                top_files.append(Document(page_content=chunk.text, metadata=chunk.metadata))
                 if len(top_files) >= 1:
                     break
 
-            files_section = self.read_file(top_files) or ""
+            files_section = self.read_file(top_files) or "" if top_files else ""
         except Exception as e:
             logger.error(f"Full-file append skipped because of error: {e}")
 

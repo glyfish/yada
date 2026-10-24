@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from dataclasses import replace
 from typing import Any, Dict, Optional, cast
 
 from langchain_core.output_parsers import StrOutputParser
@@ -8,7 +9,7 @@ from langgraph.graph import StateGraph, START, END
 from pydantic import BaseModel, Field
 
 from apps.agentic.core.document_loaders.chroma_document_loader import ChromaDocumentLoader
-from apps.agentic.core.agents.messages import WorkerState
+from apps.agentic.core.agents.messages import RetrievedChunk, WorkerState
 from apps.agentic.core.llm_factory import agent_llm_model, scoring_llm_model
 from apps.agentic.core.checkpointer import checkpointer
 from apps.agentic.core.constants import RAG_SCORE_THRESHOLD
@@ -281,14 +282,19 @@ class ChromaRAGAgent(ABC):
                 logger.info(f"Unfiltered retry retrieved {len(hits)} documents.")
 
         sep = "\n\n-----\n\n"
-        parts = []
+        parts, chunks = [], []
         for i, d in enumerate(hits, 1):
-            header = header_for(d.metadata or {})
+            metadata = d.metadata or {}
+            header = header_for(metadata)
             parts.append(f"Document {i}:\n{header}\n---\n{d.page_content}"
                          if header else f"Document {i}:\n{d.page_content}")
+            chunks.append(RetrievedChunk(index=i, text=d.page_content, metadata=metadata))
 
         context = sep.join(parts) if parts else "(no results)"
-        return {"messages": [SystemMessage(content=context)]}
+        # Both forms, deliberately. The text is what the grader and the generating
+        # model read; the chunks are what anything structured reads. Deriving one from
+        # the other by parsing is how the metadata was lost in the first place.
+        return {"messages": [SystemMessage(content=context)], "hits": chunks}
 
 
     def _grade_documents(self, state):
@@ -306,12 +312,13 @@ class ChromaRAGAgent(ABC):
         messages = state["messages"]
         question = messages[0].content
         docs_content = messages[-1].content
+        retrieved = state.get("hits") or []
 
         sep = "\n\n-----\n\n"
         chunks = [c for c in docs_content.split(sep) if c.strip()]
 
         if not chunks:
-            return {"messages": [SystemMessage(content="(no results)")]}
+            return {"messages": [SystemMessage(content="(no results)")], "hits": []}
 
         try:
             ranking = cast(ChunkRanking, (self._grade_prompt | self._grader_llm).invoke(
@@ -321,7 +328,7 @@ class ChromaRAGAgent(ABC):
             # Ranking is an optimisation, not a gate. If it fails, hand the model
             # everything retrieved rather than nothing.
             logger.warning(f"Ranking failed, passing all {len(chunks)} chunks: {e}")
-            return {"messages": [SystemMessage(content=sep.join(chunks))]}
+            return {"messages": [SystemMessage(content=sep.join(chunks))], "hits": retrieved}
 
         # A chunk the ranker omitted scores 0.0 rather than being silently dropped.
         ranked = sorted(((scored.get(i, 0.0), i, c) for i, c in enumerate(chunks, 1)),
@@ -340,7 +347,7 @@ class ChromaRAGAgent(ABC):
             logger.info(
                 f"Document ranking: nothing relevant (best={best:.2f} < "
                 f"{self.grade_min_score}); returning no results for: {question}")
-            return {"messages": [SystemMessage(content="(no relevant results found)")]}
+            return {"messages": [SystemMessage(content="(no relevant results found)")], "hits": []}
 
         floor = best * self.grade_relative_floor
         keep = [(s, i, c) for s, i, c in ranked if s >= floor][:self.grade_top_n]
@@ -350,10 +357,14 @@ class ChromaRAGAgent(ABC):
             f"(best={best:.2f}, floor={floor:.2f}, scores="
             f"{[round(s, 2) for s, _, _ in ranked]})")
 
-        # The score travels with the chunk: the generating model can weigh a weak
-        # hit accordingly, and it is the per-result score structured MCP output needs.
+        # The score travels with the chunk twice over: in the text, where the
+        # generating model can weigh a weak hit; and on the chunk itself, which is the
+        # per-result score a structured result needs and the string cannot carry.
+        by_index = {c.index: c for c in retrieved}
+        kept_hits = [replace(by_index[i], score=s) for s, i, _ in keep if i in by_index]
+
         context = sep.join(f"{c}\n[relevance: {s:.2f}]" for s, _, c in keep)
-        return {"messages": [SystemMessage(content=context)]}
+        return {"messages": [SystemMessage(content=context)], "hits": kept_hits}
 
 
     def _create_agent(self):

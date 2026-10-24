@@ -1,5 +1,6 @@
+from dataclasses import dataclass
 from typing import Annotated, Sequence
-from typing_extensions import TypedDict
+from typing_extensions import NotRequired, TypedDict
 
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
@@ -58,13 +59,45 @@ AgentStateModel = Annotation.Root({
 })
 
 
+@dataclass
+class RetrievedChunk:
+    """
+    One retrieved chunk, kept whole across a node boundary.
+
+    The graph passed retrieved documents as text in a SystemMessage, so everything a
+    chunk knew about itself -- which repository, which file, what the ranker scored it
+    -- survived only as far as it could be written into a header and parsed back out.
+    The score fared worst: `_grade_documents` had it as a float and could express it
+    only as the string `[relevance: 0.95]` appended to the text.
+
+    Nothing could consume that. A structured result needs the score as a number, the
+    path as a path, and the metadata as fields, which is why the chunks now travel
+    beside the messages rather than inside them.
+    """
+
+    index: int                  # 1-based, matching the "Document N:" label the grader reads
+    text: str
+    metadata: dict
+    score: float | None = None  # set by the ranker; None before grading
+
+    @property
+    def path(self) -> str:
+        return self.metadata.get("path") or self.metadata.get("title") or ""
+
+
 class WorkerState(TypedDict):
     """
     WorkerState is a TypedDict that defines the structure of the worker's state.
     It includes a list of messages annotated with the add_messages reducer.
+
+    `hits` is NotRequired because most graphs here never retrieve; those that do
+    overwrite it wholesale at each node, which is the default reducer for an
+    un-annotated field and the behaviour wanted -- grading narrows the set rather than
+    adding to it.
     """
 
     messages: Annotated[Sequence[BaseMessage], add_messages]
+    hits: NotRequired[list[RetrievedChunk]]
 
 
 def get_last_message(state) -> BaseMessage:
