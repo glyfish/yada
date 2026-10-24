@@ -83,6 +83,64 @@ PROGRAMMING_LANGUAGE_MAP = {
     ".xml": "xml",
     ".css": "css",
     ".txt": "text",
+    # Present in the store and promised by the extractor's `ext` description, but
+    # missing here until 2026-10-24 -- so they rendered as plaintext in a fenced block
+    # and no language name could resolve to them. `.ipynb` alone is 191,357 chunks,
+    # 46% of the index and its single largest extension.
+    ".ipynb": "json",
+    ".m": "objectivec",      # this store's .m is iOS, not MATLAB
+    ".mm": "objectivec",
+    ".erl": "erlang",
+    ".hrl": "erlang",
+    ".jl": "julia",
+    ".sol": "solidity",
+    ".pl": "perl",
+    ".tex": "latex",
+    ".zsh": "bash",
+    ".rst": "rst",
+    ".svg": "xml",
+    ".rake": "ruby",
+    ".gemspec": "ruby",
+}
+
+
+def _language_extensions() -> dict[str, tuple[str, ...]]:
+    """
+    Invert PROGRAMMING_LANGUAGE_MAP into language -> the extensions it covers.
+
+    Derived rather than written out so the two cannot disagree, which is the failure
+    the map's own gap just demonstrated. A language reaches every extension mapped to
+    it, so 'c' means .c and .h, and 'yaml' means .yaml and .yml.
+    """
+    out: dict[str, list[str]] = {}
+    for ext, language in PROGRAMMING_LANGUAGE_MAP.items():
+        out.setdefault(language, []).append(ext)
+    return {k: tuple(sorted(v)) for k, v in out.items()}
+
+
+#: Language name -> the stored extensions it means. Consulted only for a value with no
+#: leading dot: a dot says the caller is naming an extension literally, so `.c` is .c
+#: alone while `c` is the language and includes its headers.
+LANGUAGE_EXTENSIONS: dict[str, tuple[str, ...]] = {
+    **_language_extensions(),
+    # Names for a language that are not the map's own label for it. Every one of these
+    # is already promised by the extractor's `ext` field description; without them the
+    # description describes a mapping that does not exist.
+    "c++": _language_extensions()["cpp"],
+    "c#": _language_extensions()["csharp"],
+    "golang": _language_extensions()["go"],
+    "js": _language_extensions()["javascript"],
+    "ts": _language_extensions()["typescript"],
+    "shell": _language_extensions()["bash"],
+    "sh": _language_extensions()["bash"],
+    "yml": _language_extensions()["yaml"],
+    "objective-c": (".m", ".mm"),
+    "objectivec": (".m", ".mm"),
+    "objc": (".m", ".mm"),
+    "jupyter": (".ipynb",),
+    "notebook": (".ipynb",),
+    "notebooks": (".ipynb",),
+    "plaintext": (".txt",),
 }
 
 # SSE streaming status labels for agent tool/node events

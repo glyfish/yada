@@ -142,6 +142,41 @@ def test_extension_spelling_is_normalised(proposed):
     assert r.values == (".py",)
 
 
+@pytest.mark.parametrize("proposed,expected", [
+    ("Python", (".py",)),
+    ("python", (".py",)),
+    ("Jupyter", (".ipynb",)),
+    ("notebook", (".ipynb",)),
+])
+def test_a_language_name_resolves_to_its_extensions(proposed, expected):
+    """Nobody asks for '.rb' code; they ask for Ruby. Only the mappings the codebase
+    already specifies, so this is a lookup and never a guess."""
+    r = Vocabulary.resolve("github", "ext", proposed)
+    assert r.kind == "language"
+    assert r.values == expected
+
+
+def test_a_language_only_reaches_extensions_the_store_holds():
+    """C maps to .c and .h; this fixture holds neither, so it is a reportable miss
+    rather than a filter on values that are not there."""
+    assert Vocabulary.resolve("github", "ext", "C").kind == "none"
+
+
+def test_a_dot_means_the_extension_literally():
+    """
+    The one case where the two readings differ. The fixture has no .h, so use the
+    live-store shape: `c` is the language and takes headers, `.c` is that extension
+    alone. The dot is how a caller says which they meant.
+    """
+    Vocabulary._cache[("github", "ext")] = {".c": 10, ".h": 20, ".py": 5}
+    assert Vocabulary.resolve("github", "ext", "c").values == (".c", ".h")
+    assert Vocabulary.resolve("github", "ext", ".c").values == (".c",)
+
+
+def test_an_unmapped_language_is_a_miss_not_a_guess():
+    assert Vocabulary.resolve("github", "ext", "Brainfuck").kind == "none"
+
+
 @pytest.mark.parametrize("proposed", ["", NO_EXTENSION])
 def test_blank_extension_selects_files_without_one(proposed):
     """A blank ext means LICENSE and Makefile -- not 'every extension', which is omission."""

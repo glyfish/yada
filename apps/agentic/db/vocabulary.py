@@ -32,6 +32,7 @@ from sqlalchemy import MetaData, Table, create_engine, delete, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import Engine
 
+from apps.agentic.core.constants import LANGUAGE_EXTENSIONS
 from apps.core.environment import db_url as environment_db_url
 from lib.logger import get_logger
 
@@ -45,7 +46,7 @@ logger = get_logger("YADA")
 #: the files that have none.
 NO_EXTENSION = "(no extension)"
 
-ResolutionKind = Literal["exact", "alias", "substring", "empty", "none"]
+ResolutionKind = Literal["exact", "language", "alias", "substring", "empty", "none"]
 
 
 @dataclass(frozen=True)
@@ -91,6 +92,8 @@ class Resolution:
             return "exact"
         if self.kind == "empty":
             return "files with no extension"
+        if self.kind == "language":
+            return f"language {self.proposed!r} -> {', '.join(self.values)}"
         if self.kind == "none":
             return "no match"
         if self.alias_kind == "account":
@@ -286,14 +289,31 @@ class Vocabulary:
         if proposed in values:
             return Resolution(field, proposed, (proposed,), "exact", field_total=total)
 
-        # The leading dot and the case are spelling, not meaning: "py" and "PY" each name
-        # one extension, and letting either fall through to substring widens it to
-        # .ipynb, .py, .pyi and .pyx -- three wrong values outweighing the intended one.
-        # Normalise before widening.
         if field == "ext":
             folded = proposed.casefold()
-            folded = folded if folded.startswith(".") else f".{folded}"
-            matches = tuple(sorted(v for v in values if v.casefold() == folded))
+
+            # A language name, which is what a request actually contains -- nobody asks
+            # for ".rb" code, they ask for Ruby. Only the mappings the codebase already
+            # specifies, so this stays a lookup and never a guess, and intersected with
+            # what is stored so it cannot propose an extension the store lacks.
+            #
+            # Only without a leading dot. The dot says the caller means an extension
+            # literally, and the two readings differ where a language shares its name
+            # with one of its extensions: `.c` is .c alone, `c` is C and takes .h too.
+            if not folded.startswith("."):
+                mapped = LANGUAGE_EXTENSIONS.get(folded)
+                if mapped:
+                    present = tuple(e for e in mapped if e in values)
+                    if present:
+                        return Resolution(field, proposed, present, "language",
+                                          field_total=total)
+
+            # Otherwise the dot and the case are spelling, not meaning: "py" and "PY"
+            # each name one extension, and letting either fall through to substring
+            # widens it to .ipynb, .py, .pyi and .pyx -- three wrong values outweighing
+            # the intended one. Normalise before widening.
+            dotted = folded if folded.startswith(".") else f".{folded}"
+            matches = tuple(sorted(v for v in values if v.casefold() == dotted))
             if matches:
                 return Resolution(field, proposed, matches, "exact", field_total=total)
 
