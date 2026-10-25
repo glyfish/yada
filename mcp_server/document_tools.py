@@ -57,6 +57,24 @@ PUBLISHED_FILTERS: dict[str, tuple[str, ...]] = {
     RESEARCH_LIBRARY_DB_NAME: ("authors", "title", "shelf"),
 }
 
+#: What a describe REPORTS, which is not the same as what it accepts. `account` is not a
+#: filter -- `repo` takes an account name and the server classifies it -- but it is very
+#: much a fact about the store, and leaving it out of the output caused a real failure:
+#: asked for a table of account, project and size, a model got repo and size from here,
+#: had nothing for account, and filled the column from its own knowledge of GitHub --
+#: `quantopian` for pyalgotrade, `mementum` for backtrader. Every forked repository was
+#: attributed to its upstream owner instead of the account that actually holds it.
+REPORTED_FACETS: dict[str, tuple[str, ...]] = {
+    GITHUB_DB_NAME: ("account", "repo", "ext"),
+    RESEARCH_LIBRARY_DB_NAME: ("authors", "title", "shelf"),
+}
+
+#: Pairs reported as one facet, because a flat facet cannot express which values
+#: co-occur. Listing accounts and repositories separately says there are two accounts
+#: and 101 repositories but not which owns which, and a model asked for a pairing it
+#: cannot see will invent one rather than decline. 101 entries, one per repository.
+FACET_PAIRS: dict[str, tuple[str, str]] = {GITHUB_DB_NAME: ("account", "repo")}
+
 _agents: dict[str, ChromaRAGAgent] = {}
 
 
@@ -231,7 +249,19 @@ def _describe(store: str, proposed: dict[str, str | None], vocab_model) -> Any:
 
     base["filters_applied"] = resolved.applied
     documents, chunks = Vocabulary.counts(store, resolved.resolutions)
-    facets = Vocabulary.facets(store, resolved.resolutions, fields=PUBLISHED_FILTERS[store])
+    facets = Vocabulary.facets(store, resolved.resolutions, fields=REPORTED_FACETS[store])
+
+    pair = FACET_PAIRS.get(store)
+    if pair:
+        left, right = pair
+        combined: dict[str, int] = {}
+        for field_values, n, _ in Vocabulary.combinations(store, resolved.resolutions):
+            a, b = field_values.get(left), field_values.get(right)
+            if a and b:
+                combined[f"{a}/{b}"] = combined.get(f"{a}/{b}", 0) + n
+        if combined:
+            facets[f"{left}/{right}"] = dict(
+                sorted(combined.items(), key=lambda kv: (-kv[1], kv[0])))
 
     if chunks == 0:
         return vocab_model(**{**base, "status": "no_match",
@@ -241,6 +271,13 @@ def _describe(store: str, proposed: dict[str, str | None], vocab_model) -> Any:
 
 
 # ----------------------------------------------------------- generated descriptions
+
+def _account_values() -> str:
+    try:
+        return " and ".join(sorted(Vocabulary.values(GITHUB_DB_NAME, "account")))
+    except Exception:
+        return "troystribling and glyfish"
+
 
 def _shelf_values() -> str:
     try:
@@ -322,8 +359,13 @@ def register(server) -> None:
     server.add_tool(
         describe_code, name="describe_code",
         description=(
-            "What the code repositories contain: repositories, file types and counts, "
-            "under any filters given. No file contents. "
+            "What the code repositories contain: accounts, repositories, file types and "
+            "counts, under any filters given. No file contents.\n"
+            f"Facets include 'account/repo', which pairs every repository with the "
+            f"account that holds it -- the only accounts are {_account_values()}. Many "
+            "repositories are forks, so the account here is who holds this copy, not "
+            "whoever originally published the project; use this facet rather than "
+            "assuming, since the two differ often.\n"
             "describe_code(repo='zgomot') answers 'what is this repository written in'. "
             "Call it before search_code when a name or language is uncertain."),
     )
