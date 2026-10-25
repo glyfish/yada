@@ -24,11 +24,12 @@ See sefer/planning/yada-document-mcp-design.md §4 and §5.
 from __future__ import annotations
 
 import re
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Iterable, Literal, Mapping, Sequence
 
-from sqlalchemy import MetaData, Table, create_engine, delete, select, text
+from sqlalchemy import MetaData, Table, and_, create_engine, delete, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import Engine
 
@@ -176,6 +177,7 @@ class Vocabulary:
     _values: Table | None = None
     _alias: Table | None = None
     _scan: Table | None = None
+    _combination: Table | None = None
     _cache: dict[tuple[str, str], dict[str, int]] = {}
     _alias_cache: dict[tuple[str, str], dict[str, tuple[tuple[str, ...], str]]] = {}
 
@@ -187,10 +189,12 @@ class Vocabulary:
         cls._engine = create_engine(resolved, pool_pre_ping=True)
         metadata = MetaData()
         metadata.reflect(bind=cls._engine, only=[
-            "document_vocabulary", "document_vocabulary_alias", "document_vocabulary_scan"])
+            "document_vocabulary", "document_vocabulary_alias", "document_vocabulary_scan",
+            "document_vocabulary_combination"])
         cls._values = metadata.tables["document_vocabulary"]
         cls._alias = metadata.tables["document_vocabulary_alias"]
         cls._scan = metadata.tables["document_vocabulary_scan"]
+        cls._combination = metadata.tables["document_vocabulary_combination"]
         cls._cache.clear()
         cls._alias_cache.clear()
         logger.info(f"Vocabulary initialized against {resolved}")
@@ -369,6 +373,68 @@ class Vocabulary:
         ordered = sorted(values, key=lambda v: (-values[v], v))
         return [NO_EXTENSION if v == "" else v for v in ordered[:limit]]
 
+    # ------------------------------------------------- the filtered subset (0003)
+
+    @classmethod
+    def combinations(cls, store: str,
+                     resolutions: Sequence[Resolution] = ()) -> list[tuple[dict, int, int]]:
+        """
+        The (values, chunks, documents) rows matching a resolved filter set.
+
+        Fetched whole and aggregated in Python rather than one GROUP BY per field: a
+        store is at most 961 rows, so one round trip beats several, and the caller
+        usually wants every field's breakdown at once.
+        """
+        k = cls._combination
+        assert k is not None
+        conditions = [k.c.store == store]
+        for r in resolutions:
+            field = r.applied_field or r.field
+            values = r.applied_values or r.values
+            if not values:
+                continue
+            if len(values) == 1:
+                conditions.append(k.c.field_values.contains({field: values[0]}))
+            else:
+                conditions.append(k.c.field_values[field].astext.in_(list(values)))
+        with cls._engine_or_raise().connect() as conn:
+            rows = conn.execute(
+                select(k.c.field_values, k.c.chunks, k.c.documents).where(and_(*conditions))
+            ).fetchall()
+        return [(v, int(c), int(d)) for v, c, d in rows]
+
+    @classmethod
+    def facets(cls, store: str, resolutions: Sequence[Resolution] = (),
+               fields: Sequence[str] | None = None) -> dict[str, dict[str, int]]:
+        """
+        {field: {value: chunks}} over the filtered subset.
+
+        This is the whole reason the combination table exists. Built from the marginal
+        counts instead, ``describe_code(repo="zgomot")`` would return the store-wide
+        extension histogram -- right shape, right counts, wrong question, and plausible
+        enough to be cited.
+        """
+        out: dict[str, Counter[str]] = defaultdict(Counter)
+        for values, chunks, _ in cls.combinations(store, resolutions):
+            for field, value in values.items():
+                if fields is not None and field not in fields:
+                    continue
+                out[field][NO_EXTENSION if field == "ext" and value == "" else value] += chunks
+        return {f: dict(sorted(c.items(), key=lambda kv: (-kv[1], kv[0]))) for f, c in out.items()}
+
+    @classmethod
+    def counts(cls, store: str, resolutions: Sequence[Resolution] = ()) -> tuple[int, int]:
+        """
+        (documents, chunks) over the filtered subset.
+
+        Summing ``documents`` across rows does not double-count: every chunk of a file
+        carries the same repo, ext and account, so a file belongs to exactly one
+        combination -- as does a library document, whose shelf, authors and title are
+        fixed while only its section varies.
+        """
+        rows = cls.combinations(store, resolutions)
+        return sum(d for _, _, d in rows), sum(c for _, c, _ in rows)
+
     @classmethod
     def prompt_block(cls, store: str, fields: Sequence[str], max_values: int = 120) -> str:
         """
@@ -418,6 +484,7 @@ class Vocabulary:
         values: Mapping[str, Mapping[str, int]],
         field_chunks: Mapping[str, int],
         aliases: Iterable[tuple[str, str, str, str]] = (),
+        combinations: Iterable[tuple[dict[str, str], int, int]] = (),
     ) -> None:
         """
         Replace one store's vocabulary in a single transaction.
@@ -426,11 +493,18 @@ class Vocabulary:
         would resolve some values and not others, which is the silent-partial-failure
         this design exists to remove.
         """
-        v, a, s = cls._values, cls._alias, cls._scan
-        assert v is not None and a is not None and s is not None
+        v, a, s, k = cls._values, cls._alias, cls._scan, cls._combination
+        assert v is not None and a is not None and s is not None and k is not None
         with cls._engine_or_raise().begin() as conn:
             conn.execute(delete(v).where(v.c.store == store))
             conn.execute(delete(a).where(a.c.store == store))
+            conn.execute(delete(k).where(k.c.store == store))
+            combination_rows = [
+                {"store": store, "field_values": vals, "chunks": n, "documents": docs}
+                for vals, n, docs in combinations if n > 0 and docs > 0
+            ]
+            if combination_rows:
+                conn.execute(k.insert(), combination_rows)
             rows = [
                 {"store": store, "field": f, "value": val, "chunks": n,
                  "field_chunks": field_chunks.get(f, 0)}
@@ -456,4 +530,4 @@ class Vocabulary:
         cls._cache = {k: val for k, val in cls._cache.items() if k[0] != store}
         cls._alias_cache = {k: val for k, val in cls._alias_cache.items() if k[0] != store}
         logger.info(f"Vocabulary for {store}: {len(rows)} values, {len(alias_rows)} aliases, "
-                    f"{chunks:,} chunks")
+                    f"{len(combination_rows)} combinations, {chunks:,} chunks")

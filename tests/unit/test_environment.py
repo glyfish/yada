@@ -54,4 +54,4 @@ def test_code_head_is_the_newest_migration():
     fails to chain onto the head, which otherwise shows up only as verify_database
     refusing to start against a database that is in fact migrated.
     """
-    assert alembic_head() == "0002"
+    assert alembic_head() == "0003"

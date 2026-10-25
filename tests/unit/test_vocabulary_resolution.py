@@ -237,3 +237,73 @@ def test_one_unresolvable_value_blocks_the_whole_search():
 def test_account_and_extension_conjoin_on_different_fields():
     f = Vocabulary.resolve_filters("github", {"repo": "glyfish", "ext": ".py"})
     assert f.where == {"$and": [{"account": "glyfish"}, {"ext": ".py"}]}
+
+
+# ------------------------------------------------- the filtered subset (0003)
+
+#: Shaped like the live rows, one per distinct (account, repo, ext) tuple.
+COMBINATIONS = [
+    ({"account": "troystribling", "repo": "zgomot", "ext": ".rb"}, 284, 55),
+    ({"account": "troystribling", "repo": "zgomot", "ext": ".rdoc"}, 66, 9),
+    ({"account": "troystribling", "repo": "zgomot", "ext": ""}, 18, 8),
+    ({"account": "glyfish", "repo": "alef", "ext": ".py"}, 9_000, 120),
+    ({"account": "glyfish", "repo": "alef", "ext": ".ipynb"}, 50_000, 300),
+]
+
+
+@pytest.fixture
+def combinations(monkeypatch):
+    """Serve the rows without a database; the SQL is exercised against the live store."""
+    def fake(cls, store, resolutions=()):
+        rows = COMBINATIONS
+        for r in resolutions:
+            field = r.applied_field or r.field
+            values = r.applied_values or r.values
+            rows = [row for row in rows if row[0].get(field) in values]
+        return rows
+    monkeypatch.setattr(Vocabulary, "combinations", classmethod(fake))
+
+
+def test_a_filtered_describe_is_not_the_store_wide_histogram(combinations):
+    """
+    The failure this table exists to prevent. Built from marginals,
+    describe_code(repo="zgomot") returns every extension in the store -- right shape,
+    right counts, wrong question, and plausible enough that a model will cite it. The
+    only way to notice is to already know zgomot is Ruby.
+    """
+    zgomot = Vocabulary.resolve("github", "repo", "zgomot")
+    facets = Vocabulary.facets("github", [zgomot], fields=["ext"])
+
+    assert set(facets["ext"]) == {".rb", ".rdoc", NO_EXTENSION}   # not .py, not .ipynb
+    assert facets["ext"][".rb"] == 284
+    assert max(facets["ext"], key=facets["ext"].get) == ".rb"     # Ruby, as it should be
+
+
+def test_filtered_facets_sum_to_the_marginal(combinations):
+    """The cross-check that catches a joint count served as a marginal, or the reverse."""
+    zgomot = Vocabulary.resolve("github", "repo", "zgomot")
+    facets = Vocabulary.facets("github", [zgomot], fields=["ext"])
+    _, chunks = Vocabulary.counts("github", [zgomot])
+    assert sum(facets["ext"].values()) == chunks == 284 + 66 + 18
+
+
+def test_counts_separate_documents_from_chunks(combinations):
+    documents, chunks = Vocabulary.counts("github", [Vocabulary.resolve("github", "repo", "zgomot")])
+    assert (documents, chunks) == (55 + 9 + 8, 284 + 66 + 18)
+
+
+def test_an_account_alias_filters_on_the_account_field(combinations):
+    """resolve() moved the filter to `account`, so the rows must be matched there."""
+    glyfish = Vocabulary.resolve("github", "repo", "glyfish")
+    assert glyfish.applied_field == "account"
+    documents, chunks = Vocabulary.counts("github", [glyfish])
+    assert (documents, chunks) == (420, 59_000)
+
+
+def test_facets_name_the_blank_extension(combinations):
+    facets = Vocabulary.facets("github", [Vocabulary.resolve("github", "repo", "zgomot")])
+    assert NO_EXTENSION in facets["ext"] and "" not in facets["ext"]
+
+
+def test_unfiltered_facets_cover_the_whole_store(combinations):
+    assert Vocabulary.counts("github") == (492, 59_368)

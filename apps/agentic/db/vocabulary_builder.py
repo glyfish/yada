@@ -122,6 +122,11 @@ def rebuild(store: str) -> dict[str, int]:
     counts: dict[str, Counter[str]] = {f: Counter() for f in fields}
     present: Counter[str] = Counter()
     repo_accounts: dict[str, set[str]] = defaultdict(set)
+    # One entry per distinct tuple of this store's fields -> [chunks, {file paths}].
+    # Accumulated in the pass already being made, because the pass is the expensive
+    # part: 33.5 s for github, and a second one would double it for counts that are
+    # already streaming past.
+    combinations: dict[tuple[tuple[str, str], ...], list] = defaultdict(lambda: [0, set()])
     chunks = 0
 
     for metadata in iter_metadatas(collection):
@@ -137,6 +142,11 @@ def rebuild(store: str) -> dict[str, int]:
             if repo and account:
                 repo_accounts[str(repo)].add(str(account))
 
+        key = tuple((f, str(metadata.get(f))) for f in fields if metadata.get(f) is not None)
+        entry = combinations[key]
+        entry[0] += 1
+        entry[1].add(metadata.get("path"))
+
     Vocabulary.replace_store(
         store=store,
         collection=STORE_COLLECTIONS[store],
@@ -144,8 +154,9 @@ def rebuild(store: str) -> dict[str, int]:
         values={f: dict(c) for f, c in counts.items()},
         field_chunks=dict(present),
         aliases=_aliases_for(store, counts, repo_accounts),
+        combinations=[(dict(k), n, len(paths)) for k, (n, paths) in combinations.items()],
     )
-    return {f: len(c) for f, c in counts.items()}
+    return {f: len(c) for f, c in counts.items()} | {"combinations": len(combinations)}
 
 
 def is_stale(store: str) -> bool:
