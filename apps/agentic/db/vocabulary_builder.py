@@ -12,7 +12,7 @@ research_library. That cost is why the result is persisted rather than computed 
 from __future__ import annotations
 
 import os
-from collections import Counter, defaultdict
+from collections import defaultdict
 from typing import Any, Iterator, Mapping
 
 import chromadb
@@ -24,7 +24,7 @@ from apps.agentic.core.constants import (
     RESEARCH_LIBRARY_COLLECTION_NAME,
     RESEARCH_LIBRARY_DB_NAME,
 )
-from apps.agentic.db.vocabulary import Vocabulary, split_authors, surname
+from apps.agentic.db.vocabulary import Vocabulary
 from lib.logger import get_logger
 
 logger = get_logger("YADA")
@@ -76,39 +76,6 @@ def iter_metadatas(collection: Any, page: int = _PAGE) -> Iterator[Mapping[str, 
         offset += len(metadatas)
 
 
-def _aliases_for(store: str, values: Mapping[str, Mapping[str, int]],
-                 repo_accounts: Mapping[str, set[str]]) -> list[tuple[str, str, str, str]]:
-    """
-    (field, alias, value, kind) rows -- the names a caller is likely to use that are not
-    themselves stored values.
-
-    Two cases, both drawn from observed failures:
-
-    surname   'Matthaeus' is not a stored value; the stored value is the whole author
-              list, 'Troy Stribling, William H. Matthaeus'. Substring would also find it,
-              but by characters rather than by name -- surname 'Ng' is a substring of
-              'Young'. Token-exact first, substring only as a fallback.
-
-    account   'glyfish' is not a repo and shares no characters with most of its repos, so
-              substring cannot reach them. The alias is how an account name resolves to
-              the repositories it holds.
-    """
-    rows: list[tuple[str, str, str, str]] = []
-    if store == RESEARCH_LIBRARY_DB_NAME:
-        seen: set[tuple[str, str]] = set()
-        for value in values.get("authors", {}):
-            for name in split_authors(value):
-                key = (surname(name), value)
-                if key not in seen:
-                    seen.add(key)
-                    rows.append(("authors", key[0], value, "surname"))
-    if store == GITHUB_DB_NAME:
-        for repo, accounts in repo_accounts.items():
-            for account in accounts:
-                rows.append(("repo", account, repo, "account"))
-    return rows
-
-
 def rebuild(store: str) -> dict[str, int]:
     """
     Rescan one store and replace its vocabulary. Returns {field: distinct values}.
@@ -119,29 +86,15 @@ def rebuild(store: str) -> dict[str, int]:
     fields = STORE_FIELDS[store]
     collection = open_collection(store)
 
-    counts: dict[str, Counter[str]] = {f: Counter() for f in fields}
-    present: Counter[str] = Counter()
-    repo_accounts: dict[str, set[str]] = defaultdict(set)
     # One entry per distinct tuple of this store's fields -> [chunks, {file paths}].
-    # Accumulated in the pass already being made, because the pass is the expensive
-    # part: 33.5 s for github, and a second one would double it for counts that are
-    # already streaming past.
+    # This is the whole output: marginals, coverage and aliases are all derived from it
+    # at read time (see Vocabulary.values / .aliases / .coverage), so there is one write
+    # path and nothing that can fall out of step with anything else.
     combinations: dict[tuple[tuple[str, str], ...], list] = defaultdict(lambda: [0, set()])
     chunks = 0
 
     for metadata in iter_metadatas(collection):
         chunks += 1
-        for field in fields:
-            value = metadata.get(field)
-            if value is None:
-                continue
-            counts[field][str(value)] += 1
-            present[field] += 1
-        if store == GITHUB_DB_NAME:
-            repo, account = metadata.get("repo"), metadata.get("account")
-            if repo and account:
-                repo_accounts[str(repo)].add(str(account))
-
         key = tuple((f, str(metadata.get(f))) for f in fields if metadata.get(f) is not None)
         entry = combinations[key]
         entry[0] += 1
@@ -151,12 +104,9 @@ def rebuild(store: str) -> dict[str, int]:
         store=store,
         collection=STORE_COLLECTIONS[store],
         chunks=chunks,
-        values={f: dict(c) for f, c in counts.items()},
-        field_chunks=dict(present),
-        aliases=_aliases_for(store, counts, repo_accounts),
         combinations=[(dict(k), n, len(paths)) for k, (n, paths) in combinations.items()],
     )
-    return {f: len(c) for f, c in counts.items()} | {"combinations": len(combinations)}
+    return {"combinations": len(combinations), "chunks": chunks}
 
 
 def is_stale(store: str) -> bool:

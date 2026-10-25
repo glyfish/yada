@@ -29,7 +29,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Iterable, Literal, Mapping, Sequence
 
-from sqlalchemy import MetaData, Table, and_, create_engine, delete, select, text
+from sqlalchemy import MetaData, Table, create_engine, delete, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import Engine
 
@@ -46,6 +46,11 @@ logger = get_logger("YADA")
 #: what is absent: omitting ``ext`` searches every extension, passing this searches only
 #: the files that have none.
 NO_EXTENSION = "(no extension)"
+
+#: The field whose values are whole author lists, so a surname resolves against them.
+_SURNAME_FIELD = "authors"
+#: The field an account name stands in for: `repo="glyfish"` names an account.
+_ACCOUNT_OF = "repo"
 
 ResolutionKind = Literal["exact", "language", "alias", "substring", "empty", "none"]
 
@@ -166,18 +171,20 @@ def split_authors(value: str) -> list[str]:
 
 class Vocabulary:
     """
-    Reads the vocabulary tables and resolves proposed filter values against them.
+    Reads the vocabulary and resolves proposed filter values against it.
 
-    Initialized once at startup via ``Vocabulary.initialize()``. Rows are loaded
-    lazily per (store, field) and cached in process; the tables are small enough that
-    a whole store is a few hundred rows.
+    Initialized once at startup via ``Vocabulary.initialize()``. One table is read --
+    the per-combination rows, at most 961 for a store -- and the marginals, the aliases
+    and the coverage figures are all derived from it and memoised. They used to be
+    tables of their own, which meant two write paths producing counts that had to agree;
+    deriving them means there is nothing to keep in step.
     """
 
     _engine: Engine | None = None
-    _values: Table | None = None
-    _alias: Table | None = None
     _scan: Table | None = None
     _combination: Table | None = None
+    #: The one table read; everything else is derived from it and memoised below.
+    _rows_cache: dict[str, list[tuple[dict, int, int]]] = {}
     _cache: dict[tuple[str, str], dict[str, int]] = {}
     _alias_cache: dict[tuple[str, str], dict[str, tuple[tuple[str, ...], str]]] = {}
 
@@ -189,12 +196,10 @@ class Vocabulary:
         cls._engine = create_engine(resolved, pool_pre_ping=True)
         metadata = MetaData()
         metadata.reflect(bind=cls._engine, only=[
-            "document_vocabulary", "document_vocabulary_alias", "document_vocabulary_scan",
-            "document_vocabulary_combination"])
-        cls._values = metadata.tables["document_vocabulary"]
-        cls._alias = metadata.tables["document_vocabulary_alias"]
+            "document_vocabulary_scan", "document_vocabulary_combination"])
         cls._scan = metadata.tables["document_vocabulary_scan"]
         cls._combination = metadata.tables["document_vocabulary_combination"]
+        cls._rows_cache.clear()
         cls._cache.clear()
         cls._alias_cache.clear()
         logger.info(f"Vocabulary initialized against {resolved}")
@@ -208,35 +213,70 @@ class Vocabulary:
     # ------------------------------------------------------------------- reads
 
     @classmethod
+    def rows(cls, store: str) -> list[tuple[dict, int, int]]:
+        """
+        Every combination row for a store, read once per process.
+
+        One read serves resolution, the generated descriptions and every describe call:
+        a store is at most 961 rows, so holding them beats a query per question. This is
+        the single source the other reads derive from -- the marginals and aliases used
+        to be tables, which meant two write paths producing counts that had to agree.
+        """
+        if store not in cls._rows_cache:
+            k = cls._combination
+            assert k is not None
+            with cls._engine_or_raise().connect() as conn:
+                fetched = conn.execute(
+                    select(k.c.field_values, k.c.chunks, k.c.documents).where(k.c.store == store)
+                ).fetchall()
+            cls._rows_cache[store] = [(v, int(c), int(d)) for v, c, d in fetched]
+        return cls._rows_cache[store]
+
+    @classmethod
     def values(cls, store: str, field: str) -> dict[str, int]:
-        """{value: chunk count} for one field, cached in process."""
+        """{value: chunk count} for one field, summed over the combinations holding it."""
         key = (store, field)
         if key not in cls._cache:
-            t = cls._values
-            assert t is not None
-            with cls._engine_or_raise().connect() as conn:
-                rows = conn.execute(
-                    select(t.c.value, t.c.chunks).where(t.c.store == store, t.c.field == field)
-                ).fetchall()
-            cls._cache[key] = {v: n for v, n in rows}
+            counts: Counter[str] = Counter()
+            for field_values, chunks, _ in cls.rows(store):
+                if field in field_values:
+                    counts[field_values[field]] += chunks
+            cls._cache[key] = dict(counts)
         return cls._cache[key]
 
     @classmethod
     def aliases(cls, store: str, field: str) -> dict[str, tuple[tuple[str, ...], str]]:
-        """{alias: ((values it reaches), kind)} -- surnames, and accounts for ``repo``."""
+        """
+        {alias: ((values it reaches), kind)} -- the names a caller uses that are not
+        themselves stored values.
+
+        Derived rather than stored, from the same two rules that used to populate the
+        alias table. Both are pure functions of the combinations, so there is nothing to
+        keep in sync; ``kind`` is implicit in which rule produced the entry, where it was
+        previously a column with a CHECK constraint.
+        """
         key = (store, field)
         if key not in cls._alias_cache:
-            t = cls._alias
-            assert t is not None
-            with cls._engine_or_raise().connect() as conn:
-                rows = conn.execute(
-                    select(t.c.alias, t.c.value, t.c.kind)
-                    .where(t.c.store == store, t.c.field == field)
-                ).fetchall()
-            out: dict[str, tuple[list[str], str]] = {}
-            for alias, value, kind in rows:
-                out.setdefault(alias, ([], kind))[0].append(value)
-            cls._alias_cache[key] = {k: (tuple(sorted(v)), kind) for k, (v, kind) in out.items()}
+            out: dict[str, tuple[set[str], str]] = {}
+
+            # A surname is not a stored value -- the stored value is the whole author
+            # list -- and it unifies that person's spellings. Token-exact, so it beats
+            # the substring fallback, under which 'Ng' would match 'Young'.
+            if field == _SURNAME_FIELD:
+                for value in cls.values(store, field):
+                    for name in split_authors(value):
+                        out.setdefault(surname(name), (set(), "surname"))[0].add(value)
+
+            # An account shares no characters with most of its repositories, so substring
+            # cannot reach them. Both keys are on every github row, so the mapping is
+            # just a projection of the combinations.
+            if field == _ACCOUNT_OF:
+                for field_values, _, _ in cls.rows(store):
+                    account, repo = field_values.get("account"), field_values.get(field)
+                    if account and repo:
+                        out.setdefault(account, (set(), "account"))[0].add(repo)
+
+            cls._alias_cache[key] = {a: (tuple(sorted(v)), kind) for a, (v, kind) in out.items()}
         return cls._alias_cache[key]
 
     @classmethod
@@ -246,14 +286,8 @@ class Vocabulary:
         A field below the store total is partial, and a filter on it silently excludes
         the chunks that lack it -- so a generated description has to say so.
         """
-        t, s = cls._values, cls._scan
-        assert t is not None and s is not None
-        with cls._engine_or_raise().connect() as conn:
-            field_chunks = conn.execute(
-                select(t.c.field_chunks).where(t.c.store == store, t.c.field == field).limit(1)
-            ).scalar()
-            total = conn.execute(select(s.c.chunks).where(s.c.store == store)).scalar()
-        return int(field_chunks or 0), int(total or 0)
+        rows = cls.rows(store)
+        return (sum(c for fv, c, _ in rows if field in fv), sum(c for _, c, _ in rows))
 
     @classmethod
     def scan_info(cls, store: str) -> tuple[str, int, datetime] | None:
@@ -381,27 +415,18 @@ class Vocabulary:
         """
         The (values, chunks, documents) rows matching a resolved filter set.
 
-        Fetched whole and aggregated in Python rather than one GROUP BY per field: a
-        store is at most 961 rows, so one round trip beats several, and the caller
-        usually wants every field's breakdown at once.
+        Filtered in memory from the one cached read. A store is at most 961 rows, so a
+        scan costs microseconds and a describe does no database work at all after the
+        first call -- against 3.8 s to ask Chroma the same question.
         """
-        k = cls._combination
-        assert k is not None
-        conditions = [k.c.store == store]
+        rows = cls.rows(store)
         for r in resolutions:
             field = r.applied_field or r.field
-            values = r.applied_values or r.values
+            values = set(r.applied_values or r.values)
             if not values:
                 continue
-            if len(values) == 1:
-                conditions.append(k.c.field_values.contains({field: values[0]}))
-            else:
-                conditions.append(k.c.field_values[field].astext.in_(list(values)))
-        with cls._engine_or_raise().connect() as conn:
-            rows = conn.execute(
-                select(k.c.field_values, k.c.chunks, k.c.documents).where(and_(*conditions))
-            ).fetchall()
-        return [(v, int(c), int(d)) for v, c, d in rows]
+            rows = [row for row in rows if row[0].get(field) in values]
+        return rows
 
     @classmethod
     def facets(cls, store: str, resolutions: Sequence[Resolution] = (),
@@ -481,9 +506,6 @@ class Vocabulary:
         store: str,
         collection: str,
         chunks: int,
-        values: Mapping[str, Mapping[str, int]],
-        field_chunks: Mapping[str, int],
-        aliases: Iterable[tuple[str, str, str, str]] = (),
         combinations: Iterable[tuple[dict[str, str], int, int]] = (),
     ) -> None:
         """
@@ -493,31 +515,16 @@ class Vocabulary:
         would resolve some values and not others, which is the silent-partial-failure
         this design exists to remove.
         """
-        v, a, s, k = cls._values, cls._alias, cls._scan, cls._combination
-        assert v is not None and a is not None and s is not None and k is not None
+        s, k = cls._scan, cls._combination
+        assert s is not None and k is not None
         with cls._engine_or_raise().begin() as conn:
-            conn.execute(delete(v).where(v.c.store == store))
-            conn.execute(delete(a).where(a.c.store == store))
             conn.execute(delete(k).where(k.c.store == store))
-            combination_rows = [
-                {"store": store, "field_values": vals, "chunks": n, "documents": docs}
-                for vals, n, docs in combinations if n > 0 and docs > 0
-            ]
-            if combination_rows:
-                conn.execute(k.insert(), combination_rows)
             rows = [
-                {"store": store, "field": f, "value": val, "chunks": n,
-                 "field_chunks": field_chunks.get(f, 0)}
-                for f, vals in values.items() for val, n in vals.items() if n > 0
+                {"store": store, "field_values": field_values, "chunks": n, "documents": docs}
+                for field_values, n, docs in combinations if n > 0 and docs > 0
             ]
             if rows:
-                conn.execute(v.insert(), rows)
-            alias_rows = [
-                {"store": store, "field": f, "alias": al, "value": val, "kind": kind}
-                for f, al, val, kind in aliases
-            ]
-            if alias_rows:
-                conn.execute(a.insert(), alias_rows)
+                conn.execute(k.insert(), rows)
             conn.execute(
                 insert(s)
                 .values(store=store, collection=collection, chunks=chunks,
@@ -527,7 +534,7 @@ class Vocabulary:
                     set_={"collection": collection, "chunks": chunks, "built_at": text("now()")},
                 )
             )
-        cls._cache = {k: val for k, val in cls._cache.items() if k[0] != store}
-        cls._alias_cache = {k: val for k, val in cls._alias_cache.items() if k[0] != store}
-        logger.info(f"Vocabulary for {store}: {len(rows)} values, {len(alias_rows)} aliases, "
-                    f"{len(combination_rows)} combinations, {chunks:,} chunks")
+        cls._rows_cache.pop(store, None)
+        cls._cache = {key: v for key, v in cls._cache.items() if key[0] != store}
+        cls._alias_cache = {key: v for key, v in cls._alias_cache.items() if key[0] != store}
+        logger.info(f"Vocabulary for {store}: {len(rows)} combinations, {chunks:,} chunks")
