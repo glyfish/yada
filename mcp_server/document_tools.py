@@ -28,6 +28,7 @@ See sefer/planning/yada-document-mcp-design.md.
 
 from __future__ import annotations
 
+from time import perf_counter
 from typing import Any
 
 from apps.agentic.core.agents.chroma_rag_agent import ChromaRAGAgent, SearchOutcome
@@ -128,6 +129,40 @@ def _facets_of(chunks, fields: tuple[str, ...]) -> dict[str, dict[str, int]]:
 
 def _store_is_built(store: str) -> bool:
     return Vocabulary.scan_info(store) is not None
+
+
+def _log_request(tool: str, arguments: dict) -> float:
+    """
+    Record what a client actually asked for, and return a start time.
+
+    Nothing logged a tool call before this: a describe left no trace at all, and a
+    search logged only the retriever's own line, so the tool, its arguments and the
+    status it returned were invisible. For a design whose subject is the gap between
+    what was requested and what ran, that is the one thing the log has to show -- and
+    when a client sends something surprising, this is the only record of it.
+    """
+    shown = " ".join(f"{k}={v!r}" for k, v in arguments.items() if v is not None) or "(no arguments)"
+    logger.info(f"{tool} <- {shown}")
+    return perf_counter()
+
+
+def _log_outcome(tool: str, started: float, result: Any) -> Any:
+    """Log what the call returned, and hand the result straight back."""
+    elapsed = perf_counter() - started
+    parts = [f"{tool} -> {result.status} in {elapsed:.2f}s"]
+    if result.filters_applied:
+        parts.append(f"applied={result.filters_applied}")
+    if result.filters_resolved:
+        parts.append(f"resolved={result.filters_resolved}")
+    if getattr(result, "hits", None) is not None:
+        parts.append(f"{len(result.hits)} hits of {result.retrieved} retrieved, "
+                     f"best={result.best_score}")
+    elif getattr(result, "chunks", None):
+        parts.append(f"{result.documents:,} documents / {result.chunks:,} chunks")
+    if result.detail:
+        parts.append(result.detail)
+    logger.info(" | ".join(parts))
+    return result
 
 
 def _search(store: str, query: str, proposed: dict[str, str | None], limit: int,
@@ -321,24 +356,37 @@ def register(server) -> None:
 
     def search_code(query: str, repo: str | None = None, ext: str | None = None,
                     limit: int = 10) -> CodeHits:
-        return _search(GITHUB_DB_NAME, query, {"repo": repo, "ext": ext}, limit,
-                       CodeHits, GithubMeta)
+        started = _log_request("search_code",
+                               {"query": query, "repo": repo, "ext": ext, "limit": limit})
+        return _log_outcome("search_code", started,
+                            _search(GITHUB_DB_NAME, query, {"repo": repo, "ext": ext},
+                                    limit, CodeHits, GithubMeta))
 
     def describe_code(repo: str | None = None, ext: str | None = None) -> CodeVocabulary:
-        return _describe(GITHUB_DB_NAME, {"repo": repo, "ext": ext}, CodeVocabulary)
+        started = _log_request("describe_code", {"repo": repo, "ext": ext})
+        return _log_outcome("describe_code", started,
+                            _describe(GITHUB_DB_NAME, {"repo": repo, "ext": ext},
+                                      CodeVocabulary))
 
     def search_research_library(query: str, authors: str | None = None,
                                 title: str | None = None, shelf: str | None = None,
                                 limit: int = 10) -> LibraryHits:
-        return _search(RESEARCH_LIBRARY_DB_NAME, query,
-                       {"authors": authors, "title": title, "shelf": shelf}, limit,
-                       LibraryHits, LibraryMeta)
+        started = _log_request("search_research_library",
+                               {"query": query, "authors": authors, "title": title,
+                                "shelf": shelf, "limit": limit})
+        return _log_outcome("search_research_library", started,
+                            _search(RESEARCH_LIBRARY_DB_NAME, query,
+                                    {"authors": authors, "title": title, "shelf": shelf},
+                                    limit, LibraryHits, LibraryMeta))
 
     def describe_research_library(authors: str | None = None, title: str | None = None,
                                   shelf: str | None = None) -> LibraryVocabulary:
-        return _describe(RESEARCH_LIBRARY_DB_NAME,
-                         {"authors": authors, "title": title, "shelf": shelf},
-                         LibraryVocabulary)
+        started = _log_request("describe_research_library",
+                               {"authors": authors, "title": title, "shelf": shelf})
+        return _log_outcome("describe_research_library", started,
+                            _describe(RESEARCH_LIBRARY_DB_NAME,
+                                      {"authors": authors, "title": title, "shelf": shelf},
+                                      LibraryVocabulary))
 
     server.add_tool(
         search_code, name="search_code",
