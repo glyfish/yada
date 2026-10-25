@@ -84,7 +84,7 @@ class ResearchLibraryAgent(FileChromaRAGAgent):
     async def create(cls, query=None) -> "ResearchLibraryAgent":
         return cls(query)
 
-    def __init__(self, query):
+    def __init__(self, query, widen_on_empty: bool = True):
         tool_name = "research_note_agent_tool"
         tool_description = """
             Research Note Retriever
@@ -95,7 +95,8 @@ class ResearchLibraryAgent(FileChromaRAGAgent):
             research documents.
             """
 
-        super().__init__(tool_name, tool_description, ResearchLibraryChromaDocumentLoader(), query)
+        super().__init__(tool_name, tool_description, ResearchLibraryChromaDocumentLoader(), query,
+                         widen_on_empty=widen_on_empty)
 
         self._generate_prompt = ChatPromptTemplate.from_messages([("human", """
             You are an expert assistant answering questions about Troy Stribling's research library.

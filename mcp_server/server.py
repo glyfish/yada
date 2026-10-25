@@ -89,6 +89,7 @@ from apps.agentic.db.report_cache import ReportCache  # noqa: E402
 from apps.agentic.db.series_cache import SeriesCache  # noqa: E402
 from apps.agentic.db.vocabulary import Vocabulary  # noqa: E402
 from apps.core.environment import current_environment, verify_database  # noqa: E402
+from mcp_server.document_tools import register as register_document_tools  # noqa: E402
 from mcp_server.plot_app import HTML as PLOT_APP_HTML, meta_for  # noqa: E402
 
 from lib.logger import get_logger  # noqa: E402
@@ -311,6 +312,14 @@ async def plot_report(report_id_or_title: str) -> list[TextContent | ImageConten
 
 
 server = MCPServer("yada", version=VERSION, extensions=[apps])
+
+# After the server exists, not before -- the opposite of the @apps.tool rule above,
+# which has to be earlier because MCPServer collects extension tools at construction.
+# These are registered with add_tool because their descriptions are generated from the
+# vocabulary, and a decorator takes a literal. Needs the database, so initialize first;
+# that is a Postgres connect and a reflect, with no Chroma scan.
+_initialize()
+register_document_tools(server)
 
 
 def run() -> None:

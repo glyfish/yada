@@ -49,7 +49,7 @@ class CodeRepoAgent(FileChromaRAGAgent):
     async def create(cls, query=None) -> "CodeRepoAgent":
         return cls(query)
 
-    def __init__(self, query):
+    def __init__(self, query, widen_on_empty: bool = True):
         tool_name = "github_agent_tool"
         
         tool_description = (
@@ -60,7 +60,8 @@ class CodeRepoAgent(FileChromaRAGAgent):
             "Use this for any query about 'my code', 'my repo(s)', or requests for specific files/functions."
         )
 
-        super().__init__(tool_name, tool_description, GitHubChromaDocumentLoader(), query)
+        super().__init__(tool_name, tool_description, GitHubChromaDocumentLoader(), query,
+                         widen_on_empty=widen_on_empty)
 
         self._generate_prompt = ChatPromptTemplate.from_messages([("human", """                                                                   
         You are an expert assistant answering questions about Troy Stribling's code repositories.

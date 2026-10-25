@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Any, Dict, Optional, cast
 
 from langchain_core.output_parsers import StrOutputParser
@@ -33,6 +33,36 @@ def _normalize_chroma_filter(query: Optional[Dict[str, Any]]) -> Optional[Dict[s
     if len(query) > 1:
         return {"$and": [{k: v} for k, v in query.items()]}
     return query
+
+
+@dataclass
+class RetrievalOutcome:
+    """What one retrieval produced, including the ways it can fail."""
+
+    chunks: list[RetrievedChunk]
+    context: str                 # the header-joined text the ranker and the model read
+    retrieved: int               # candidates before grading
+    widened: bool                # the unfiltered fallback fired
+    error: str | None            # the retriever raised
+
+
+@dataclass
+class SearchOutcome:
+    """
+    Retrieve-and-rank, without generating.
+
+    Separate from a bare list because these four outcomes are otherwise
+    indistinguishable, and conflating them is what let a search report confident
+    nonsense: `retrieved=0` means the filter was too narrow, `best_score` below the
+    floor means the corpus had nothing relevant, `widened` means the answer came from
+    a different set than the caller asked for, and `error` means nothing was tried.
+    """
+
+    chunks: list[RetrievedChunk]
+    retrieved: int
+    best_score: float | None     # None when nothing was retrieved or the ranker failed
+    widened: bool
+    error: str | None
 
 
 class ChunkScore(BaseModel):
@@ -97,40 +127,34 @@ class ChromaRAGAgent(ABC):
 
     def __init__(self, retriever_tool_name: str, retriever_tool_description: str,
                  doc_loader: ChromaDocumentLoader, query: Optional[Dict[str, Any]] = None, retriever_k=8, retriever_fetch_k=40,
-                 score_threshold: Optional[float]=RAG_SCORE_THRESHOLD):
+                 score_threshold: Optional[float]=RAG_SCORE_THRESHOLD,
+                 widen_on_empty: bool = True):
         self.retriever_tool_name = retriever_tool_name
         self.retriever_tool_description = retriever_tool_description
         self._query = query
+        self._retriever_k = retriever_k
+        self._retriever_fetch_k = retriever_fetch_k
+        self._score_threshold = score_threshold
+        # Whether a filter that matches nothing falls back to an unfiltered search.
+        # Right for a conversational agent, which would otherwise answer "no relevant
+        # documents" and leave the user unable to tell that from an empty corpus.
+        # Wrong for a tool with a result contract, which can say *which* filter matched
+        # nothing and offer what does exist -- so the MCP layer turns it off.
+        self._widen_on_empty = widen_on_empty
 
         self._llm = agent_llm_model()
         self._doc_loader = doc_loader
 
-        normalized_query = _normalize_chroma_filter(query)
-        search_kwargs: dict = {"k": retriever_k, "fetch_k": retriever_fetch_k}
-        if normalized_query is not None:
-            search_kwargs["filter"] = normalized_query
-        if score_threshold is not None:
-            search_kwargs["score_threshold"] = score_threshold
-
         self._vectorstore = self._doc_loader.vectorstore
-        self._retriever = self._vectorstore.as_retriever(
-            search_type="mmr",
-            search_kwargs=search_kwargs
-        )
+        self._retriever = self._build_retriever(query)
 
         # Chroma metadata filters are exact equality, so a filter that is merely
         # close matches NOTHING rather than matching less -- authors:"W. H. Matthaeus"
         # against a store holding only comma-joined full author strings returns 0 of
-        # 4,875, while the same query unfiltered puts the right paper at rank 1. The
-        # agent then reports "no relevant documents", which the user cannot tell apart
-        # from an empty corpus. Keep an unfiltered retriever so _retrieve can degrade
-        # instead of failing closed.
+        # 4,875, while the same query unfiltered puts the right paper at rank 1.
         self._unfiltered_retriever = (
-            self._vectorstore.as_retriever(
-                search_type="mmr",
-                search_kwargs={k: v for k, v in search_kwargs.items() if k != "filter"},
-            )
-            if normalized_query is not None
+            self._build_retriever(None)
+            if widen_on_empty and _normalize_chroma_filter(query) is not None
             else None
         )
 
@@ -164,6 +188,24 @@ class ChromaRAGAgent(ABC):
             ("human", "Question: {question}\n\nDocuments:\n{documents}"),
         ])
         self._agent = self._create_agent()
+
+
+    def _build_retriever(self, query: Optional[Dict[str, Any]], k: int | None = None):
+        """
+        A retriever for one filter.
+
+        Built here rather than only in ``__init__`` so a filter can be supplied per
+        call. With it baked in at construction, every filtered search needed its own
+        agent -- and constructing one builds a Chroma client, an embeddings client and
+        two LLM clients, which a search that never generates should not pay for.
+        """
+        search_kwargs: dict = {"k": k or self._retriever_k, "fetch_k": self._retriever_fetch_k}
+        normalized = _normalize_chroma_filter(query)
+        if normalized is not None:
+            search_kwargs["filter"] = normalized
+        if self._score_threshold is not None:
+            search_kwargs["score_threshold"] = self._score_threshold
+        return self._vectorstore.as_retriever(search_type="mmr", search_kwargs=search_kwargs)
 
 
     @property
@@ -253,48 +295,91 @@ class ChromaRAGAgent(ABC):
         return {"messages": [AIMessage(content=full_response)]}
     
 
-    def _retrieve(self, state):
-        messages = state["messages"]
-        question = messages[0].content if hasattr(messages[0], "content") else str(messages[0])
+    def _header_for(self, metadata: dict) -> str:
+        fields = [f"{label}: {metadata.get(key)}"
+                  for key, label in self.DOCUMENT_HEADER_KEYS
+                  if metadata.get(key) not in (None, "")]
+        return " | ".join(fields)
+
+
+    def retrieve_chunks(self, question: str, where: Optional[Dict[str, Any]] = None,
+                        k: int | None = None) -> "RetrievalOutcome":
+        """
+        Retrieve candidates for a question, with an optional per-call filter.
+
+        Returns an outcome rather than a list because four situations are otherwise
+        indistinguishable to a caller: nothing retrieved, the retriever raised, the
+        filter matched nothing and was widened, and a normal result. Only the last is
+        success, and the graph used to collapse all four into a string.
+        """
+        retriever = self._retriever if where is None and k is None else self._build_retriever(
+            where if where is not None else self._query, k)
         try:
-            hits = self.retriever.invoke(question)
+            hits = retriever.invoke(question)
         except Exception as e:
             logger.error(f"Retriever error: {e}")
-            return {"messages": [SystemMessage(content=f"Retriever error: {e}")]}
+            return RetrievalOutcome([], "", 0, False, str(e))
 
         logger.info(f"Retrieved {len(hits)} documents for query: {question}")
 
-        def header_for(metadata: dict) -> str:
-            fields = [f"{label}: {metadata.get(key)}"
-                      for key, label in self.DOCUMENT_HEADER_KEYS
-                      if metadata.get(key) not in (None, "")]
-            return " | ".join(fields)
-
+        widened = False
         if not hits and self._unfiltered_retriever is not None:
-            logger.warning(
-                f"Filter matched nothing ({self._query!r}); retrying unfiltered."
-            )
+            logger.warning(f"Filter matched nothing ({self._query!r}); retrying unfiltered.")
             try:
                 hits = self._unfiltered_retriever.invoke(question)
             except Exception as e:
                 logger.error(f"Unfiltered retry error: {e}")
             else:
+                widened = True
                 logger.info(f"Unfiltered retry retrieved {len(hits)} documents.")
 
         sep = "\n\n-----\n\n"
         parts, chunks = [], []
         for i, d in enumerate(hits, 1):
             metadata = d.metadata or {}
-            header = header_for(metadata)
+            header = self._header_for(metadata)
             parts.append(f"Document {i}:\n{header}\n---\n{d.page_content}"
                          if header else f"Document {i}:\n{d.page_content}")
             chunks.append(RetrievedChunk(index=i, text=d.page_content, metadata=metadata))
 
-        context = sep.join(parts) if parts else "(no results)"
         # Both forms, deliberately. The text is what the grader and the generating
         # model read; the chunks are what anything structured reads. Deriving one from
         # the other by parsing is how the metadata was lost in the first place.
-        return {"messages": [SystemMessage(content=context)], "hits": chunks}
+        return RetrievalOutcome(chunks, sep.join(parts), len(chunks), widened, None)
+
+
+    def search(self, question: str, where: Optional[Dict[str, Any]] = None,
+               k: int | None = None) -> "SearchOutcome":
+        """
+        Retrieve and rank, without generating an answer.
+
+        What an MCP search tool needs: ranked hits carrying their metadata and scores,
+        not prose about them. One embedding call and one ranking call, where the full
+        graph also pays an opus call to write an answer the caller is going to discard.
+
+        Short-circuits on zero retrieval. The graph does not: it turns an empty result
+        into the literal string "(no results)", splits that into one chunk, and spends
+        a ranking call scoring it.
+        """
+        retrieved = self.retrieve_chunks(question, where, k)
+        if retrieved.error is not None:
+            return SearchOutcome([], 0, None, retrieved.widened, retrieved.error)
+        if not retrieved.chunks:
+            return SearchOutcome([], 0, None, retrieved.widened, None)
+
+        kept, best, error = self._rank(question, retrieved.chunks, retrieved.context)
+        return SearchOutcome(kept, retrieved.retrieved, best, retrieved.widened, error)
+
+
+    def _retrieve(self, state):
+        messages = state["messages"]
+        question = messages[0].content if hasattr(messages[0], "content") else str(messages[0])
+        outcome = self.retrieve_chunks(question)
+        if outcome.error is not None:
+            return {"messages": [SystemMessage(content=f"Retriever error: {outcome.error}")],
+                    "hits": []}
+        return {"messages": [SystemMessage(content=outcome.context or "(no results)")],
+                "hits": outcome.chunks}
 
 
     def _grade_documents(self, state):
@@ -311,28 +396,47 @@ class ChromaRAGAgent(ABC):
 
         messages = state["messages"]
         question = messages[0].content
-        docs_content = messages[-1].content
         retrieved = state.get("hits") or []
 
-        sep = "\n\n-----\n\n"
-        chunks = [c for c in docs_content.split(sep) if c.strip()]
-
-        if not chunks:
+        if not retrieved:
             return {"messages": [SystemMessage(content="(no results)")], "hits": []}
 
+        sep = "\n\n-----\n\n"
+        context = messages[-1].content
+        kept, _, error = self._rank(question, retrieved, context)
+        if error is not None:
+            return {"messages": [SystemMessage(content=context)], "hits": retrieved}
+        if not kept:
+            return {"messages": [SystemMessage(content="(no relevant results found)")], "hits": []}
+
+        # The score travels with the chunk twice over: in the text, where the
+        # generating model can weigh a weak hit; and on the chunk itself, which is the
+        # per-result score a structured result needs and the string cannot carry.
+        graded = sep.join(
+            f"{c.text}\n[relevance: {c.score:.2f}]" for c in kept if c.score is not None)
+        return {"messages": [SystemMessage(content=graded or context)], "hits": kept}
+
+
+    def _rank(self, question: str, chunks: list[RetrievedChunk], context: str
+              ) -> tuple[list[RetrievedChunk], float | None, str | None]:
+        """
+        Score the candidates against each other and keep those near the best.
+
+        Returns (kept, best score, error). On a ranking failure the error is set and
+        every chunk comes back ungraded: ranking is an optimisation, not a gate, so a
+        failure hands over everything retrieved rather than nothing.
+        """
         try:
             ranking = cast(ChunkRanking, (self._grade_prompt | self._grader_llm).invoke(
-                {"question": question, "documents": docs_content}))
+                {"question": question, "documents": context}))
             scored = {s.index: s.score for s in ranking.scores if 1 <= s.index <= len(chunks)}
         except Exception as e:
-            # Ranking is an optimisation, not a gate. If it fails, hand the model
-            # everything retrieved rather than nothing.
             logger.warning(f"Ranking failed, passing all {len(chunks)} chunks: {e}")
-            return {"messages": [SystemMessage(content=sep.join(chunks))], "hits": retrieved}
+            return list(chunks), None, str(e)
 
         # A chunk the ranker omitted scores 0.0 rather than being silently dropped.
-        ranked = sorted(((scored.get(i, 0.0), i, c) for i, c in enumerate(chunks, 1)),
-                        key=lambda t: (-t[0], t[1]))
+        ranked = sorted((replace(c, score=scored.get(c.index, 0.0)) for c in chunks),
+                        key=lambda c: (-(c.score or 0.0), c.index))
 
         # Relative floor, deliberately not absolute. RAG_SCORE_THRESHOLD is an
         # absolute cutoff and is unusable for exactly this reason: the observed
@@ -342,29 +446,20 @@ class ChromaRAGAgent(ABC):
         # cannot return nothing -- the top chunk always clears its own floor. That
         # is the property the old binary gate lacked: it answered N independent
         # yes/no questions and could answer "no" to all of them.
-        best = ranked[0][0]
+        best = ranked[0].score or 0.0
         if best < self.grade_min_score:
             logger.info(
                 f"Document ranking: nothing relevant (best={best:.2f} < "
                 f"{self.grade_min_score}); returning no results for: {question}")
-            return {"messages": [SystemMessage(content="(no relevant results found)")], "hits": []}
+            return [], best, None
 
         floor = best * self.grade_relative_floor
-        keep = [(s, i, c) for s, i, c in ranked if s >= floor][:self.grade_top_n]
-
+        keep = [c for c in ranked if (c.score or 0.0) >= floor][:self.grade_top_n]
         logger.info(
             f"Document ranking: kept {len(keep)}/{len(chunks)} "
             f"(best={best:.2f}, floor={floor:.2f}, scores="
-            f"{[round(s, 2) for s, _, _ in ranked]})")
-
-        # The score travels with the chunk twice over: in the text, where the
-        # generating model can weigh a weak hit; and on the chunk itself, which is the
-        # per-result score a structured result needs and the string cannot carry.
-        by_index = {c.index: c for c in retrieved}
-        kept_hits = [replace(by_index[i], score=s) for s, i, _ in keep if i in by_index]
-
-        context = sep.join(f"{c}\n[relevance: {s:.2f}]" for s, _, c in keep)
-        return {"messages": [SystemMessage(content=context)], "hits": kept_hits}
+            f"{[round(c.score or 0.0, 2) for c in ranked]})")
+        return keep, best, None
 
 
     def _create_agent(self):
