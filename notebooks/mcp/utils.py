@@ -29,11 +29,25 @@ from typing import Any
 
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
-from mcp.types import CallToolResult
+from mcp.types import CallToolResult, PaginatedRequestParams
 
 from lib.utils import print_json_vertical
 
 MCP_URL = os.getenv("YADA_MCP_URL", "http://127.0.0.1:8081/mcp")
+
+
+def _caller(name: str, **extra: Any) -> dict[str, Any]:
+    """Identify which helper issued a request, for the server's log.
+
+    ``list_mcp_tools`` and ``show_tool_schema`` are the same protocol call --
+    ``tools/list`` -- and differ only in what this module does with the response, so
+    the server cannot tell them apart and logs two identical lines. MCP lets a request
+    carry ``_meta``, which the server sees as ``ctx.meta`` and yada's request log
+    prints with the rest of the params, so saying who called is enough to separate them.
+
+    Purely diagnostic: ``_meta`` never reaches a tool's arguments.
+    """
+    return {"caller": name, **{k: v for k, v in extra.items() if v is not None}}
 
 
 async def _with_session(fn: Callable[[ClientSession], Awaitable[Any]]) -> Any:
@@ -64,7 +78,8 @@ async def list_mcp_tools(prefix: str | tuple[str, ...] | None = None) -> None:
     value would echo the list underneath the printed output.
     """
     prefixes = (prefix,) if isinstance(prefix, str) else prefix
-    tools = await _with_session(lambda s: s.list_tools())
+    tools = await _with_session(lambda s: s.list_tools(
+        params=PaginatedRequestParams(meta=_caller("list_mcp_tools", prefix=prefix))))
     for tool in tools.tools:
         if prefixes and not tool.name.startswith(tuple(prefixes)):
             continue
@@ -82,7 +97,8 @@ async def show_tool_schema(tool_name: str, raw: bool = False) -> dict[str, Any]:
     ``raw=True`` dumps the JSON schema instead — the authoritative shape an MCP
     consumer actually parses.
     """
-    listed = await _with_session(lambda s: s.list_tools())
+    listed = await _with_session(lambda s: s.list_tools(
+        params=PaginatedRequestParams(meta=_caller("show_tool_schema", tool=tool_name))))
     tools = {tool.name: tool for tool in listed.tools}
     if tool_name not in tools:
         raise RuntimeError(f"no tool {tool_name!r} on the server. Available: {sorted(tools)}")
@@ -102,7 +118,8 @@ async def show_tool_schema(tool_name: str, raw: bool = False) -> dict[str, Any]:
 
 async def call_tool(tool_name: str, arguments: dict[str, Any] | None = None) -> CallToolResult:
     """Call a tool and return the raw result, images and all."""
-    return await _with_session(lambda s: s.call_tool(tool_name, arguments or {}))
+    return await _with_session(lambda s: s.call_tool(
+        tool_name, arguments or {}, meta=_caller("call_tool")))
 
 
 def show_result(result: CallToolResult) -> None:
