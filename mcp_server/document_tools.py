@@ -28,8 +28,10 @@ See sefer/planning/yada-document-mcp-design.md.
 
 from __future__ import annotations
 
+import logging
+from contextvars import ContextVar
 from time import perf_counter
-from typing import Any
+from typing import Any, Callable
 
 from apps.agentic.core.agents.chroma_rag_agent import ChromaRAGAgent, SearchOutcome
 from apps.agentic.core.constants import GITHUB_DB_NAME, RESEARCH_LIBRARY_DB_NAME
@@ -131,25 +133,52 @@ def _store_is_built(store: str) -> bool:
     return Vocabulary.scan_info(store) is not None
 
 
-def _log_request(tool: str, arguments: dict) -> float:
+#: The tool currently being served, so every line logged while it runs says which
+#: endpoint produced it. A ContextVar rather than a global because the server handles
+#: calls concurrently, and "Retrieved 5 documents" with no endpoint is unreadable once
+#: two stores are being searched at once.
+_current_tool: ContextVar[str | None] = ContextVar("current_tool", default=None)
+
+
+class _EndpointFilter(logging.Filter):
+    """Prefix every record logged during a tool call with the endpoint name.
+
+    Installed on the shared "YADA" logger, so it reaches the lines this module never
+    writes -- the retriever's and the ranker's -- which are the ones that previously
+    could not be attributed to anything.
     """
-    Record what a client actually asked for, and return a start time.
 
-    Nothing logged a tool call before this: a describe left no trace at all, and a
-    search logged only the retriever's own line, so the tool, its arguments and the
-    status it returned were invisible. For a design whose subject is the gap between
-    what was requested and what ran, that is the one thing the log has to show -- and
-    when a client sends something surprising, this is the only record of it.
+    def filter(self, record: logging.LogRecord) -> bool:
+        tool = _current_tool.get()
+        if tool and not getattr(record, "_endpoint_tagged", False):
+            record.msg = f"[{tool}] {record.msg}"
+            record._endpoint_tagged = True
+        return True
+
+
+def _tool_call(tool: str, arguments: dict, run: Callable[[], Any]) -> Any:
     """
-    shown = " ".join(f"{k}={v!r}" for k, v in arguments.items() if v is not None) or "(no arguments)"
-    logger.info(f"{tool} <- {shown}")
-    return perf_counter()
+    Run one tool call, logging what was asked and what came back.
 
+    Nothing recorded a call before this: a describe left no trace at all, and a search
+    logged only the retriever's own line, so the tool, its arguments and the status
+    were invisible. For a design whose subject is the gap between what was requested
+    and what ran, that is the one thing the console has to show -- and it is the only
+    record of what a client actually sent, which matters when the client is a model.
+    """
+    shown = " ".join(f"{k}={v!r}" for k, v in arguments.items() if v is not None)
+    logger.info(f"{tool} <- {shown or '(no arguments)'}")
 
-def _log_outcome(tool: str, started: float, result: Any) -> Any:
-    """Log what the call returned, and hand the result straight back."""
-    elapsed = perf_counter() - started
-    parts = [f"{tool} -> {result.status} in {elapsed:.2f}s"]
+    token = _current_tool.set(tool)
+    started = perf_counter()
+    try:
+        result = run()
+    finally:
+        # Reset before the outcome line, which names the tool itself and would
+        # otherwise be tagged twice.
+        _current_tool.reset(token)
+
+    parts = [f"{tool} -> {result.status} in {perf_counter() - started:.2f}s"]
     if result.filters_applied:
         parts.append(f"applied={result.filters_applied}")
     if result.filters_resolved:
@@ -349,6 +378,9 @@ def register(server) -> None:
     after the server exists, which is the opposite of the ``@apps.tool`` rule in
     server.py -- those are collected at construction.
     """
+    if not any(isinstance(f, _EndpointFilter) for f in logger.filters):
+        logger.addFilter(_EndpointFilter())
+
     surnames = _surnames()
     surname_line = (f" A surname alone is enough and is preferred -- it reaches every "
                     f"spelling of that name and every co-authored paper: {surnames}."
@@ -356,37 +388,35 @@ def register(server) -> None:
 
     def search_code(query: str, repo: str | None = None, ext: str | None = None,
                     limit: int = 10) -> CodeHits:
-        started = _log_request("search_code",
-                               {"query": query, "repo": repo, "ext": ext, "limit": limit})
-        return _log_outcome("search_code", started,
-                            _search(GITHUB_DB_NAME, query, {"repo": repo, "ext": ext},
-                                    limit, CodeHits, GithubMeta))
+        return _tool_call(
+            "search_code", {"query": query, "repo": repo, "ext": ext, "limit": limit},
+            lambda: _search(GITHUB_DB_NAME, query, {"repo": repo, "ext": ext},
+                            limit, CodeHits, GithubMeta))
 
     def describe_code(repo: str | None = None, ext: str | None = None) -> CodeVocabulary:
-        started = _log_request("describe_code", {"repo": repo, "ext": ext})
-        return _log_outcome("describe_code", started,
-                            _describe(GITHUB_DB_NAME, {"repo": repo, "ext": ext},
-                                      CodeVocabulary))
+        return _tool_call(
+            "describe_code", {"repo": repo, "ext": ext},
+            lambda: _describe(GITHUB_DB_NAME, {"repo": repo, "ext": ext}, CodeVocabulary))
 
     def search_research_library(query: str, authors: str | None = None,
                                 title: str | None = None, shelf: str | None = None,
                                 limit: int = 10) -> LibraryHits:
-        started = _log_request("search_research_library",
-                               {"query": query, "authors": authors, "title": title,
-                                "shelf": shelf, "limit": limit})
-        return _log_outcome("search_research_library", started,
-                            _search(RESEARCH_LIBRARY_DB_NAME, query,
-                                    {"authors": authors, "title": title, "shelf": shelf},
-                                    limit, LibraryHits, LibraryMeta))
+        return _tool_call(
+            "search_research_library",
+            {"query": query, "authors": authors, "title": title, "shelf": shelf,
+             "limit": limit},
+            lambda: _search(RESEARCH_LIBRARY_DB_NAME, query,
+                            {"authors": authors, "title": title, "shelf": shelf},
+                            limit, LibraryHits, LibraryMeta))
 
     def describe_research_library(authors: str | None = None, title: str | None = None,
                                   shelf: str | None = None) -> LibraryVocabulary:
-        started = _log_request("describe_research_library",
-                               {"authors": authors, "title": title, "shelf": shelf})
-        return _log_outcome("describe_research_library", started,
-                            _describe(RESEARCH_LIBRARY_DB_NAME,
-                                      {"authors": authors, "title": title, "shelf": shelf},
-                                      LibraryVocabulary))
+        return _tool_call(
+            "describe_research_library",
+            {"authors": authors, "title": title, "shelf": shelf},
+            lambda: _describe(RESEARCH_LIBRARY_DB_NAME,
+                              {"authors": authors, "title": title, "shelf": shelf},
+                              LibraryVocabulary))
 
     server.add_tool(
         search_code, name="search_code",
