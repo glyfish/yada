@@ -162,7 +162,6 @@ class DocumentLoaderAgent(ReactAgent):
         ])
 
 
-    @staticmethod
     @tool_spec(
         args_schema=LoadResearchDocumentInput,
         metadata=ToolSpec(
@@ -174,6 +173,7 @@ class DocumentLoaderAgent(ReactAgent):
             ],
         ),
     )
+    @staticmethod
     async def load_research_document(
         filename: str,
         path: str,
@@ -204,7 +204,6 @@ class DocumentLoaderAgent(ReactAgent):
         return f"Loaded research document: {title}."
 
 
-    @staticmethod
     @tool_spec(
         args_schema=LoadGitHubRepoInput,
         metadata=ToolSpec(
@@ -216,6 +215,7 @@ class DocumentLoaderAgent(ReactAgent):
             ],
         ),
     )
+    @staticmethod
     async def load_github_repo(account: str, repo: str) -> str:
         github_api_key = os.environ["GITHUB_API_KEY"]
         headers = {"Authorization": f"token {github_api_key}"}
@@ -238,7 +238,6 @@ class DocumentLoaderAgent(ReactAgent):
         return f"Loaded GitHub repository {account}/{repo}."
 
 
-    @staticmethod
     @tool_spec(
         args_schema=None,
         metadata=ToolSpec(
@@ -251,6 +250,7 @@ class DocumentLoaderAgent(ReactAgent):
             ],
         ),
     )
+    @staticmethod
     async def load_all_github_repos() -> str:
         github_api_key = os.environ["GITHUB_API_KEY"]
         headers = {"Authorization": f"token {github_api_key}"}
@@ -289,7 +289,6 @@ class DocumentLoaderAgent(ReactAgent):
         return "All GitHub repositories cloned or updated and indexed successfully."
 
 
-    @staticmethod
     @tool_spec(
         args_schema=LoadETFDataInput,
         metadata=ToolSpec(
@@ -304,6 +303,7 @@ class DocumentLoaderAgent(ReactAgent):
             ],
         ),
     )
+    @staticmethod
     async def load_etf_data(
         family: Optional[str] = None,
         category_group: Optional[str] = None,
@@ -320,7 +320,6 @@ class DocumentLoaderAgent(ReactAgent):
         return "ETF data loaded successfully."
 
 
-    @staticmethod
     @tool_spec(
         args_schema=LoadETFDataInput,
         metadata=ToolSpec(
@@ -334,6 +333,7 @@ class DocumentLoaderAgent(ReactAgent):
             ],
         ),
     )
+    @staticmethod
     async def reload_etf_data(
         family: Optional[str] = None,
         category_group: Optional[str] = None,

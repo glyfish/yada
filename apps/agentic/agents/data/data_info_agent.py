@@ -271,7 +271,6 @@ class DataInfoAgent(ReactAgent):
         return collect_metadata_rows(loader, _row_factory)
 
 
-    @staticmethod
     @tool_spec(
         args_schema=None,
         metadata=ToolSpec(
@@ -291,6 +290,7 @@ class DataInfoAgent(ReactAgent):
             ],
         ),
     )
+    @staticmethod
     def repository_names() -> list[str]:
 
         base_path = Path(GITHUB_LOCAL_PATH)
@@ -306,7 +306,6 @@ class DataInfoAgent(ReactAgent):
         return repo_names
 
 
-    @staticmethod
     @tool_spec(
         args_schema=RepositoryFilesInput,
         metadata=ToolSpec(
@@ -325,6 +324,7 @@ class DataInfoAgent(ReactAgent):
             ],
         ),
     )
+    @staticmethod
     def filenames_for_repository(account: str, repository: str, max_results: int = 250) -> list[str]:
 
         base_path = Path(GITHUB_LOCAL_PATH)
@@ -346,7 +346,6 @@ class DataInfoAgent(ReactAgent):
         return files
 
 
-    @staticmethod
     @tool_spec(
         args_schema=ResearchLibraryMetadataListInput,
         metadata=ToolSpec(
@@ -363,6 +362,7 @@ class DataInfoAgent(ReactAgent):
             ],
         ),
     )
+    @staticmethod
     def research_library_metadata_summary(
         max_results: int = 100, start_after: str | None = None
     ) -> list[dict]:
@@ -371,7 +371,6 @@ class DataInfoAgent(ReactAgent):
         return paginate_metadata_rows(rows, max_results, start_after)
 
 
-    @staticmethod
     @tool_spec(
         args_schema=ResearchLibraryTitleQueryInput,
         metadata=ToolSpec(
@@ -393,6 +392,7 @@ class DataInfoAgent(ReactAgent):
             ],
         ),
     )
+    @staticmethod
     def research_library_titles_by_metadata(
         author: str | None = None,
         topic: str | None = None,
@@ -457,7 +457,6 @@ class DataInfoAgent(ReactAgent):
         return sorted(distinct)
 
 
-    @staticmethod
     @tool_spec(
         args_schema=ETFMetadataFieldInput,
         metadata=ToolSpec(
@@ -476,6 +475,7 @@ class DataInfoAgent(ReactAgent):
             ],
         ),
     )
+    @staticmethod
     def etf_metadata_values(field: str) -> str:
         VALID = {"exchange", "currency", "family", "category_group", "category"}
         if field not in VALID:
@@ -500,7 +500,6 @@ class DataInfoAgent(ReactAgent):
         return "\n".join(lines)
 
 
-    @staticmethod
     @tool_spec(
         args_schema=None,
         metadata=ToolSpec(
@@ -523,9 +522,10 @@ class DataInfoAgent(ReactAgent):
             ],
         ),
     )
+    @staticmethod
     async def list_time_series_reports(
         source: str | None = None,
-        state: Annotated[dict, InjectedState] = None,
+        state: Annotated[dict, InjectedState] | None = None,
     ) -> str:
         cache_source, where = await _resolve_cache_filter(source, state)
         rows = ReportCache._list_reports_sync(cache_source, where)
@@ -543,7 +543,6 @@ class DataInfoAgent(ReactAgent):
         return "\n".join(lines)
 
 
-    @staticmethod
     @tool_spec(
         args_schema=TimeSeriesReportDetailsInput,
         metadata=ToolSpec(
@@ -563,6 +562,7 @@ class DataInfoAgent(ReactAgent):
             ],
         ),
     )
+    @staticmethod
     def list_time_series_report_details(report_id_or_title: str) -> str:
         import uuid as _uuid
         try:
@@ -608,7 +608,6 @@ class DataInfoAgent(ReactAgent):
         return "\n".join(lines)
 
 
-    @staticmethod
     @tool_spec(
         args_schema=None,
         metadata=ToolSpec(
@@ -632,9 +631,10 @@ class DataInfoAgent(ReactAgent):
             ],
         ),
     )
+    @staticmethod
     async def list_time_series(
         source: str | None = None,
-        state: Annotated[dict, InjectedState] = None,
+        state: Annotated[dict, InjectedState] | None = None,
     ) -> str:
         cache_source, where = await _resolve_cache_filter(source, state)
         rows = SeriesCache._list_series_sync(cache_source, where)
@@ -651,7 +651,6 @@ class DataInfoAgent(ReactAgent):
         return "\n".join(lines)
 
 
-    @staticmethod
     @tool_spec(
         args_schema=TimeSeriesDetailsInput,
         metadata=ToolSpec(
@@ -669,6 +668,7 @@ class DataInfoAgent(ReactAgent):
             ],
         ),
     )
+    @staticmethod
     def list_time_series_details(cache_id_or_native_id: str) -> str:
         rows = SeriesCache._get_details_by_id_sync(cache_id_or_native_id)
         if not rows:
