@@ -43,6 +43,31 @@ def _render(params: Any) -> str:
     return text if len(text) <= _MAX_PARAMS else f"{text[:_MAX_PARAMS]}... ({len(text)} chars)"
 
 
+def _caller_of(params: Any) -> str:
+    """
+    Who sent this, out of the request's ``_meta``, rendered for the line header.
+
+    Several distinct client operations share one protocol method -- listing tools and
+    inspecting one tool's schema are both ``tools/list`` -- so the method alone cannot
+    tell them apart, and buried in the params dict the difference is easy to miss. A
+    client that names itself gets that name in the header instead.
+    """
+    if not isinstance(params, dict):
+        return ""
+    meta = params.get("_meta")
+    if not isinstance(meta, dict) or not meta.get("caller"):
+        return ""
+    extra = " ".join(f"{k}={v!r}" for k, v in meta.items() if k != "caller")
+    return f" ({meta['caller']}{' ' + extra if extra else ''})"
+
+
+def _without_meta(params: Any) -> Any:
+    """Params minus ``_meta``, which the header already shows."""
+    if isinstance(params, dict) and "_meta" in params:
+        return {k: v for k, v in params.items() if k != "_meta"}
+    return params
+
+
 def _first_text(result: dict) -> str:
     """The message out of a serialized CallToolResult, which carries it as content."""
     for block in result.get("content") or []:
@@ -57,12 +82,13 @@ class RequestLogMiddleware(ServerMiddleware[Any]):
 
     async def __call__(self, ctx, call_next):
         started = perf_counter()
-        logger.info(f"rpc {ctx.method} <- {_render(ctx.params)}".rstrip())
+        who = _caller_of(ctx.params)
+        logger.info(f"rpc {ctx.method}{who} <- {_render(_without_meta(ctx.params))}".rstrip())
         try:
             result = await call_next(ctx)
         except Exception as e:
             # The case the tool-level log cannot see: refused before the handler ran.
-            logger.warning(f"rpc {ctx.method} -> {type(e).__name__}: {e} "
+            logger.warning(f"rpc {ctx.method}{who} -> {type(e).__name__}: {e} "
                            f"in {perf_counter() - started:.2f}s")
             raise
         # A failing tool reports in band rather than raising, so "the handler
@@ -72,11 +98,11 @@ class RequestLogMiddleware(ServerMiddleware[Any]):
         # spelling `isError` and not the python attribute. Logging ok for a call
         # that failed would be the same confusion this module exists to remove.
         if isinstance(result, dict) and result.get("isError"):
-            logger.warning(f"rpc {ctx.method} -> isError in {perf_counter() - started:.2f}s: "
+            logger.warning(f"rpc {ctx.method}{who} -> isError in {perf_counter() - started:.2f}s: "
                            f"{_first_text(result)}")
             return result
 
-        logger.info(f"rpc {ctx.method} -> ok in {perf_counter() - started:.2f}s")
+        logger.info(f"rpc {ctx.method}{who} -> ok in {perf_counter() - started:.2f}s")
         return result
 
 
