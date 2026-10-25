@@ -90,6 +90,7 @@ from apps.agentic.db.series_cache import SeriesCache  # noqa: E402
 from apps.agentic.db.vocabulary import Vocabulary  # noqa: E402
 from apps.core.environment import current_environment, verify_database  # noqa: E402
 from mcp_server.document_tools import register as register_document_tools  # noqa: E402
+from mcp_server.request_log import install as install_request_log  # noqa: E402
 from mcp_server.plot_app import HTML as PLOT_APP_HTML, meta_for  # noqa: E402
 
 from lib.logger import get_logger  # noqa: E402
@@ -320,6 +321,7 @@ server = MCPServer("yada", version=VERSION, extensions=[apps])
 # that is a Postgres connect and a reflect, with no Chroma scan.
 _initialize()
 register_document_tools(server)
+install_request_log(server)
 
 
 def run() -> None:
