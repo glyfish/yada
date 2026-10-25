@@ -378,7 +378,6 @@ class TimeSeriesReportPlotAgent(ReactAgent):
         ])
 
 
-    @staticmethod
     @tool_spec(
         args_schema=GetReportInfoInput,
         metadata=ToolSpec(
@@ -395,6 +394,7 @@ class TimeSeriesReportPlotAgent(ReactAgent):
             ],
         ),
     )
+    @staticmethod
     async def get_report_info(report_id_or_title: str) -> str:
         record = None
         try:
@@ -468,7 +468,6 @@ class TimeSeriesReportPlotAgent(ReactAgent):
         })
 
 
-    @staticmethod
     @tool_spec(
         args_schema=ReportSinglePlotInput,
         metadata=ToolSpec(
@@ -482,6 +481,7 @@ class TimeSeriesReportPlotAgent(ReactAgent):
             ],
         ),
     )
+    @staticmethod
     def report_plot_single(
         cache_id: str,
         date_from: str | None,
@@ -506,7 +506,6 @@ class TimeSeriesReportPlotAgent(ReactAgent):
             raise
 
 
-    @staticmethod
     @tool_spec(
         args_schema=ReportComparisonPlotInput,
         metadata=ToolSpec(
@@ -519,6 +518,7 @@ class TimeSeriesReportPlotAgent(ReactAgent):
             ],
         ),
     )
+    @staticmethod
     def report_plot_comparison(
         cache_ids: list[str],
         date_from: str | None,
@@ -545,7 +545,6 @@ class TimeSeriesReportPlotAgent(ReactAgent):
             raise
 
 
-    @staticmethod
     @tool_spec(
         args_schema=ReportTwinxPlotInput,
         metadata=ToolSpec(
@@ -558,6 +557,7 @@ class TimeSeriesReportPlotAgent(ReactAgent):
             ],
         ),
     )
+    @staticmethod
     def report_plot_twinx(
         left_cache_id: str,
         right_cache_id: str,
@@ -591,7 +591,6 @@ class TimeSeriesReportPlotAgent(ReactAgent):
             raise
 
 
-    @staticmethod
     @tool_spec(
         args_schema=ReportTwinxComparisonPlotInput,
         metadata=ToolSpec(
@@ -605,6 +604,7 @@ class TimeSeriesReportPlotAgent(ReactAgent):
             ],
         ),
     )
+    @staticmethod
     def report_plot_twinx_comparison(
         left_cache_ids: list[str],
         right_cache_ids: list[str],
@@ -636,7 +636,6 @@ class TimeSeriesReportPlotAgent(ReactAgent):
             raise
 
 
-    @staticmethod
     @tool_spec(
         args_schema=ReportStackPlotInput,
         metadata=ToolSpec(
@@ -649,6 +648,7 @@ class TimeSeriesReportPlotAgent(ReactAgent):
             ],
         ),
     )
+    @staticmethod
     def report_plot_stack(
         cache_ids: list[str],
         date_from: str | None,

@@ -150,7 +150,6 @@ class BarChartAgent(ReactAgent):
         ])
     
     
-    @staticmethod
     @tool_spec(
         args_schema=BarChartInput,
         metadata=ToolSpec(
@@ -181,6 +180,7 @@ class BarChartAgent(ReactAgent):
             ],
         ),
     )
+    @staticmethod
     def bar_chart_tool(data: Dict[str, float],
                        title: str,
                        x_axis_label: str,
@@ -203,7 +203,6 @@ class BarChartAgent(ReactAgent):
         return f'<div class="bar-chart"><img src="{bar_chart_file}"></div>'
 
 
-    @staticmethod
     @tool_spec(
         args_schema=MultiBarChartInput,
         metadata=ToolSpec(
@@ -235,6 +234,7 @@ class BarChartAgent(ReactAgent):
             ],
         ),
     )
+    @staticmethod
     def multi_bar_chart_tool(categories: List[str],
                              datasets: List[Dict[str, float]],
                              labels: List[str],

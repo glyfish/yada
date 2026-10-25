@@ -167,7 +167,6 @@ class TimeSeriesReportAgent(ReactAgent):
             MessagesPlaceholder(variable_name="messages"),
         ])
 
-    @staticmethod
     @tool_spec(
         args_schema=CreateReportInput,
         metadata=ToolSpec(
@@ -189,6 +188,7 @@ class TimeSeriesReportAgent(ReactAgent):
             ],
         ),
     )
+    @staticmethod
     def create_time_series_report(
         report_title: str,
         report_description: str,
@@ -248,7 +248,6 @@ class TimeSeriesReportAgent(ReactAgent):
             f"- **Series:**\n{detail_lines}"
         )
 
-    @staticmethod
     @tool_spec(
         args_schema=GetReportInput,
         metadata=ToolSpec(
@@ -266,6 +265,7 @@ class TimeSeriesReportAgent(ReactAgent):
             ],
         ),
     )
+    @staticmethod
     def get_time_series_report(report_id: str) -> str:
         record = ReportCache._get_by_report_id_sync(report_id)
         if record is None:
@@ -289,7 +289,6 @@ class TimeSeriesReportAgent(ReactAgent):
             f"**Time Series Info:**\n{series_block}"
         )
 
-    @staticmethod
     @tool_spec(
         args_schema=ListReportsInput,
         metadata=ToolSpec(
@@ -309,6 +308,7 @@ class TimeSeriesReportAgent(ReactAgent):
             ],
         ),
     )
+    @staticmethod
     def list_time_series_reports() -> str:
         reports = ReportCache._list_reports_sync()
         if not reports:
@@ -324,7 +324,6 @@ class TimeSeriesReportAgent(ReactAgent):
         )
 
 
-    @staticmethod
     @tool_spec(
         args_schema=GetReportInput,
         metadata=ToolSpec(
@@ -340,6 +339,7 @@ class TimeSeriesReportAgent(ReactAgent):
             ],
         ),
     )
+    @staticmethod
     def delete_time_series_report(report_id: str) -> str:
         deleted = ReportCache._delete_report_sync(report_id)
         if deleted:

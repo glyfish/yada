@@ -238,7 +238,6 @@ class TimeSeriesPlotAgent(ReactAgent):
         ])
 
 
-    @staticmethod
     @tool_spec(
         args_schema=SeriesFromCacheInput,
         metadata=ToolSpec(
@@ -254,6 +253,7 @@ class TimeSeriesPlotAgent(ReactAgent):
             ],
         ),
     )
+    @staticmethod
     def time_series_plot_from_cache(series_ref: str,
                                     date_from: str | None,
                                     date_to: str | None,
@@ -273,7 +273,6 @@ class TimeSeriesPlotAgent(ReactAgent):
         return f'<div class="time-series-plot"><img src="{file}"></div>'
 
 
-    @staticmethod
     @tool_spec(
         args_schema=MultiSeriesFromCacheInput,
         metadata=ToolSpec(
@@ -290,6 +289,7 @@ class TimeSeriesPlotAgent(ReactAgent):
             ],
         ),
     )
+    @staticmethod
     def time_series_stack_from_cache(series_refs: list[str],
                                      date_from: str | None,
                                      date_to: str | None,
@@ -312,7 +312,6 @@ class TimeSeriesPlotAgent(ReactAgent):
         return f'<div class="time-series-plot"><img src="{file}"></div>'
 
 
-    @staticmethod
     @tool_spec(
         args_schema=MultiSeriesFromCacheInput,
         metadata=ToolSpec(
@@ -329,6 +328,7 @@ class TimeSeriesPlotAgent(ReactAgent):
             ],
         ),
     )
+    @staticmethod
     def time_series_comparison_from_cache(series_refs: list[str],
                                           date_from: str | None,
                                           date_to: str | None,
@@ -351,7 +351,6 @@ class TimeSeriesPlotAgent(ReactAgent):
         return f'<div class="time-series-plot"><img src="{file}"></div>'
 
 
-    @staticmethod
     @tool_spec(
         args_schema=TimeSeriesPlotInput,
         metadata=ToolSpec(
@@ -378,6 +377,7 @@ class TimeSeriesPlotAgent(ReactAgent):
             ],
         ),
     )
+    @staticmethod
     def time_series_plot_tool(time: list[datetime],
                               values: list[float],
                               title: str,
@@ -402,7 +402,6 @@ class TimeSeriesPlotAgent(ReactAgent):
         return f'<div class="time-series-plot"><img src="{time_series_file}"></div>'
 
 
-    @staticmethod
     @tool_spec(
         args_schema=TimeSeriesStackInput,
         metadata=ToolSpec(
@@ -437,6 +436,7 @@ class TimeSeriesPlotAgent(ReactAgent):
             ],
         ),
     )
+    @staticmethod
     def time_series_stack_tool(time: list[datetime],
                                values: list[list[float]],
                                title: str,
@@ -463,7 +463,6 @@ class TimeSeriesPlotAgent(ReactAgent):
         return f'<div class="time-series-plot"><img src="{time_series_file}"></div>'
 
 
-    @staticmethod
     @tool_spec(
         args_schema=TimeSeriesComparisonInput,
         metadata=ToolSpec(
@@ -493,6 +492,7 @@ class TimeSeriesPlotAgent(ReactAgent):
             ],
         ),
     )
+    @staticmethod
     def time_series_comparison_tool(time: list[datetime],
                                     values: list[list[float]],
                                     title: str,
