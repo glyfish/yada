@@ -126,3 +126,50 @@ def show_result(result: CallToolResult) -> None:
             display(Image(data=raw))
         else:
             print(f"[{block.type}] {block!r}")
+
+
+def show_structured(result: CallToolResult, *, facets: int = 12, hits: int = 5) -> None:
+    """Render a document-tool result: the outcome fields, then facets or hits.
+
+    The document tools return no text blocks at all -- everything is in
+    ``structured_content``, derived from the pydantic return annotation. That is the
+    payload a client reasons over, so this prints it rather than prose about it.
+
+    ``filters_requested`` against ``filters_applied`` is the pair worth watching: they
+    differ whenever resolution did something, and a caller that cannot see the
+    difference cannot tell a widened search from the one it asked for.
+    """
+    data = result.structured_content or {}
+    if result.is_error:
+        print("is_error: True")
+
+    print(f"status            {data.get('status')}")
+    for key in ("filters_requested", "filters_applied", "filters_resolved",
+                "filters_relaxed", "detail"):
+        value = data.get(key)
+        if value:
+            print(f"{key:18}{value}")
+
+    if data.get("documents") or data.get("chunks"):
+        print(f"{'size':18}{data.get('documents', 0):,} documents, "
+              f"{data.get('chunks', 0):,} chunks")
+    if data.get("retrieved") is not None and "hits" in data:
+        print(f"{'retrieved':18}{data.get('retrieved')} candidates, "
+              f"best score {data.get('best_score')}")
+
+    for field, values in (data.get("facets") or {}).items():
+        shown = list(values.items())[:facets]
+        more = f"  (+{len(values) - len(shown)} more)" if len(values) > len(shown) else ""
+        print(f"\n  {field} -- {len(values)} values{more}")
+        for name, count in shown:
+            print(f"     {name:52} {count:>9,}")
+
+    for hit in (data.get("hits") or [])[:hits]:
+        print(f"\n  {hit['rank']}. [{hit['score']:.2f}] {hit['path']}")
+        print(f"     {hit['uri']}")
+        print(f"     {hit['metadata']}")
+        print(f"     {hit['snippet'][:160].strip()!r}...")
+
+    for field, values in (data.get("available") or {}).items():
+        print(f"\n  available {field}: {', '.join(values[:12])}"
+              f"{' ...' if len(values) > 12 else ''}")
