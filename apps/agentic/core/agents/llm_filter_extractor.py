@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from datetime import date
 from typing import Optional, cast
@@ -424,6 +425,27 @@ def resolve_research_library_filters(f: ResearchLibraryFilters) -> ResolvedFilte
     })
 
 
+def _log_extraction(label: str, request: str, extracted: BaseModel) -> None:
+    """
+    The request as received, and the filters a model pulled out of it. DEBUG.
+
+    Three different things can go wrong between a sentence and a search, and they look
+    alike from outside: the model extracts nothing, it extracts the wrong field, or it
+    extracts a value that does not exist. Resolution reports only the third -- it sees
+    a proposed value, never the sentence it came from -- so without this the first two
+    are invisible. `authors='Matthaeus'` logged on its own cannot tell you whether the
+    user said Matthaeus or Mathaeus and the model corrected it.
+
+    At DEBUG because a request can be a paragraph and this runs on every search.
+    """
+    if not logger.isEnabledFor(logging.DEBUG):
+        return
+    proposed = {k: v for k, v in extracted.model_dump().items()
+                if v is not None and k != "cleaned_query"}
+    logger.debug(f"{label} extract <- {request!r}")
+    logger.debug(f"{label} extract -> {proposed or '(no filters found)'}")
+
+
 def _log_resolution(label: str, resolved: ResolvedFilters, query: str) -> None:
     """
     Record how each proposed value resolved, loudly when one matched nothing.
@@ -578,6 +600,7 @@ async def extract_etf_filters(request: str) -> tuple[Optional[dict], str]:
         llm = filter_llm_model().with_structured_output(ETFFilters)
         prompt = _make_prompt(_ETF_SYSTEM)
         result = cast(ETFFilters, await (prompt | llm).ainvoke({"request": request}))
+        _log_extraction("ETF", request, result)
         where = etf_filters_to_where(result)
         logger.info(f"ETF filters (llm): where={where} query={result.cleaned_query!r}")
         return where, result.cleaned_query
@@ -598,6 +621,7 @@ async def extract_fred_filters(request: str) -> tuple[Optional[dict], str]:
         system = f"{_FRED_SYSTEM}\nToday's date is {date.today().isoformat()}."
         prompt = _make_prompt(system)
         result = cast(FredFilters, await (prompt | llm).ainvoke({"request": request}))
+        _log_extraction("FRED", request, result)
         where = fred_filters_to_where(result)
         logger.info(f"FRED filters (llm): where={where} query={result.cleaned_query!r}")
         return where, result.cleaned_query
@@ -620,6 +644,7 @@ async def extract_code_repo_filters(request: str) -> tuple[Optional[dict], str]:
         prompt = _make_prompt(
             _with_stored_values(_CODE_SYSTEM, GITHUB_DB_NAME, ("account", "repo")))
         result = cast(CodeRepoFilters, await (prompt | llm).ainvoke({"request": request}))
+        _log_extraction("Code repo", request, result)
         resolved = resolve_code_repo_filters(result)
         _log_resolution("Code repo", resolved, result.cleaned_query)
         return resolved.where, result.cleaned_query
@@ -640,6 +665,7 @@ async def extract_research_library_filters(request: str) -> tuple[Optional[dict]
         prompt = _make_prompt(_with_stored_values(
             _RESEARCH_SYSTEM, RESEARCH_LIBRARY_DB_NAME, ("shelf", "authors", "title")))
         result = cast(ResearchLibraryFilters, await (prompt | llm).ainvoke({"request": request}))
+        _log_extraction("Research library", request, result)
         resolved = resolve_research_library_filters(result)
         _log_resolution("Research library", resolved, result.cleaned_query)
         return resolved.where, result.cleaned_query

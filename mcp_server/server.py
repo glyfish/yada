@@ -98,6 +98,12 @@ from lib.logger import get_logger  # noqa: E402
 logger = get_logger("YADA")
 _logs_to_stderr()  # get_logger may have attached a fresh stdout handler
 
+#: lib.logger sets DEBUG, which on this server means the generate prompt and every
+#: response body on every call. INFO is the useful default; one dial raises all of it.
+#:   INFO   one line per request and per result
+#:   DEBUG  response bodies, the agent's prompts, the ranker's scores
+logger.setLevel(os.getenv("YADA_LOG_LEVEL", "INFO").upper())
+
 #: Transport is selectable so the same server serves a local client over stdio and a
 #: remote one over HTTP. Defaults to stdio, which is what Goose spawns.
 #:   stdio            — client spawns this process; no network (default)

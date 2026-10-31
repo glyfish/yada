@@ -17,10 +17,19 @@ This sits in the server's middleware chain, which wraps every inbound message, s
 sees the params as they arrived.
 
 Set ``YADA_MCP_LOG_REQUESTS=0`` to turn it off.
+
+Summary lines are INFO and **response bodies are DEBUG**, so the log level is the one
+control for verbosity. At DEBUG a body shows which blocks came back, what ``_meta``
+carries and what a ``ui://`` resource holds, which is what UI work needs; long strings
+are elided with their length reported, since a chart is a megabyte of base64 and one of
+those scrolls a terminal past everything else. ``YADA_MCP_LOG_BODIES=full`` keeps them
+intact when a body has to be read byte for byte.
 """
 
 from __future__ import annotations
 
+import json
+import logging
 import os
 from time import perf_counter
 from typing import Any
@@ -35,12 +44,88 @@ logger = get_logger("YADA")
 #: a resource write would not be, and a log line nobody can read is not a record.
 _MAX_PARAMS = 600
 
+#: Longest string kept intact inside a logged response body. Set above a ui:// page --
+#: the plot app is 6,366 characters -- because that HTML is the thing worth reading
+#: when a UI misbehaves, and well below a base64 image, which runs to hundreds of
+#: thousands of characters and scrolls a terminal past everything else. The gap between
+#: the two is wide enough that one threshold separates them cleanly.
+_MAX_STRING = 20_000
+
+#: Bodies are DEBUG; the summary lines are INFO. The level is the switch, so there is
+#: one control for verbosity rather than a private env var per thing worth hiding --
+#: and it governs the agent's own DEBUG lines (the generate prompt, several hundred
+#: characters per call) by the same dial.
+#:
+#: YADA_MCP_LOG_BODIES=full keeps base64 images and long HTML intact when a body has
+#: to be read byte for byte.
+_LOG_BODIES_VERBATIM = os.environ.get("YADA_MCP_LOG_BODIES", "").strip().lower() == "full"
+
+
+def _bodies_wanted() -> bool:
+    return logger.isEnabledFor(logging.DEBUG)
+
 
 def _render(params: Any) -> str:
     if not params:
         return ""
     text = repr(params)
-    return text if len(text) <= _MAX_PARAMS else f"{text[:_MAX_PARAMS]}... ({len(text)} chars)"
+    limit = _MAX_STRING if _bodies_wanted() else _MAX_PARAMS
+    return text if len(text) <= limit else f"{text[:limit]}... ({len(text)} chars)"
+
+
+def _elide(value: Any) -> Any:
+    """
+    Walk a response, shortening strings too long to read.
+
+    The point of logging a body is to see its shape -- which blocks came back, what
+    `_meta` carries, what a ui:// resource actually contains. One base64 image defeats
+    that on its own, so the blob is replaced by its size while the structure around it
+    survives intact.
+    """
+    if isinstance(value, dict):
+        return {k: _elide(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_elide(v) for v in value]
+    if isinstance(value, str) and len(value) > _MAX_STRING:
+        return f"<{len(value):,} chars elided: {value[:60]}...>"
+    return value
+
+
+def _summarise_tools(result: Any) -> str | None:
+    """
+    One line per tool instead of the whole catalogue.
+
+    A tools/list body is 890 lines -- six tools with their input AND output schemas --
+    and every client sends one on connect, so logging it whole buries the responses
+    worth reading behind a wall of static schema. The schemas do not change between
+    calls; `show_tool_schema` prints them on demand. `=full` still dumps everything.
+    """
+    tools = result.get("tools") if isinstance(result, dict) else None
+    if not isinstance(tools, list):
+        return None
+    lines = []
+    for t in tools:
+        if not isinstance(t, dict):
+            continue
+        args = list((t.get("inputSchema") or {}).get("properties") or {})
+        structured = "structured" if t.get("outputSchema") else "text"
+        lines.append(f"    {t.get('name')}({', '.join(args)}) -> {structured}")
+    return "\n" + "\n".join(lines) if lines else None
+
+
+def _body(result: Any, method: str = "") -> str:
+    """The response, formatted for reading. Empty when DEBUG is not enabled."""
+    if not _bodies_wanted():
+        return ""
+    try:
+        if not _LOG_BODIES_VERBATIM and method == "tools/list":
+            summary = _summarise_tools(result)
+            if summary is not None:
+                return summary
+        shown = result if _LOG_BODIES_VERBATIM else _elide(result)
+        return "\n" + json.dumps(shown, indent=2, default=str)
+    except Exception as e:                      # never let logging break a response
+        return f"\n<unloggable body: {type(e).__name__}: {e}>"
 
 
 def _caller_of(params: Any) -> str:
@@ -98,11 +183,16 @@ class RequestLogMiddleware(ServerMiddleware[Any]):
         # spelling `isError` and not the python attribute. Logging ok for a call
         # that failed would be the same confusion this module exists to remove.
         if isinstance(result, dict) and result.get("isError"):
-            logger.warning(f"rpc {ctx.method}{who} -> isError in {perf_counter() - started:.2f}s: "
-                           f"{_first_text(result)}")
-            return result
+            logger.warning(f"rpc {ctx.method}{who} -> isError in "
+                           f"{perf_counter() - started:.2f}s: {_first_text(result)}")
+        else:
+            logger.info(f"rpc {ctx.method}{who} -> ok in {perf_counter() - started:.2f}s")
 
-        logger.info(f"rpc {ctx.method}{who} -> ok in {perf_counter() - started:.2f}s")
+        # Separate record, so the one-line summary stays readable at INFO and the body
+        # appears only when the level asks for it.
+        body = _body(result, ctx.method)
+        if body:
+            logger.debug(f"rpc {ctx.method}{who} body:{body}")
         return result
 
 
@@ -114,4 +204,6 @@ def install(server) -> None:
     if any(isinstance(m, RequestLogMiddleware) for m in server.middleware):
         return
     server.middleware.append(RequestLogMiddleware())
-    logger.info("Request logging enabled: every inbound message is logged as received")
+    bodies = ("verbatim (YADA_MCP_LOG_BODIES=full)" if _LOG_BODIES_VERBATIM
+              else "elided" if _bodies_wanted() else "off -- raise the level to DEBUG")
+    logger.info(f"Request logging enabled: every inbound message logged; bodies {bodies}")
