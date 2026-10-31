@@ -307,3 +307,36 @@ def test_facets_name_the_blank_extension(combinations):
 
 def test_unfiltered_facets_cover_the_whole_store(combinations):
     assert Vocabulary.counts("github") == (492, 59_368)
+
+
+# ------------------------------------------------- qualified repository names
+
+def test_a_qualified_name_resolves_to_the_repository(combinations):
+    """`account/repo` is how a describe reports a repository, so it has to be a value
+    the caller can pass straight back."""
+    r = Vocabulary.resolve("github", "repo", "troystribling/zgomot")
+    assert r.kind == "exact"
+    assert r.values == ("zgomot",)
+    assert r.where() == {"repo": "zgomot"}          # the account is not re-applied
+
+
+def test_a_real_repository_under_the_wrong_account_is_a_miss(combinations):
+    """
+    The failure this spelling exists to prevent, in its sharpest form.
+
+    zgomot is real and glyfish is real, but glyfish does not hold zgomot. Resolving on
+    the repo half alone would answer a question nobody asked, and the answer would look
+    right -- which is how a table of repositories came back with every fork attributed
+    to the account that published it rather than the one holding this copy.
+    """
+    r = Vocabulary.resolve("github", "repo", "glyfish/zgomot")
+    assert r.kind == "none"
+    assert r.where() is None
+
+
+def test_a_bare_name_still_resolves(combinations):
+    assert Vocabulary.resolve("github", "repo", "zgomot").values == ("zgomot",)
+
+
+def test_a_qualified_name_with_an_unknown_repository_is_a_miss(combinations):
+    assert Vocabulary.resolve("github", "repo", "glyfish/nosuch").kind == "none"

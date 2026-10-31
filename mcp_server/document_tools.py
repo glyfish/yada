@@ -111,8 +111,26 @@ def _resolve(store: str, proposed: dict[str, str | None]):
 
 
 def _available(store: str, resolutions) -> dict[str, list[str]]:
-    """What exists for each field that matched nothing -- the next step after a dead end."""
-    return {r.field: Vocabulary.available(store, r.field) for r in resolutions if not r.matched}
+    """
+    What exists for each field that matched nothing -- the next step after a dead end.
+
+    Repositories come back qualified, for the same reason the facets do: a bare name
+    has no owner, and a reader handed 40 of them will supply owners from memory. This
+    is the error path, where the caller is already wrong about something, so it is the
+    worst place to hand back a spelling that invites a second guess.
+    """
+    out: dict[str, list[str]] = {}
+    for r in resolutions:
+        if r.matched:
+            continue
+        if store == GITHUB_DB_NAME and r.field == "repo":
+            owners = {fv["repo"]: fv["account"] for fv, _, _ in Vocabulary.rows(store)
+                      if fv.get("repo") and fv.get("account")}
+            out[r.field] = [f"{owners[v]}/{v}" if v in owners else v
+                            for v in Vocabulary.available(store, r.field)]
+        else:
+            out[r.field] = Vocabulary.available(store, r.field)
+    return out
 
 
 def _facets_of(chunks, fields: tuple[str, ...]) -> dict[str, dict[str, int]]:
@@ -324,6 +342,15 @@ def _describe(store: str, proposed: dict[str, str | None], vocab_model) -> Any:
             if a and b:
                 combined[f"{a}/{b}"] = combined.get(f"{a}/{b}", 0) + n
         if combined:
+            # The pair replaces the two facets it contains rather than joining them.
+            # Publishing both put 101 bare repository names next to the same 101
+            # qualified ones, and a bare name has no owner -- so the obvious thing for
+            # a reader asked to report owners is to supply them from memory, which for
+            # a fork means the upstream owner rather than whoever holds this copy.
+            # That is exactly the table that came back wrong. One spelling, always
+            # qualified, and 875 tokens lighter.
+            for subsumed in pair:
+                facets.pop(subsumed, None)
             facets[f"{left}/{right}"] = dict(
                 sorted(combined.items(), key=lambda kv: (-kv[1], kv[0])))
 
@@ -424,9 +451,12 @@ def register(server) -> None:
             "Search Troy Stribling's indexed code repositories by meaning and return "
             f"ranked excerpts with their file paths ({_counts(GITHUB_DB_NAME)}).\n"
             "- query: what to look for, in natural language.\n"
-            "- repo: a repository name, or a GitHub account name to search everything "
-            "under it. A partial name works. Omit to search every repository. "
-            "Call describe_code to see what exists.\n"
+            "- repo: a repository, written 'account/name' as describe_code reports it, "
+            "or just the name when it is unambiguous. A GitHub account name on its own "
+            "searches everything under it, and a partial name works. Omit to search "
+            "every repository. Call describe_code to see what exists -- many "
+            "repositories are forks, so the account holding a copy is often not the "
+            "account that published it.\n"
             "- ext: a file extension such as '.py', or a language name such as 'Python', "
             "which maps to the extensions that language uses. Pass '(no extension)' for "
             "files that have none, such as LICENSE and Makefile. Omit to search all types.\n"

@@ -303,6 +303,12 @@ class Vocabulary:
     # -------------------------------------------------------------- resolution
 
     @classmethod
+    def _holds(cls, store: str, account: str, repo: str) -> bool:
+        """Whether this account actually holds this repository."""
+        return any(fv.get("account") == account and fv.get(_ACCOUNT_OF) == repo
+                   for fv, _, _ in cls.combinations(store))
+
+    @classmethod
     def resolve(cls, store: str, field: str, proposed: str) -> Resolution:
         """
         Expand a proposed filter value to the exact stored values it should match.
@@ -326,6 +332,20 @@ class Vocabulary:
 
         if proposed in values:
             return Resolution(field, proposed, (proposed,), "exact", field_total=total)
+
+        # `account/repo`, which is how a describe names a repository. Bare repo names
+        # are ambiguous to a reader -- 101 of them with no owner invites filling the
+        # owner in from memory, and for forks the remembered owner is the upstream one
+        # rather than whoever holds this copy. Accepting the qualified spelling is what
+        # lets a describe publish only the unambiguous form and still have its keys be
+        # values a caller can pass straight back.
+        if field == _ACCOUNT_OF and "/" in proposed:
+            account, _, repo = proposed.partition("/")
+            if repo in values and cls._holds(store, account, repo):
+                return Resolution(field, proposed, (repo,), "exact", field_total=total)
+            # A real repo under the wrong account is a miss, not a match: resolving it
+            # anyway would answer a question the caller did not ask.
+            return Resolution(field, proposed, (), "none", field_total=total)
 
         if field == "ext":
             folded = proposed.casefold()
