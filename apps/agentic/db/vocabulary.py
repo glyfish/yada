@@ -185,6 +185,10 @@ class Vocabulary:
     _combination: Table | None = None
     #: The one table read; everything else is derived from it and memoised below.
     _rows_cache: dict[str, list[tuple[dict, int, int]]] = {}
+    #: The ``built_at`` each store's cached rows were read at. A rebuild in ANOTHER
+    #: process bumps the stored value, and comparing it is how this process notices;
+    #: ``replace_store`` only invalidates the caches of the process that wrote.
+    _built_at_cache: dict[str, datetime] = {}
     _cache: dict[tuple[str, str], dict[str, int]] = {}
     _alias_cache: dict[tuple[str, str], dict[str, tuple[tuple[str, ...], str]]] = {}
 
@@ -210,18 +214,70 @@ class Vocabulary:
             raise RuntimeError("Vocabulary.initialize() has not been called")
         return cls._engine
 
+    @classmethod
+    def ensure_initialized(cls) -> None:
+        """
+        Initialize against the environment's database if nothing has yet.
+
+        The MCP server initializes explicitly at startup, which is the right shape for a
+        long-lived process. A loader, a notebook or a one-off script does not -- and the
+        rebuild that has to follow every write runs in exactly those. Making that one
+        path independent of startup order is what lets the refresh live with the write.
+        """
+        if cls._engine is None:
+            cls.initialize()
+
+    @classmethod
+    def forget(cls, store: str) -> None:
+        """Drop every memoised read for one store, so the next one re-reads."""
+        cls._rows_cache.pop(store, None)
+        cls._built_at_cache.pop(store, None)
+        cls._cache = {key: v for key, v in cls._cache.items() if key[0] != store}
+        cls._alias_cache = {key: v for key, v in cls._alias_cache.items() if key[0] != store}
+
+    @classmethod
+    def _built_at(cls, store: str) -> datetime | None:
+        """
+        When this store's vocabulary was last written, or None if it never was.
+
+        Deliberately narrower than ``scan_info``: this runs on every read, so it selects
+        the one column the freshness check compares and nothing else.
+        """
+        s = cls._scan
+        assert s is not None
+        with cls._engine_or_raise().connect() as conn:
+            row = conn.execute(select(s.c.built_at).where(s.c.store == store)).first()
+        return row[0] if row else None
+
     # ------------------------------------------------------------------- reads
 
     @classmethod
     def rows(cls, store: str) -> list[tuple[dict, int, int]]:
         """
-        Every combination row for a store, read once per process.
+        Every combination row for a store, cached until the store is rebuilt.
 
         One read serves resolution, the generated descriptions and every describe call:
         a store is at most 961 rows, so holding them beats a query per question. This is
         the single source the other reads derive from -- the marginals and aliases used
         to be tables, which meant two write paths producing counts that had to agree.
+
+        Being the single source is also why the freshness check belongs here. The rows
+        were previously read *once per process*, which is correct only while nothing
+        else writes them: the loader runs in its own process, so after a load the
+        long-lived server went on serving the vocabulary it read at startup, and
+        ``replace_store`` could not help because it invalidates the caches of the
+        process that wrote. Checking ``built_at`` on the way through means every
+        derived read -- values, aliases, coverage, combinations, facets, counts -- is
+        current without any of them having to remember to ask.
+
+        The cost is one indexed single-row SELECT per call, against a local database,
+        on a path whose other half is a multi-second vector search.
         """
+        built_at = cls._built_at(store)
+        if cls._built_at_cache.get(store) != built_at:
+            cls.forget(store)
+            if built_at is not None:
+                cls._built_at_cache[store] = built_at
         if store not in cls._rows_cache:
             k = cls._combination
             assert k is not None
@@ -554,7 +610,5 @@ class Vocabulary:
                     set_={"collection": collection, "chunks": chunks, "built_at": text("now()")},
                 )
             )
-        cls._rows_cache.pop(store, None)
-        cls._cache = {key: v for key, v in cls._cache.items() if key[0] != store}
-        cls._alias_cache = {key: v for key, v in cls._alias_cache.items() if key[0] != store}
+        cls.forget(store)
         logger.info(f"Vocabulary for {store}: {len(rows)} combinations, {chunks:,} chunks")

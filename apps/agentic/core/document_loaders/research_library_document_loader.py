@@ -118,7 +118,11 @@ class ResearchLibraryChromaDocumentLoader(ChromaDocumentLoader):
             chunks.extend(parts)
 
         if not chunks:
+            # The delete above already ran, so the store changed even though nothing was
+            # written -- this exit leaves the document gone, and the vocabulary has to
+            # say so rather than keep describing it.
             logger.warning(f"No content extracted from {filename}; skipping.")
+            self.refresh_vocabulary()
             return
 
         BATCH = 64
@@ -130,6 +134,7 @@ class ResearchLibraryChromaDocumentLoader(ChromaDocumentLoader):
         )
 
         logger.info(f"Loaded research document: {meta_data['title']}.")
+        self.refresh_vocabulary()
 
 
     async def load_all_documents(self, base_path: str, **kwargs):

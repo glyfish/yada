@@ -78,6 +78,10 @@ class GitHubChromaDocumentLoader(ChromaDocumentLoader):
                     await self.load_github_repo(repo_path)
 
         logger.info(f"Finished updating github document store from {base_path}.")
+        # Once for the whole sweep, not once per repo: a github rebuild rescans the
+        # entire collection (~36 s), so per-repo would make the cost quadratic in
+        # repositories for a snapshot only the last one would survive.
+        self.refresh_vocabulary()
 
 
     async def load_document(self, path: str, **kwargs):
@@ -89,6 +93,7 @@ class GitHubChromaDocumentLoader(ChromaDocumentLoader):
                 
         if os.path.isdir(os.path.join(path, ".git")):
             await self.load_github_repo(path)
+            self.refresh_vocabulary()
 
 
     def _delete_repo(self, account: str, repo_name: str) -> int:

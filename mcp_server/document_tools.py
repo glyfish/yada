@@ -35,6 +35,7 @@ from typing import Any, Callable
 
 from apps.agentic.core.agents.chroma_rag_agent import ChromaRAGAgent, SearchOutcome
 from apps.agentic.core.constants import GITHUB_DB_NAME, RESEARCH_LIBRARY_DB_NAME
+from apps.agentic.db import vocabulary_builder
 from apps.agentic.db.vocabulary import NO_EXTENSION, Vocabulary
 from lib.logger import get_logger
 
@@ -151,6 +152,52 @@ def _store_is_built(store: str) -> bool:
     return Vocabulary.scan_info(store) is not None
 
 
+#: Stores whose chunk count has been checked against the vocabulary in this process.
+_size_checked: set[str] = set()
+
+
+def _staleness_note(store: str) -> str | None:
+    """
+    A line to report when the vocabulary has fallen behind its store, else None.
+
+    The loaders rebuild after every write, so this is a backstop, not the mechanism --
+    it catches the store that changed without one: a directory copied between machines,
+    a restore from backup, a load run from a build predating the refresh. All three are
+    on the path for the December server move, where a store and its vocabulary travel
+    separately (`sefer/planning/yada-todo.md` §2).
+
+    Checked once per process per store, at first use rather than at boot, because
+    `collection.count()` costs 3.8 s on github and 69 ms on the library; a server that
+    stays up for days should not pay the former on every restart, and a check that never
+    runs catches nothing. The cost is that a store changed behind the server *after* its
+    first check goes unseen until a restart -- acceptable, because the case this cannot
+    see is the case the loaders now prevent, and a rebuild from any process is noticed
+    through `built_at` instead.
+
+    Never raises. A backstop that can break a working search is worse than the gap.
+    """
+    if store in _size_checked:
+        return None
+    _size_checked.add(store)
+    try:
+        if not vocabulary_builder.is_stale(store):
+            return None
+    except Exception:
+        logger.exception(f"Could not check whether the {store} vocabulary is current.")
+        return None
+    logger.warning(
+        f"The {store} vocabulary is behind the store: the collection has changed size "
+        f"since it was built. Filters may deny values that exist. Run a rebuild."
+    )
+    return (f"Note: the {store} vocabulary is out of date -- the store has changed size "
+            f"since it was built, so filter values added since then will not resolve.")
+
+
+def _with_note(detail: str | None, note: str | None) -> str | None:
+    """Join a status detail and a staleness note, keeping whichever exists."""
+    return " ".join(part for part in (detail, note) if part) or None
+
+
 #: The tool currently being served, so every line logged while it runs says which
 #: endpoint produced it. A ContextVar rather than a global because the server handles
 #: calls concurrently, and "Retrieved 5 documents" with no endpoint is unreadable once
@@ -231,6 +278,7 @@ def _search(store: str, query: str, proposed: dict[str, str | None], limit: int,
                              "detail": f"The {store} vocabulary has never been built; "
                                        f"run a rebuild before searching."})
 
+    note = _staleness_note(store)
     resolved = _resolve(store, proposed)
     base["filters_resolved"] = resolved.resolved
 
@@ -238,15 +286,16 @@ def _search(store: str, query: str, proposed: dict[str, str | None], limit: int,
         dead = ", ".join(f"{r.field}={r.proposed!r}" for r in resolved.unresolvable)
         return hits_model(**{**base, "status": "unresolvable_filter", "query": query,
                              "available": _available(store, resolved.resolutions),
-                             "detail": f"{dead} matches no stored value, so no search was run. "
-                                       f"`available` lists what exists."})
+                             "detail": _with_note(
+                                 f"{dead} matches no stored value, so no search was run. "
+                                 f"`available` lists what exists.", note)})
 
     base["filters_applied"] = resolved.applied
     outcome: SearchOutcome = _agent(store).search(query, where=resolved.where, k=limit)
 
     if outcome.error is not None:
         return hits_model(**{**base, "status": "retrieval_error", "query": query,
-                             "detail": outcome.error})
+                             "detail": _with_note(outcome.error, note)})
 
     fields = PUBLISHED_FILTERS[store]
     hits = [
@@ -272,11 +321,12 @@ def _search(store: str, query: str, proposed: dict[str, str | None], limit: int,
         return hits_model(**{**base, "status": "no_match", "query": query,
                              "best_score": outcome.best_score, "retrieved": outcome.retrieved,
                              "available": _available(store, resolved.resolutions),
-                             "detail": detail})
+                             "detail": _with_note(detail, note)})
 
     return hits_model(**{**base, "query": query, "hits": hits,
                          "facets": _facets_of(outcome.chunks, fields),
-                         "best_score": outcome.best_score, "retrieved": outcome.retrieved})
+                         "best_score": outcome.best_score, "retrieved": outcome.retrieved,
+                         "detail": note})
 
 
 def _meta_value(metadata: dict, field: str) -> str:
@@ -319,6 +369,7 @@ def _describe(store: str, proposed: dict[str, str | None], vocab_model) -> Any:
         return vocab_model(**{**base, "status": "store_empty",
                               "detail": f"The {store} vocabulary has never been built."})
 
+    note = _staleness_note(store)
     resolved = _resolve(store, proposed)
     base["filters_resolved"] = resolved.resolved
 
@@ -326,8 +377,9 @@ def _describe(store: str, proposed: dict[str, str | None], vocab_model) -> Any:
         dead = ", ".join(f"{r.field}={r.proposed!r}" for r in resolved.unresolvable)
         return vocab_model(**{**base, "status": "unresolvable_filter",
                               "available": _available(store, resolved.resolutions),
-                              "detail": f"{dead} matches no stored value. "
-                                        f"`available` lists what exists."})
+                              "detail": _with_note(
+                                  f"{dead} matches no stored value. "
+                                  f"`available` lists what exists.", note)})
 
     base["filters_applied"] = resolved.applied
     documents, chunks = Vocabulary.counts(store, resolved.resolutions)
@@ -356,9 +408,10 @@ def _describe(store: str, proposed: dict[str, str | None], vocab_model) -> Any:
 
     if chunks == 0:
         return vocab_model(**{**base, "status": "no_match",
-                              "detail": "Each value exists, but nothing carries all of "
-                                        "them together."})
-    return vocab_model(**{**base, "facets": facets, "documents": documents, "chunks": chunks})
+                              "detail": _with_note("Each value exists, but nothing carries "
+                                                   "all of them together.", note)})
+    return vocab_model(**{**base, "facets": facets, "documents": documents,
+                          "chunks": chunks, "detail": note})
 
 
 # ----------------------------------------------------------- generated descriptions
