@@ -42,8 +42,7 @@
         "TOKENIZERS_PARALLELISM": "false",
         "YADA_MCP_TRANSPORT": "streamable-http",
         "YADA_MCP_HOST": "127.0.0.1",
-        "YADA_MCP_PORT": "8081",
-        "YADA_LOG_LEVEL": "INFO"
+        "YADA_MCP_PORT": "8081"
       }
     },
     {
@@ -76,8 +75,7 @@
       "name": "yada MCP server (stdio)",
       "env": {
         "TOKENIZERS_PARALLELISM": "false",
-        "YADA_MCP_TRANSPORT": "stdio",
-        "YADA_LOG_LEVEL": "INFO"
+        "YADA_MCP_TRANSPORT": "stdio"
       }
     },
     {

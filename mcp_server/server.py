@@ -102,6 +102,7 @@ _logs_to_stderr()  # get_logger may have attached a fresh stdout handler
 #: response body on every call. INFO is the useful default; one dial raises all of it.
 #:   INFO   one line per request and per result
 #:   DEBUG  response bodies, the agent's prompts, the ranker's scores
+print(f"YADA_LOG_LEVEL: {os.getenv('YADA_LOG_LEVEL', 'INFO').upper()}")
 logger.setLevel(os.getenv("YADA_LOG_LEVEL", "INFO").upper())
 
 #: Transport is selectable so the same server serves a local client over stdio and a
