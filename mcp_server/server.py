@@ -340,12 +340,15 @@ def run() -> None:
     both are supported by this SDK version.
     """
     if TRANSPORT == "stdio":
-        logger.info(f"Starting yada MCP server {VERSION} (mcp {MCP_VERSION}, transport=stdio)")
+        logger.info(f"Starting yada MCP server {VERSION} (mcp {MCP_VERSION}, transport=stdio, "
+                    f"log level {logging.getLevelName(logger.level)})")
     else:
         path = "/mcp" if TRANSPORT == "streamable-http" else "/sse"
         logger.info(
             f"Starting yada MCP server {VERSION} (mcp {MCP_VERSION}) on "
-            f"http://{HOST}:{PORT}{path} (transport={TRANSPORT})"
+            f"http://{HOST}:{PORT}{path} (transport={TRANSPORT}, "
+
+            f"log level {logging.getLevelName(logger.level)})"
         )
         if HOST not in ("127.0.0.1", "localhost", "::1"):
             logger.warning(
