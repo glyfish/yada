@@ -103,6 +103,94 @@
       "python": "/Users/troy/.pyenv/versions/yada-3.14.7/bin/python"
     },
     {
+      "name": "FRED Metadata: status",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/clients/bin/fred_metadata.py",
+      "args": [
+        "status"
+      ],
+      "cwd": "${workspaceFolder}",
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "TOKENIZERS_PARALLELISM": "false"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "python": "/Users/troy/.pyenv/versions/yada-3.14.7/bin/python"
+    },
+    {
+      "name": "FRED Metadata: dry run",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/clients/bin/fred_metadata.py",
+      "args": [
+        "all",
+        "--dry-run"
+      ],
+      "cwd": "${workspaceFolder}",
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "TOKENIZERS_PARALLELISM": "false"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "python": "/Users/troy/.pyenv/versions/yada-3.14.7/bin/python"
+    },
+    {
+      "name": "FRED Metadata: collect (walk + fetch)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/clients/bin/fred_metadata.py",
+      "args": [
+        "all"
+      ],
+      "cwd": "${workspaceFolder}",
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "TOKENIZERS_PARALLELISM": "false"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "python": "/Users/troy/.pyenv/versions/yada-3.14.7/bin/python"
+    },
+    {
+      "name": "FRED Metadata: fetch 5 categories",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/clients/bin/fred_metadata.py",
+      "args": [
+        "fetch",
+        "--limit",
+        "5"
+      ],
+      "cwd": "${workspaceFolder}",
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "TOKENIZERS_PARALLELISM": "false"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "python": "/Users/troy/.pyenv/versions/yada-3.14.7/bin/python"
+    },
+    {
+      "name": "FRED Metadata: resync",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/clients/bin/fred_metadata.py",
+      "args": [
+        "resync"
+      ],
+      "cwd": "${workspaceFolder}",
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "TOKENIZERS_PARALLELISM": "false"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "python": "/Users/troy/.pyenv/versions/yada-3.14.7/bin/python"
+    },
+    {
       "name": "Unit Tests",
       "type": "debugpy",
       "request": "launch",

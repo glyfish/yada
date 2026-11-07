@@ -3,8 +3,13 @@ Tests for FRED API discovery.
 
 The pagination loop and the page cap are the whole point of the module, and both are
 pure given a stub client, so they are tested without a database or a network. What is
-deliberately *not* covered here is the database reconciliation in `fetch_category`,
-which needs Postgres; it is exercised by running `discover` against dev.
+deliberately *not* covered here is the database reconciliation in `fetch_category` and
+the surplus query in `surplus_categories`, both of which need Postgres; they are
+exercised by running `discover` and `fred_metadata.py status` against dev.
+
+`surplus_categories` was verified that way on 2026-11-07: it returns exactly one row
+across 5,201 categories (34111, holding 2,398 against FRED's 1,398), which is the case
+that prompted writing it.
 """
 
 import pytest

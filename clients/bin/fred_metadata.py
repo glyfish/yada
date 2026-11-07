@@ -68,6 +68,7 @@ from apps.agentic.db.fred_discovery import (  # noqa: E402
     pending_categories,
     rebuild_paths,
     refresh_derived,
+    surplus_categories,
     walk_categories,
 )
 from lib.logger import get_logger  # noqa: E402
@@ -122,6 +123,18 @@ def cmd_status(args: argparse.Namespace) -> dict:
     counts["unwalked"] = counts["categories"] - counts["walked"]
     counts["pending_fetch"] = len(pending_categories(engine))
     counts["volume_excluded_roots"] = sorted(VOLUME_EXCLUDED)
+
+    # The other direction. `scans_bad` catches a category holding LESS than FRED reports;
+    # it is structurally blind to one holding MORE, because it compares against what a run
+    # wrote rather than what the category holds. Retired series are invisible to it.
+    surplus = surplus_categories(engine)
+    counts["surplus_categories"] = len(surplus)
+    counts["surplus_memberships"] = sum(held - api for _, _, api, held in surplus)
+    if surplus:
+        counts["surplus_detail"] = [
+            {"category_id": cid, "path": path, "api": api, "held": held}
+            for cid, path, api, held in surplus[:10]
+        ]
     return counts
 
 

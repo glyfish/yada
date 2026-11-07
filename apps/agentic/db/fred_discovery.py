@@ -711,6 +711,54 @@ def pending_categories(engine: Engine) -> list[tuple[int, int | None]]:
         ]
 
 
+def surplus_categories(engine: Engine) -> list[tuple[int, str, int, int]]:
+    """
+    Categories holding MORE memberships than FRED says the category contains, as
+    `(category_id, category_path, api_series_count, held)`.
+
+    This is the blind spot in `fred_category_scan`. The scan compares
+    `api_series_count` against `fetched_series_count` -- what FRED reported against what
+    *this run wrote* -- which proves a fetch was complete and says nothing about rows that
+    were already there. A category can therefore read `status='ok'` while holding series
+    FRED has retired, because nothing in the fetch path deletes.
+
+    That is not a bug in the never-delete rule, which is deliberate: the source is ~10,700
+    paced requests and a partial run must leave the catalogue larger, never emptier. It is
+    a gap in what the reconciliation can *see*, and this query is the other half of it.
+
+    Found one case on 2026-11-07, which is what prompted this: category 34111, Senior
+    Credit Officer Opinion Survey, held 2,398 against FRED's 1,398. The surplus 1,000 were
+    the retired `ALLQ*` series family, written by the superseded YAML loader -- 0 of 1,000
+    carried `notes` while all 1,398 current rows did -- and left behind when FRED replaced
+    the family with differently-prefixed ids. 1,000 exactly, because that was the old
+    export's page size.
+
+    Reporting only. Pruning needs a complete scan to be safe and is a separate pass: a
+    surplus here is evidence FRED dropped something, but a failed or capped fetch would
+    look the same if this were ever run against partial data.
+    """
+    with engine.connect() as connection:
+        return [
+            (row[0], row[1], row[2], row[3])
+            for row in connection.execute(
+                text(
+                    """
+                    SELECT c.category_id, c.category_path, s.api_series_count, h.held
+                      FROM fred_category AS c
+                      JOIN fred_category_scan AS s USING (category_id)
+                      JOIN (SELECT category_id, count(*) AS held
+                              FROM fred_series_category
+                             GROUP BY category_id) AS h USING (category_id)
+                     WHERE s.status = 'ok'
+                       AND s.page_limit IS NULL
+                       AND h.held > s.api_series_count
+                     ORDER BY h.held - s.api_series_count DESC
+                    """
+                )
+            )
+        ]
+
+
 def discover(
     url: str | None = None,
     api: FredApi | None = None,
