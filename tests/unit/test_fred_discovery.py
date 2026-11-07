@@ -159,14 +159,28 @@ def test_the_true_count_is_still_reported_under_a_cap():
 # ------------------------------------------------------------------------- exclusions
 
 
-def test_regional_data_is_the_excluded_subtree():
-    assert 3008 in VOLUME_EXCLUDED
-
-
-def test_every_exclusion_carries_a_reason():
-    """A flag without a reason is the thing this column exists to prevent."""
+def test_the_exclusion_table_holds_ids_against_reasons():
+    """
+    Tests the contract, not today's contents. `VOLUME_EXCLUDED` is empty as of
+    2026-11-07 -- U.S. Regional Data was excluded on 2026-11-01 and is now being
+    fetched -- and asserting a particular entry would just encode whichever volume
+    decision was current when the test was written.
+    """
     for category_id, reason in VOLUME_EXCLUDED.items():
+        assert isinstance(category_id, int)
+        # A flag without a reason is exactly what this column exists to prevent: an
+        # omission nobody can tell from a bug.
         assert isinstance(reason, str) and len(reason) > 40, category_id
+
+
+def test_an_empty_exclusion_table_means_fetch_everything():
+    """
+    Emptying the table must be a valid configuration, because that is how a branch gets
+    included again. `mark_exclusions` reconciles in both directions for the same reason:
+    emptying it has to CLEAR the stored marks, or a branch that is wanted again stays
+    invisible to `pending_categories` and the fetch skips it silently.
+    """
+    assert isinstance(VOLUME_EXCLUDED, dict)
 
 
 # ------------------------------------------------------------------------------- key

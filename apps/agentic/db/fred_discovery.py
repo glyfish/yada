@@ -76,16 +76,16 @@ MAX_DEPTH = 12
 #: Subtrees recorded but deliberately not fetched, with the reason stored in
 #: `fred_category.excluded_reason`. These are decisions, not gaps: state and county data
 #: was left out of the original export on purpose because of its volume, and nothing
-#: recorded that, so this session mistook it for a defect. Deferral, not rejection --
-#: the categories are walked and kept, so lifting one is a fetch, never a re-walk.
-VOLUME_EXCLUDED: dict[int, str] = {
-    3008: (
-        "U.S. Regional Data: excluded by volume (decision 2026-11-01). "
-        "States alone is 53 categories holding ~80,000 series before county and metro "
-        "nodes, which make up 4,160 of the 5,186 categories in FRED's tree. "
-        "Fetchable later without re-walking."
-    ),
-}
+#: recorded that, so a later reader mistook it for a defect.
+#:
+#: **Empty as of 2026-11-07.** `3008` (U.S. Regional Data) was excluded on 2026-11-01 and
+#: is now included: measuring the catalogue showed we held 424,634 of FRED's 853,320
+#: series, and that the missing half was almost entirely this branch -- seven of FRED's
+#: eight largest releases are state, county or metro. The fetch is ~10,400 requests and
+#: about two hours, which was judged worth it. The mechanism stays because the next
+#: volume decision will want it, and `mark_exclusions` reconciles in both directions, so
+#: emptying this dict clears the marks rather than stranding them.
+VOLUME_EXCLUDED: dict[int, str] = {}
 
 #: Deliberate page ceilings, matched against `category_path` by prefix. Countries stay at
 #: one page for the same volume reason the branch above is out. Recorded per category in
@@ -172,8 +172,32 @@ def _now() -> datetime:
 # --------------------------------------------------------------------------- tree
 
 
+def _child_ids(engine: Engine, category_id: int) -> list[int]:
+    """Children already recorded for this category, so resume can queue past it."""
+    with engine.connect() as connection:
+        return [
+            row[0]
+            for row in connection.execute(
+                text("SELECT category_id FROM fred_category WHERE parent_id = :parent"),
+                {"parent": category_id},
+            )
+        ]
+
+
+def walked_categories(engine: Engine) -> set[int]:
+    """Categories the walk has already asked for children."""
+    with engine.connect() as connection:
+        return {
+            row[0]
+            for row in connection.execute(
+                text("SELECT category_id FROM fred_category WHERE walked_at IS NOT NULL")
+            )
+        }
+
+
 def walk_categories(
-    engine: Engine, api: FredApi, excluded: dict[int, str] | None = None
+    engine: Engine, api: FredApi, excluded: dict[int, str] | None = None,
+    revisit: bool = False,
 ) -> dict[str, int]:
     """
     Breadth-first from FRED's root, writing `(category_id, category_name, parent_id)`.
@@ -186,13 +210,22 @@ def walk_categories(
     An excluded category is **recorded and not descended into**. It stays in the tree
     carrying its reason, so the branch is visible as a decision rather than a gap, and
     the walk costs one request for it instead of several thousand.
+
+    `revisit=False` (the default) **resumes**: a category whose `walked_at` is set is not
+    asked for children again, which is what makes an interrupted regional walk cheap to
+    restart. It also means children FRED has added since are not noticed, so a *refresh*
+    must pass `revisit=True`. Neither is safe as an implicit default -- skipping always
+    makes every later run a no-op, revisiting always makes resume pointless -- so the
+    caller states which it wants.
     """
     excluded = VOLUME_EXCLUDED if excluded is None else excluded
     categories = _table(engine, "fred_category")
+    already = set() if revisit else walked_categories(engine)
     seen: set[int] = set()
     queue: deque[tuple[int, int]] = deque([(ROOT_CATEGORY, 0)])
     written = 0
     stopped: list[int] = []
+    skipped = 0
 
     while queue:
         category_id, depth = queue.popleft()
@@ -204,6 +237,16 @@ def walk_categories(
             # Recorded by mark_exclusions, which also covers anything already walked
             # beneath it from an earlier, unscoped run.
             stopped.append(category_id)
+            continue
+
+        if category_id in already:
+            # Visited by an earlier run. Its children are already recorded, so they are
+            # queued from the database rather than re-fetched -- otherwise resuming
+            # would stop at the frontier of the previous run instead of continuing past
+            # it.
+            skipped += 1
+            for child_id in _child_ids(engine, category_id):
+                queue.append((child_id, depth + 1))
             continue
 
         children = api.get("category/children", category_id=category_id).get(
@@ -226,61 +269,97 @@ def walk_categories(
             )
             queue.append((child_id, depth + 1))
 
-        if rows:
-            statement = pg_insert(categories).values(rows)
-            statement = statement.on_conflict_do_update(
-                index_elements=["category_id"],
-                set_={
-                    "category_name": statement.excluded.category_name,
-                    "parent_id": statement.excluded.parent_id,
-                },
+        # One transaction for the children and the visited stamp. Separately, a crash
+        # between them would leave a category marked walked whose children were never
+        # written -- and resume trusts the stamp, so that subtree would be lost
+        # silently. The exact failure class this module exists to rule out.
+        with engine.begin() as connection:
+            if rows:
+                statement = pg_insert(categories).values(rows)
+                connection.execute(
+                    statement.on_conflict_do_update(
+                        index_elements=["category_id"],
+                        set_={
+                            "category_name": statement.excluded.category_name,
+                            "parent_id": statement.excluded.parent_id,
+                        },
+                    )
+                )
+                written += len(rows)
+            connection.execute(
+                text(
+                    "UPDATE fred_category SET walked_at = now() "
+                    " WHERE category_id = :category"
+                ),
+                {"category": category_id},
             )
-            with engine.begin() as connection:
-                connection.execute(statement)
-            written += len(rows)
 
         if len(seen) % 100 == 0:
-            logger.info(f"FRED tree walk: {len(seen)} categories visited")
+            logger.info(
+                f"FRED tree walk: {len(seen)} visited "
+                f"({skipped} already walked), {written} written"
+            )
 
     logger.info(
-        f"FRED tree walk complete: {written} categories written, "
-        f"{len(stopped)} excluded subtrees not descended into"
+        f"FRED tree walk complete: {written} categories written, {skipped} skipped as "
+        f"already walked, {len(stopped)} excluded subtrees not descended into"
     )
-    return {"visited": len(seen), "written": written, "excluded_roots": len(stopped)}
+    return {
+        "visited": len(seen), "written": written, "skipped": skipped,
+        "excluded_roots": len(stopped),
+    }
 
 
 def mark_exclusions(engine: Engine, excluded: dict[int, str] | None = None) -> dict[str, int]:
     """
-    Stamp `excluded_reason` on each excluded subtree.
+    Make `excluded_reason` in the database match `excluded`, in both directions.
 
-    Applied to descendants too, because an earlier unscoped walk already wrote 4,160
-    regional categories. Those are kept -- they cost nothing, they record that the
-    branch exists, and keeping them means a later decision to include regional data is
-    a fetch rather than another hour of walking.
+    Marking is applied to descendants, because an unscoped walk may already have written
+    thousands of categories beneath an excluded root. Those are kept -- they cost
+    nothing, they record that the branch exists, and keeping them means a later decision
+    to include the branch is a fetch rather than another hour of walking.
 
-    A descendant that already holds series is left unmarked: `Census Regions`, `BEA
-    Regions` and `BLS Regions` came through the original export with data, so calling
-    them excluded would contradict the rows sitting under them.
+    **Clearing matters as much as marking.** Emptying `VOLUME_EXCLUDED` has to clear the
+    marks, or a branch that is now wanted stays invisible to `pending_categories` and the
+    fetch silently skips it -- an exclusion outliving its decision, which is the failure
+    this column was added to prevent. So anything carrying a reason that no longer
+    belongs to an excluded subtree is cleared.
+
+    A descendant that already holds series is never marked: `Census`, `BEA` and `BLS
+    Regions` came through the original export with data, and calling them excluded would
+    contradict the rows beneath them.
     """
     excluded = VOLUME_EXCLUDED if excluded is None else excluded
-    marked = 0
+    marked = cleared = 0
     with engine.begin() as connection:
+        keep: set[int] = set()
         for root_id, reason in excluded.items():
+            ids = [
+                row[0]
+                for row in connection.execute(
+                    text(
+                        """
+                        WITH RECURSIVE subtree AS (
+                            SELECT category_id, 1 AS depth FROM fred_category
+                             WHERE category_id = :root
+                            UNION ALL
+                            SELECT child.category_id, subtree.depth + 1
+                              FROM fred_category AS child
+                              JOIN subtree ON child.parent_id = subtree.category_id
+                             WHERE subtree.depth < :max_depth
+                        )
+                        SELECT category_id FROM subtree
+                        """
+                    ),
+                    {"root": root_id, "max_depth": MAX_DEPTH},
+                )
+            ]
+            keep.update(ids)
             marked += connection.execute(
                 text(
                     """
-                    WITH RECURSIVE subtree AS (
-                        SELECT category_id, 1 AS depth FROM fred_category
-                         WHERE category_id = :root
-                        UNION ALL
-                        SELECT child.category_id, subtree.depth + 1
-                          FROM fred_category AS child
-                          JOIN subtree ON child.parent_id = subtree.category_id
-                         WHERE subtree.depth < :max_depth
-                    )
-                    UPDATE fred_category AS target
-                       SET excluded_reason = :reason
-                     WHERE target.category_id IN (SELECT category_id FROM subtree)
+                    UPDATE fred_category AS target SET excluded_reason = :reason
+                     WHERE target.category_id = ANY(:ids)
                        AND NOT EXISTS (
                            SELECT 1 FROM fred_series_category sc
                             WHERE sc.category_id = target.category_id
@@ -288,11 +367,25 @@ def mark_exclusions(engine: Engine, excluded: dict[int, str] | None = None) -> d
                        AND target.excluded_reason IS DISTINCT FROM :reason
                     """
                 ),
-                {"root": root_id, "reason": reason, "max_depth": MAX_DEPTH},
+                {"reason": reason, "ids": ids},
             ).rowcount
-    if marked:
-        logger.info(f"marked {marked} categories as deliberately excluded")
-    return {"marked": marked}
+
+        cleared = connection.execute(
+            text(
+                """
+                UPDATE fred_category SET excluded_reason = NULL
+                 WHERE excluded_reason IS NOT NULL
+                   AND NOT (category_id = ANY(:keep))
+                """
+            ),
+            {"keep": sorted(keep) or [0]},
+        ).rowcount
+
+    if marked or cleared:
+        logger.info(
+            f"exclusions reconciled: {marked} marked, {cleared} cleared"
+        )
+    return {"marked": marked, "cleared": cleared}
 
 
 def rebuild_paths(engine: Engine) -> dict[str, int]:
