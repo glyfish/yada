@@ -20,7 +20,7 @@ requests and changes no rows:
 - series are upserted, memberships inserted on-conflict-do-nothing.
 - `paths` and `exclusions` update only where the value actually differs.
 
-That is what makes `notebooks/data/fred_meta_data.ipynb` safe to re-run, and it is
+That is what makes `notebooks/data/fred/fred_meta_data.ipynb` safe to re-run, and it is
 asserted by `tests/unit/test_fred_discovery.py`.
 
 Examples
