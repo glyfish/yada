@@ -1,9 +1,16 @@
 """
 Derive browsable subcategories under each FRED category, and name them.
 
-FRED's taxonomy bottoms out above browsable size -- every category holding 500+ series
-has zero children, and the largest holds 53,187 -- so the nodes between a category and
-its series do not exist upstream and have to be built. See `0008_fred_subcategories.py`.
+FRED's taxonomy bottoms out above browsable size: 206 categories hold 500 or more series
+attached directly to them, the largest holds 53,187, and descending does not help --
+`Production & Business Activity > Housing` holds 53,187 series while its 7 children hold
+254 between them. So the nodes between a category and its series do not exist upstream and
+have to be built. See `0008_fred_subcategories.py`.
+
+**Corrected 2026-11-07.** This said "every category holding 500+ series has zero
+children", measured against a partially walked tree. 64 of the 206 do have children. The
+argument is unaffected and better supported: it does not rest on an absence of children
+but on where the series are attached.
 
 The pipeline, per category:
 
@@ -15,20 +22,27 @@ The pipeline, per category:
 3. **Name** each node from its members with an LLM, producing a short name and a set of
    search `concepts` that deliberately includes synonyms absent from the titles.
 
-Step 3 is why this works at all. The names and concepts become a ~31,000-row full-text
-index that answers conceptual queries the 424,634 titles cannot: measured on a sample,
+Step 3 is why this works at all. The names and concepts become a full-text index --
+~43,000 rows for the non-regional half -- that answers conceptual queries the 846,628
+titles cannot: measured on a sample,
 "steel making capacity", "heavy industry plant buildout" and "coal and coke production"
 all reached **first place** for a topic whose titles contain none of those words, while
 lexical search over the titles returned zero rows for all three.
 
-Because the names are model output rather than source data, `PROMPT_VERSION` is stored on
-every row. A changed prompt gives different names for identical input, and a half-rebuilt
-tree must not be mistakable for a consistent one.
+Because both the names and the shape are derived rather than source data, every row
+stores `PROMPT_VERSION` and `SPLIT_VERSION`. A changed prompt gives different names for
+identical input and a changed splitter gives a different tree, and a half-rebuilt
+catalogue must not be mistakable for a consistent one.
 
 Clustering happens **within** a category, never globally. It is cheaper, the naming is
 sharper because the input is already homogeneous, and it keeps FRED's own curation as the
-spine rather than replacing it with 27,000 derived nodes and no human structure above
-them.
+spine rather than replacing it with tens of thousands of derived nodes and no human
+structure above them.
+
+**Scope.** `SCOPES` splits the catalogue, and `pending_builds` defaults to
+`non-regional`. Regional data is 4,173 of 5,201 categories and the semantic scheme does
+not fit it -- see `SCOPES` for why, and section 4.4 of
+`sefer/planning/yada-fred-subcategory-procedure.md` for what it would need instead.
 """
 
 from __future__ import annotations
@@ -36,8 +50,11 @@ from __future__ import annotations
 import json
 import math
 import os
+import time
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
+from threading import Lock
 from typing import Any, Callable, Iterable, Sequence
 
 from sqlalchemy import MetaData, Table, text
@@ -55,6 +72,14 @@ LEAF_CAP = 25
 
 #: Branching ceiling for interior nodes. The same argument applies upward: a node with
 #: 243 children is no more evaluable than a leaf with 1,000 series.
+#:
+#: Enforced in `recursive_split` and asserted by `branch_cap_violations`. It was
+#: previously only *documented*: the k ceiling read `branch ** 2`, so a node could take
+#: 625 children, and 130 of the 723 non-regional categories were over the threshold that
+#: triggers it. Measured 2026-11-08 before fixing it: enforcing 25 costs ~$1.02 more in
+#: naming and does NOT make the tree deeper to browse -- total depth (FRED path +
+#: derived levels) stays at a median of 4 non-regional and 6 regional either way,
+#: because the categories with the most series sit shallowest in FRED's own tree.
 BRANCH_CAP = 25
 
 EMBED_MODEL = "text-embedding-3-small"
@@ -78,6 +103,19 @@ NAMING_MAX_TOKENS = 1500
 #: Per 1M tokens for NAMING_MODEL, for the cost recorded per category.
 NAMING_INPUT_RATE = 0.10
 NAMING_OUTPUT_RATE = 0.50
+
+#: Naming calls in flight at once, within one level of one category's tree.
+#:
+#: Cost was never the constraint here; wall-clock was. Measured sequentially at 1.37 s
+#: per call (34 calls in 44.0 s and 43 in 62.6 s on the two probe categories), which puts
+#: the non-regional half at ~13.6 hours of nothing but waiting on HTTP. Siblings are
+#: independent, so the only ordering the tree requires is child-before-parent.
+NAMING_CONCURRENCY = 8
+
+#: Attempts the SDK makes for 429 and 5xx before raising. The default of 2 is thin for a
+#: run of ~36,000 calls: one unretried overload marks a whole category `error`, and a
+#: retry re-spends every name already generated for it.
+NAMING_MAX_RETRIES = 8
 
 # ---------------------------------------------------------------------------
 # The classification prompt.
@@ -106,6 +144,40 @@ NAMING_OUTPUT_RATE = 0.50
 # ---------------------------------------------------------------------------
 
 PROMPT_VERSION = "2026-11-01.1"
+
+#: The clustering that produced a tree, stored on every row beside `PROMPT_VERSION`.
+#:
+#: Same argument as the prompt version, for the same reason: the names are not the only
+#: model output here, the *shape* is derived too, and a tree half-built under one splitter
+#: is no more comparable than one half-built under two prompts. Bump this on any change
+#: to `recursive_split` or the clustering it defaults to.
+#:
+#: `2026-11-08.balanced` replaced plain k-means with a size-balanced assignment. Plain
+#: k-means returns clusters of wildly uneven size, and since the recursion continues until
+#: every leaf is under the cap, one fat cluster drags a whole branch down several further
+#: levels. Measured: a 9,932-series category reached **depth 8** with 1,105 nodes and 9
+#: leaves holding a single series; balanced, the same category is depth 3 with 426 nodes
+#: and no singletons. It is shallower, 61% cheaper to name, and costs 2 points of leaf
+#: cohesion (0.953 -> 0.931 mean cosine to the leaf centroid).
+SPLIT_VERSION = "2026-11-08.balanced"
+
+#: Which half of the catalogue a build covers, as a `category_path` predicate.
+#:
+#: The split is not cosmetic. The semantic scheme clusters series by title text, which
+#: works where titles differ by WHAT is measured and fails where they differ by WHERE:
+#: county titles are one measure with a place name substituted, so clustering groups
+#: Alabama's counties together instead of grouping unemployment measures together.
+#: Regional data is 4,173 of 5,201 categories, it already sits 5 levels deep in FRED's
+#: own tree (3,078 of those are `States > * > Counties > *`), and building a semantic
+#: tree under it would reach 8 levels to browse data whose natural shape is two facets.
+#: See `sefer/planning/yada-fred-subcategory-procedure.md` section 4.4. Until that is
+#: settled, `non-regional` is the only scope with a measured basis, so there is no
+#: default: a caller states which half it is paying for.
+SCOPES = {
+    "all": "",
+    "non-regional": "AND c.category_path NOT LIKE 'U.S. Regional Data%'",
+    "regional": "AND c.category_path LIKE 'U.S. Regional Data%'",
+}
 
 LEAF_SYSTEM_PROMPT = """\
 You name groups of statistical data series in a catalogue, for a browsable tree.
@@ -219,7 +291,11 @@ class TitleEmbedder:
         self._client = client
         self._model = model
         self._dims = dims
-        self._cache: dict[str, list[float]] = {}
+        #: float32 rows, not `list[float]`. The cache spans a whole build so duplicate
+        #: titles are embedded once, and the non-regional half holds 289,744 distinct
+        #: titles: as Python float objects at 256 dims that is ~2.4 GB, as float32 rows
+        #: ~0.30 GB. The callers already coerce to float32, so nothing downstream changes.
+        self._cache: dict[str, Any] = {}
         self.embedded = 0
 
     def _ensure_client(self) -> Any:
@@ -229,7 +305,9 @@ class TitleEmbedder:
             self._client = OpenAI()
         return self._client
 
-    def embed(self, titles: Iterable[str]) -> dict[str, list[float]]:
+    def embed(self, titles: Iterable[str]) -> dict[str, Any]:
+        import numpy as np
+
         wanted = [t for t in dict.fromkeys(titles) if t not in self._cache]
         for start in range(0, len(wanted), EMBED_BATCH):
             batch = wanted[start:start + EMBED_BATCH]
@@ -237,7 +315,7 @@ class TitleEmbedder:
                 model=self._model, input=batch, dimensions=self._dims
             )
             for title, item in zip(batch, response.data):
-                self._cache[title] = item.embedding
+                self._cache[title] = np.asarray(item.embedding, dtype="float32")
             self.embedded += len(batch)
         return self._cache
 
@@ -246,11 +324,21 @@ class TitleEmbedder:
 
 
 class Namer:
-    """Names nodes, counting tokens so the build can report what it spent."""
+    """
+    Names nodes, counting tokens so the build can report what it spent.
 
-    def __init__(self, client: Any = None, model: str = NAMING_MODEL):
+    Safe to call from several threads: `_name_tree` names a whole level at once, so the
+    counters are mutated concurrently and an unguarded `+=` would under-report the spend
+    on the one run where the number matters.
+    """
+
+    def __init__(self, client: Any = None, model: str = NAMING_MODEL,
+                 max_retries: int = NAMING_MAX_RETRIES):
         self._client = client
         self._model = model
+        self._max_retries = max_retries
+        self._lock = Lock()
+        self._client_lock = Lock()
         self.calls = 0
         self.input_tokens = 0
         self.output_tokens = 0
@@ -260,10 +348,14 @@ class Namer:
         self.truncated = 0
 
     def _ensure_client(self) -> Any:
+        # Double-checked under a lock: without it, concurrent first calls each build a
+        # client and all but one are discarded along with their connection pools.
         if self._client is None:
-            from anthropic import Anthropic
+            with self._client_lock:
+                if self._client is None:
+                    from anthropic import Anthropic
 
-            self._client = Anthropic()
+                    self._client = Anthropic(max_retries=self._max_retries)
         return self._client
 
     @property
@@ -290,20 +382,24 @@ class Namer:
                 system=system,
                 messages=[{"role": "user", "content": user}],
             )
-            self.calls += 1
             usage = getattr(message, "usage", None)
-            if usage is not None:
-                self.input_tokens += getattr(usage, "input_tokens", 0) or 0
-                self.output_tokens += getattr(usage, "output_tokens", 0) or 0
+            with self._lock:
+                self.calls += 1
+                if usage is not None:
+                    self.input_tokens += getattr(usage, "input_tokens", 0) or 0
+                    self.output_tokens += getattr(usage, "output_tokens", 0) or 0
             if getattr(message, "stop_reason", None) == "max_tokens":
-                self.truncated += 1
+                with self._lock:
+                    self.truncated += 1
                 budget *= 2
                 continue
             named = parse_naming_reply(extract_text(message))
             if named["name"].startswith("UNNAMED"):
-                self.failures += 1
+                with self._lock:
+                    self.failures += 1
             return named
-        self.failures += 1
+        with self._lock:
+            self.failures += 1
         return {"name": "UNNAMED (reply truncated)", "concepts": ""}
 
     def name_leaf(self, titles: Sequence[str]) -> dict[str, str]:
@@ -316,6 +412,43 @@ class Namer:
 
 
 # --------------------------------------------------------------------------- clustering
+
+
+def balanced_clusters(vectors: Any, k: int) -> Any:
+    """
+    k-means centroids, then assignment capped at `ceil(n / k)` per cluster.
+
+    Plain k-means optimises cohesion and says nothing about size, which is the wrong
+    objective for a tree whose requirement is a *size* ceiling: the recursion keeps
+    splitting until every leaf is under the cap, so an uneven split does not get
+    absorbed, it gets amplified into depth. See `SPLIT_VERSION` for the measurement.
+
+    Points are placed most-confident-first -- ordered by distance to their nearest
+    centroid -- so the points with a clear home get it, and the ones paying for the
+    balance are the ones that were ambiguous anyway. Deterministic: `random_state` is
+    fixed and the sorts are stable, so a rebuild reproduces the tree.
+    """
+    import numpy as np
+    from sklearn.cluster import KMeans
+
+    kmeans = KMeans(n_clusters=k, n_init=3, random_state=0).fit(vectors)
+    capacity = math.ceil(len(vectors) / k)
+    distance = np.stack(
+        [((vectors - centre) ** 2).sum(1) for centre in kmeans.cluster_centers_], axis=1
+    )
+    # Precomputed once: per-point argsort inside the loop is the same work n times over.
+    preference = np.argsort(distance, axis=1, kind="stable")
+    order = np.argsort(distance.min(axis=1), kind="stable")
+
+    counts = np.zeros(k, dtype=int)
+    labels = np.full(len(vectors), -1, dtype=int)
+    for point in order:
+        for choice in preference[point]:
+            if counts[choice] < capacity:
+                labels[point] = choice
+                counts[choice] += 1
+                break
+    return labels
 
 
 def recursive_split(
@@ -336,6 +469,16 @@ def recursive_split(
     and without it the recursion never terminates. Falling back to an arbitrary split is
     worse structure but a finite build, and the alternative is a hang that looks like
     slow progress.
+
+    `k` is capped at `branch`, not `branch ** 2`. The squared form was here first and it
+    let the 53,187-series category give its root 625 children -- a node no more readable
+    than the pile it was built to break up, which is the whole requirement. See
+    `BRANCH_CAP` for what enforcing it costs, and for the measurement showing it does not
+    make the tree deeper.
+
+    Clustering defaults to `balanced_clusters`, not plain k-means: the recursion turns an
+    uneven split into depth rather than absorbing it. `cluster` stays injectable so the
+    shape can be tested without a model or a network.
     """
     import numpy as np
 
@@ -343,15 +486,8 @@ def recursive_split(
     if len(indices) <= cap:
         return {"members": indices, "children": [], "depth": depth}
 
-    k = min(max(2, math.ceil(len(indices) / cap)), len(indices), branch ** 2)
-    if cluster is None:
-        from sklearn.cluster import KMeans
-
-        labels = KMeans(n_clusters=k, n_init=3, random_state=0).fit_predict(
-            vectors[indices]
-        )
-    else:
-        labels = cluster(vectors[indices], k)
+    k = min(max(2, math.ceil(len(indices) / cap)), len(indices), branch)
+    labels = (cluster or balanced_clusters)(vectors[indices], k)
 
     groups: dict[int, list[int]] = defaultdict(list)
     for position, label in enumerate(labels):
@@ -367,6 +503,35 @@ def recursive_split(
         for group in usable
     ]
     return {"members": indices, "children": children, "depth": depth}
+
+
+def modelled_nodes(size: int, cap: int = LEAF_CAP, branch: int = BRANCH_CAP) -> int:
+    """
+    How many nodes `recursive_split` will produce for a category of `size` series.
+
+    Exact, not an estimate, because `balanced_clusters` divides each node evenly: it
+    predicted 20 / 151 / 426 nodes for the 454 / 2,790 / 9,932-series categories and the
+    real splitter produced 20 / 151 / 426. Under plain k-means nothing like this was
+    possible -- an uneven split recursed further, and the same three categories came out
+    at 43 / 259 / 1,105.
+
+    Every node is one naming call, so this is what a run costs. It lives here rather than
+    in the CLI that reports it because a cost model that drifts from the splitter is how
+    a plan ends up quoting a number nobody can reproduce.
+    """
+    total = 0
+    frontier = [size]
+    while frontier:
+        following = []
+        for node in frontier:
+            total += 1
+            if node <= cap:
+                continue
+            k = min(max(2, math.ceil(node / cap)), node, branch)
+            base, extra = divmod(node, k)
+            following.extend([base + 1] * extra + [base] * (k - extra))
+        frontier = following
+    return total
 
 
 def centroid_of(vectors: Any, indices: Sequence[int]) -> list[float]:
@@ -406,6 +571,61 @@ def leaf_cap_violations(engine: Engine, cap: int = LEAF_CAP) -> list[tuple[int, 
         ]
 
 
+def branch_cap_violations(
+    engine: Engine, cap: int = BRANCH_CAP
+) -> list[tuple[int, int, int]]:
+    """
+    Interior nodes with more than `cap` children, as `(subcategory_id, category_id, n)`.
+
+    The upward half of the invariant, and the reason it exists: `BRANCH_CAP` was stated,
+    documented and argued for, and the splitter quietly allowed 25x it for a year because
+    nothing asserted it. `leaf_cap_violations` covers the downward half; a tree can
+    satisfy that one completely and still be unbrowsable at the top.
+    """
+    with engine.connect() as connection:
+        return [
+            (row[0], row[1], row[2])
+            for row in connection.execute(
+                text(
+                    """
+                    SELECT parent_subcategory_id, category_id, count(*) AS children
+                      FROM fred_subcategory
+                     WHERE parent_subcategory_id IS NOT NULL
+                     GROUP BY parent_subcategory_id, category_id
+                    HAVING count(*) > :cap
+                     ORDER BY children DESC
+                    """
+                ),
+                {"cap": cap},
+            )
+        ]
+
+
+def unnamed_nodes(engine: Engine) -> list[tuple[int, int, str]]:
+    """
+    Nodes whose name is a naming failure, as `(subcategory_id, category_id, name)`.
+
+    `parse_naming_reply` degrades to `UNNAMED (...)` on purpose -- one bad reply must not
+    abort a build of ~36,000 nodes -- but a degraded name is written to a browsable tree
+    beside a build row that says `ok`. Without this query the only record of a failure is
+    a counter in a process that has since exited.
+    """
+    with engine.connect() as connection:
+        return [
+            (row[0], row[1], row[2])
+            for row in connection.execute(
+                text(
+                    """
+                    SELECT subcategory_id, category_id, name
+                      FROM fred_subcategory
+                     WHERE name LIKE 'UNNAMED%'
+                     ORDER BY category_id, subcategory_id
+                    """
+                )
+            )
+        ]
+
+
 # --------------------------------------------------------------------------- build
 
 
@@ -429,25 +649,88 @@ def category_series(engine: Engine, category_id: int) -> list[tuple[str, str]]:
         ]
 
 
-def _name_tree(node: dict, titles: Sequence[str], namer: Namer) -> None:
+def _name_tree(
+    node: dict, titles: Sequence[str], namer: Namer,
+    workers: int = NAMING_CONCURRENCY,
+) -> None:
     """
-    Name every node bottom-up, in place.
+    Name every node bottom-up, in place: concurrent within a level, ordered between them.
 
     Bottom-up because an interior node is named from its children's names. Naming it
     from a sample of its series would describe the sample and read as describing the
     subtree -- confidently, and wrongly.
+
+    That dependency is the *only* ordering the tree needs. Siblings do not see each other
+    (`§4.4 sibling-blind naming`), so a level can be named all at once, and the recursive
+    one-at-a-time version this replaces spent the entire run waiting on HTTP: 1.37 s per
+    call measured, ~36,000 calls, ~13.6 hours of it for the non-regional half alone.
+
+    Names do not depend on the order within a level, so the tree this produces is the
+    same tree the sequential version produced -- a concurrent build is reproducible for
+    the same reason a sequential one is.
     """
-    for child in node["children"]:
-        _name_tree(child, titles, namer)
-    if node["children"]:
-        node.update(namer.name_interior([c["name"] for c in node["children"]]))
-    else:
-        node.update(namer.name_leaf([titles[i] for i in node["members"]]))
+    levels: dict[int, list[dict]] = defaultdict(list)
+    stack = [node]
+    while stack:
+        current = stack.pop()
+        levels[current["depth"]].append(current)
+        stack.extend(current["children"])
+
+    for depth in sorted(levels, reverse=True):
+        jobs = [
+            (
+                target,
+                namer.name_interior if target["children"] else namer.name_leaf,
+                [child["name"] for child in target["children"]] if target["children"]
+                else [titles[index] for index in target["members"]],
+            )
+            for target in levels[depth]
+        ]
+        if workers <= 1 or len(jobs) == 1:
+            for target, name_it, argument in jobs:
+                target.update(name_it(argument))
+            continue
+        with ThreadPoolExecutor(max_workers=min(workers, len(jobs))) as pool:
+            futures = {
+                pool.submit(name_it, argument): target
+                for target, name_it, argument in jobs
+            }
+            for future in as_completed(futures):
+                # Raises if the call failed after the SDK's retries. Deliberate: it
+                # aborts this category and `build_category` records the error, rather
+                # than writing a tree with a silently unnamed branch in it.
+                futures[future].update(future.result())
 
 
 def _write_tree(
     engine: Engine, category_id: int, node: dict, series_ids: Sequence[str],
     vectors: Any, parent_id: int | None = None,
+) -> tuple[int, int]:
+    """
+    Insert a category's whole tree. Returns `(nodes, leaves)`.
+
+    Reflects the two tables once and writes in one transaction, both per category rather
+    than per node. The recursive version did `Table(..., autoload_with=engine)` twice and
+    opened a transaction on every node it visited, which for the non-regional half is
+    ~72,000 schema round-trips and ~36,000 transactions to write 36,000 rows.
+
+    One transaction also makes a crash mid-write atomic. It was already *recoverable* --
+    `clear_category` runs before the next attempt -- but recoverable and atomic are not
+    the same promise, and the weaker one leaves a partial tree readable in the meantime.
+    """
+    tables = (
+        _table(engine, "fred_subcategory"),
+        _table(engine, "fred_series_subcategory"),
+    )
+    with engine.begin() as connection:
+        return _write_node(
+            connection, tables, category_id, node, series_ids, vectors, parent_id
+        )
+
+
+def _write_node(
+    connection: Any, tables: tuple[Table, Table], category_id: int, node: dict,
+    series_ids: Sequence[str], vectors: Any, parent_id: int | None,
 ) -> tuple[int, int]:
     """
     Insert this node and its descendants top-down. Returns `(nodes, leaves)`.
@@ -456,41 +739,40 @@ def _write_tree(
     for leaves only: an interior node's members are reachable through its children, and
     duplicating them would make `series_count` ambiguous.
     """
-    subcategories = _table(engine, "fred_subcategory")
-    memberships = _table(engine, "fred_series_subcategory")
+    subcategories, memberships = tables
     is_leaf = not node["children"]
 
-    with engine.begin() as connection:
-        subcategory_id = connection.execute(
-            subcategories.insert().values(
-                category_id=category_id,
-                parent_subcategory_id=parent_id,
-                depth=node["depth"],
-                name=node.get("name") or "UNNAMED",
-                concepts=node.get("concepts") or None,
-                series_count=len(node["members"]),
-                is_leaf=is_leaf,
-                centroid=centroid_of(vectors, node["members"]),
-                prompt_version=PROMPT_VERSION,
-                embed_model=EMBED_MODEL,
-                built_at=_now(),
-            ).returning(subcategories.c.subcategory_id)
-        ).scalar_one()
+    subcategory_id = connection.execute(
+        subcategories.insert().values(
+            category_id=category_id,
+            parent_subcategory_id=parent_id,
+            depth=node["depth"],
+            name=node.get("name") or "UNNAMED",
+            concepts=node.get("concepts") or None,
+            series_count=len(node["members"]),
+            is_leaf=is_leaf,
+            centroid=centroid_of(vectors, node["members"]),
+            prompt_version=PROMPT_VERSION,
+            split_version=SPLIT_VERSION,
+            embed_model=EMBED_MODEL,
+            built_at=_now(),
+        ).returning(subcategories.c.subcategory_id)
+    ).scalar_one()
 
-        if is_leaf and node["members"]:
-            connection.execute(
-                pg_insert(memberships).values(
-                    [
-                        {"series_id": series_ids[i], "subcategory_id": subcategory_id}
-                        for i in node["members"]
-                    ]
-                ).on_conflict_do_nothing()
-            )
+    if is_leaf and node["members"]:
+        connection.execute(
+            pg_insert(memberships).values(
+                [
+                    {"series_id": series_ids[i], "subcategory_id": subcategory_id}
+                    for i in node["members"]
+                ]
+            ).on_conflict_do_nothing()
+        )
 
     nodes, leaves = 1, 1 if is_leaf else 0
     for child in node["children"]:
-        child_nodes, child_leaves = _write_tree(
-            engine, category_id, child, series_ids, vectors, subcategory_id
+        child_nodes, child_leaves = _write_node(
+            connection, tables, category_id, child, series_ids, vectors, subcategory_id
         )
         nodes += child_nodes
         leaves += child_leaves
@@ -526,7 +808,7 @@ def clear_category(engine: Engine, category_id: int) -> int:
 
 def build_category(
     engine: Engine, category_id: int, embedder: TitleEmbedder, namer: Namer,
-    cap: int = LEAF_CAP,
+    cap: int = LEAF_CAP, workers: int = NAMING_CONCURRENCY,
 ) -> dict[str, Any]:
     """Derive, name and store the subcategory tree for one FRED category."""
     import numpy as np
@@ -535,7 +817,8 @@ def build_category(
     rows = category_series(engine, category_id)
     _record_build(
         engine, category_id, status="pending", started_at=started,
-        series_count=len(rows), prompt_version=PROMPT_VERSION, embed_model=EMBED_MODEL,
+        series_count=len(rows), prompt_version=PROMPT_VERSION,
+        split_version=SPLIT_VERSION, embed_model=EMBED_MODEL,
     )
 
     if len(rows) <= cap:
@@ -544,10 +827,12 @@ def build_category(
         _record_build(
             engine, category_id, status="skipped", finished_at=_now(),
             leaves=0, nodes=0, max_leaf_size=len(rows), llm_calls=0, cost_usd=0,
+            naming_failures=0, error=None,
         )
         return {"category_id": category_id, "status": "skipped", "series": len(rows)}
 
     before_calls, before_cost = namer.calls, namer.cost_usd
+    before_failures = namer.failures
     try:
         series_ids = [r[0] for r in rows]
         titles = [r[1] for r in rows]
@@ -557,23 +842,25 @@ def build_category(
         vectors = vectors / np.where(norms == 0, 1, norms)
 
         tree = recursive_split(range(len(rows)), vectors, cap=cap)
-        _name_tree(tree, titles, namer)
+        _name_tree(tree, titles, namer, workers=workers)
         clear_category(engine, category_id)
         nodes, leaves = _write_tree(engine, category_id, tree, series_ids, vectors)
     except Exception as error:  # noqa: BLE001 -- recorded, then re-raised
         _record_build(
             engine, category_id, status="error", finished_at=_now(),
             error=str(error)[:2000], llm_calls=namer.calls - before_calls,
+            naming_failures=namer.failures - before_failures,
             cost_usd=round(namer.cost_usd - before_cost, 5),
         )
         raise
 
     violations = [v for v in leaf_cap_violations(engine, cap) if v[1] == category_id]
     max_leaf = max((v[2] for v in violations), default=cap)
+    failures = namer.failures - before_failures
     _record_build(
         engine, category_id, status="over_cap" if violations else "ok",
         finished_at=_now(), leaves=leaves, nodes=nodes, max_leaf_size=max_leaf,
-        llm_calls=namer.calls - before_calls,
+        llm_calls=namer.calls - before_calls, naming_failures=failures,
         cost_usd=round(namer.cost_usd - before_cost, 5), error=None,
     )
     if violations:
@@ -581,86 +868,138 @@ def build_category(
             f"category {category_id}: {len(violations)} leaves over the cap of {cap}, "
             f"largest {max_leaf}"
         )
+    if failures:
+        # Stored as well as logged. A degraded name is written to a browsable tree beside
+        # a row that says `ok`, and a counter in an exited process is not a record.
+        logger.warning(f"category {category_id}: {failures} nodes could not be named")
     return {
         "category_id": category_id, "status": "over_cap" if violations else "ok",
         "series": len(rows), "nodes": nodes, "leaves": leaves,
-        "llm_calls": namer.calls - before_calls,
+        "llm_calls": namer.calls - before_calls, "naming_failures": failures,
         "cost_usd": round(namer.cost_usd - before_cost, 5),
     }
 
 
-def pending_builds(engine: Engine, prompt_version: str = PROMPT_VERSION) -> list[int]:
+def pending_builds(
+    engine: Engine, scope: str = "non-regional",
+    prompt_version: str = PROMPT_VERSION, split_version: str = SPLIT_VERSION,
+) -> list[int]:
     """
     Categories needing a subcategory build, largest last so a bounded run proves the
     cheap ones first.
 
-    A build under a different `prompt_version` counts as pending: names are not
-    comparable across prompts, so a tree half-built under each is not a tree.
+    A build under a different `prompt_version` or `split_version` counts as pending:
+    neither the names nor the shape are comparable across versions, so a tree half-built
+    under each is not a tree. Both are checked, because either one alone would let a
+    stale tree read as finished.
+
+    `scope` bounds which half of the catalogue is considered; see `SCOPES`. It defaults
+    to `non-regional` because that is the half the cost and quality were measured on --
+    the unfiltered version this replaces returned all 4,606 over-cap categories, so
+    `build()` with no argument would have spent the regional budget by accident.
     """
+    if scope not in SCOPES:
+        raise ValueError(f"unknown scope {scope!r}; expected one of {sorted(SCOPES)}")
     with engine.connect() as connection:
         return [
             row[0]
             for row in connection.execute(
                 text(
-                    """
+                    f"""
                     SELECT c.category_id
                       FROM fred_category AS c
                       JOIN fred_series_category AS sc USING (category_id)
                       LEFT JOIN fred_subcategory_build AS b USING (category_id)
                      WHERE c.excluded_reason IS NULL
+                       {SCOPES[scope]}
                        AND (b.status IS NULL
                             OR b.status NOT IN ('ok', 'skipped')
-                            OR b.prompt_version IS DISTINCT FROM :version)
+                            OR b.prompt_version IS DISTINCT FROM :version
+                            OR b.split_version IS DISTINCT FROM :split)
                      GROUP BY c.category_id
                      ORDER BY count(DISTINCT sc.series_id)
                     """
                 ),
-                {"version": prompt_version},
+                {"version": prompt_version, "split": split_version},
             )
         ]
 
 
 def build(
-    url: str | None = None, limit: int | None = None, cap: int = LEAF_CAP,
-    max_series: int | None = None,
+    url: str | None = None, scope: str = "non-regional", limit: int | None = None,
+    cap: int = LEAF_CAP, max_series: int | None = None,
+    workers: int = NAMING_CONCURRENCY,
 ) -> dict[str, Any]:
     """
-    Build subcategories for every pending category.
+    Build subcategories for every pending category in `scope`.
 
-    `limit` and `max_series` bound a run: the full job is ~31,000 LLM calls, and proving
+    `limit` and `max_series` bound a run: the full job is ~36,000 LLM calls, and proving
     the mechanism on small categories before committing to that is worth more than a
     single unattended pass.
+
+    Resumable, because `pending_builds` skips what is already `ok` or `skipped` -- so an
+    interrupted run is continued by invoking it again with the same arguments, and a
+    completed one is a no-op that makes no calls and spends nothing.
     """
     engine = _engine(url)
     embedder, namer = TitleEmbedder(), Namer()
-    pending = pending_builds(engine)
+    pending = pending_builds(engine, scope=scope)
     if max_series is not None:
         sizes = dict(_category_sizes(engine))
         pending = [c for c in pending if sizes.get(c, 0) <= max_series]
     if limit is not None:
         pending = pending[:limit]
 
-    logger.info(f"subcategory build: {len(pending)} categories pending")
+    started = time.monotonic()
+    logger.info(f"subcategory build: {len(pending)} {scope} categories pending")
     outcome = {"attempted": len(pending), "ok": 0, "skipped": 0, "over_cap": 0, "failed": 0}
     for index, category_id in enumerate(pending, 1):
         try:
-            result = build_category(engine, category_id, embedder, namer, cap)
+            result = build_category(engine, category_id, embedder, namer, cap, workers)
         except Exception as error:  # noqa: BLE001
             outcome["failed"] += 1
             logger.warning(f"category {category_id} failed: {error}")
             continue
         outcome[result["status"]] = outcome.get(result["status"], 0) + 1
         if index % 20 == 0:
+            elapsed = max(time.monotonic() - started, 1)
             logger.info(
                 f"subcategory build: {index}/{len(pending)} categories, "
-                f"{namer.calls} names, ${namer.cost_usd:.4f}"
+                f"{namer.calls} names, ${namer.cost_usd:.4f}, "
+                f"{namer.calls / elapsed * 60:.0f} names/min"
             )
     outcome.update(
-        llm_calls=namer.calls, naming_failures=namer.failures,
-        titles_embedded=embedder.embedded, cost_usd=round(namer.cost_usd, 5),
-        prompt_version=PROMPT_VERSION,
+        scope=scope, llm_calls=namer.calls, naming_failures=namer.failures,
+        truncated_replies=namer.truncated, titles_embedded=embedder.embedded,
+        input_tokens=namer.input_tokens, output_tokens=namer.output_tokens,
+        cost_usd=round(namer.cost_usd, 5), prompt_version=PROMPT_VERSION,
+        split_version=SPLIT_VERSION, elapsed_s=round(time.monotonic() - started, 1),
     )
+    # Both halves of the invariant, read back from the database rather than inferred from
+    # what the build thought it wrote.
+    outcome["leaf_cap_violations"] = len(leaf_cap_violations(engine, cap))
+    outcome["branch_cap_violations"] = len(branch_cap_violations(engine))
+    outcome["unnamed_nodes"] = len(unnamed_nodes(engine))
     return outcome
+
+
+def _scoped_categories(engine: Engine, scope: str) -> list[int]:
+    """Every category id inside `scope`, regardless of build state."""
+    if scope not in SCOPES:
+        raise ValueError(f"unknown scope {scope!r}; expected one of {sorted(SCOPES)}")
+    with engine.connect() as connection:
+        return [
+            row[0]
+            for row in connection.execute(
+                text(
+                    f"""
+                    SELECT c.category_id FROM fred_category AS c
+                     WHERE c.excluded_reason IS NULL
+                       {SCOPES[scope]}
+                    """
+                )
+            )
+        ]
 
 
 def _category_sizes(engine: Engine) -> list[tuple[int, int]]:
@@ -854,7 +1193,10 @@ def refresh_counts(engine: Engine) -> dict[str, int]:
     return {"emptied": emptied, "revived": revived}
 
 
-def resync(url: str | None = None, split_over_cap: bool = False) -> dict[str, Any]:
+def resync(
+    url: str | None = None, split_over_cap: bool = False,
+    scope: str = "non-regional", workers: int = NAMING_CONCURRENCY,
+) -> dict[str, Any]:
     """
     Bring the derived tree back in step with the catalogue after a FRED discovery run.
 
@@ -864,6 +1206,10 @@ def resync(url: str | None = None, split_over_cap: bool = False) -> dict[str, An
     The expensive half is opt-in. `split_over_cap` rebuilds the categories whose leaves
     the cheap half pushed past the ceiling, which costs names. Left off, the debt is
     reported and not paid -- visible either way, which is the point.
+
+    `scope` bounds the rebuild, not the assignment. Placing a new series on an existing
+    leaf is free and must happen wherever a tree exists, or the series is unbrowsable;
+    paying to rebuild is a budget decision, and it inherits the same default as `build`.
     """
     engine = _engine(url)
     embedder, namer = TitleEmbedder(), Namer()
@@ -875,14 +1221,25 @@ def resync(url: str | None = None, split_over_cap: bool = False) -> dict[str, An
     result["over_cap_leaves"] = len(over)
     result["over_cap_categories"] = sorted({v[1] for v in over})
 
+    result["branch_cap_violations"] = len(branch_cap_violations(engine))
+    result["unnamed_nodes"] = len(unnamed_nodes(engine))
+
     if split_over_cap and over:
+        in_scope = set(_scoped_categories(engine, scope))
         rebuilt = []
         for category_id in result["over_cap_categories"]:
+            if category_id not in in_scope:
+                continue
             try:
-                rebuilt.append(build_category(engine, category_id, embedder, namer))
+                rebuilt.append(
+                    build_category(engine, category_id, embedder, namer,
+                                   workers=workers)
+                )
             except Exception as error:  # noqa: BLE001
                 logger.warning(f"resync rebuild of {category_id} failed: {error}")
         result["rebuilt"] = rebuilt
+        result["rebuild_scope"] = scope
         result["cost_usd"] = round(namer.cost_usd, 5)
         result["over_cap_leaves_after"] = len(leaf_cap_violations(engine))
+        result["branch_cap_violations_after"] = len(branch_cap_violations(engine))
     return result
