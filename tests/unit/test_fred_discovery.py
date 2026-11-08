@@ -1,11 +1,15 @@
 """
 Tests for FRED API discovery.
 
-The pagination loop and the page cap are the whole point of the module, and both are
-pure given a stub client, so they are tested without a database or a network. What is
-deliberately *not* covered here is the database reconciliation in `fetch_category` and
-the surplus query in `surplus_categories`, both of which need Postgres; they are
-exercised by running `discover` and `fred_metadata.py status` against dev.
+The pagination loop is the whole point of the module, and it is pure given a stub
+client, so it is tested without a database or a network. What is deliberately *not*
+covered here is the database reconciliation in `fetch_category` and the surplus query in
+`surplus_categories`, both of which need Postgres; they are exercised by running
+`discover` and `fred_metadata.py status` against dev.
+
+The page cap and the exclusion table used to be tested here too. Both were removed on
+2026-11-08 along with the mechanisms, so what is asserted now is their absence: every
+page FRED reports is read, and no argument can shorten that.
 
 `surplus_categories` was verified that way on 2026-11-07: it returns exactly one row
 across 5,201 categories (34111, holding 2,398 against FRED's 1,398), which is the case
@@ -17,11 +21,9 @@ import pytest
 from apps.agentic.db import fred_discovery
 from apps.agentic.db.fred_discovery import (
     PAGE,
-    VOLUME_EXCLUDED,
     FredApi,
     FredApiError,
     iter_category_series,
-    page_limit_for,
 )
 
 
@@ -42,36 +44,6 @@ class StubApi:
             for index in range(offset, min(offset + limit, self.total))
         ]
         return {"count": self.total, "offset": offset, "limit": limit, "seriess": rows}
-
-
-# --------------------------------------------------------------------- page_limit_for
-
-
-def test_countries_are_capped_at_one_page():
-    assert page_limit_for("International Data > Countries > Belgium") == 1
-
-
-def test_the_countries_node_itself_is_capped():
-    assert page_limit_for("International Data > Countries") == 1
-
-
-def test_a_sibling_of_countries_is_not_capped():
-    assert page_limit_for("International Data > Indicators > Prices") is None
-
-
-def test_an_unrelated_branch_is_not_capped():
-    assert page_limit_for("Prices > Commodities") is None
-
-
-def test_a_missing_path_is_not_capped():
-    """A category with no path yet must not silently inherit a cap."""
-    assert page_limit_for(None) is None
-    assert page_limit_for("") is None
-
-
-def test_the_cap_matches_on_the_full_prefix_not_a_substring():
-    """'Countries' alone must not trigger the International Data cap."""
-    assert page_limit_for("Countries > Belgium") is None
 
 
 # --------------------------------------------------------------- iter_category_series
@@ -127,65 +99,38 @@ def test_a_short_page_run_still_terminates():
     assert sum(len(page) for page, _ in pages) == 950
 
 
-# --------------------------------------------------------------------------- the cap
+# ------------------------------------------------------------- no partial fetch
 
-
-def test_a_page_limit_stops_early_on_purpose():
-    api = StubApi(total=2790)
-    pages = list(iter_category_series(api, 32267, page_limit=1))
-    assert len(api.calls) == 1
-    assert sum(len(page) for page, _ in pages) == 1000
-
-
-def test_a_page_limit_above_the_count_fetches_everything():
-    """A cap must not invent a shortfall where FRED has less than the ceiling."""
-    api = StubApi(total=454)
-    pages = list(iter_category_series(api, 33062, page_limit=5))
-    assert sum(len(page) for page, _ in pages) == 454
-
-
-def test_a_page_limit_of_two_takes_exactly_two_pages():
-    api = StubApi(total=9932)
-    pages = list(iter_category_series(api, 33735, page_limit=2))
-    assert [call["offset"] for call in api.calls] == [0, 1000]
-    assert sum(len(page) for page, _ in pages) == 2000
-
-
-def test_the_true_count_is_still_reported_under_a_cap():
+@pytest.mark.parametrize("total", [0, 1, 999, 1000, 1001, 2790, 2917, 9932])
+def test_every_page_fred_reports_is_read(total):
     """
-    The cap must not hide what exists. `api_series_count` is how a capped category stays
-    distinguishable from a complete one.
+    The invariant that replaced `page_limit`: there is no way to ask for less than the
+    whole category. A short read can therefore only mean something went wrong, which is
+    what lets `fetch_category` treat any shortfall as a defect.
     """
+    api = StubApi(total=total)
+    pages = list(iter_category_series(api, 1))
+    assert sum(len(page) for page, _ in pages) == total
+
+
+def test_iter_category_series_takes_no_limiting_argument():
+    """
+    Guards the decision rather than the code. Reinstating a cap means reintroducing data
+    that is missing on purpose and unreadably -- the failure this module exists to undo
+    -- so the signature is asserted, not just the behaviour.
+    """
+    import inspect
+
+    parameters = inspect.signature(iter_category_series).parameters
+    assert list(parameters) == ["api", "category_id"]
+
+
+def test_the_true_count_is_reported_on_every_page():
+    """`api_series_count` is what the reconciliation compares against, so every page
+    must carry FRED's own total rather than the size of the page."""
     api = StubApi(total=9932)
-    counts = {count for _, count in iter_category_series(api, 33735, page_limit=1)}
+    counts = {count for _, count in iter_category_series(api, 33735)}
     assert counts == {9932}
-
-
-# ------------------------------------------------------------------------- exclusions
-
-
-def test_the_exclusion_table_holds_ids_against_reasons():
-    """
-    Tests the contract, not today's contents. `VOLUME_EXCLUDED` is empty as of
-    2026-11-07 -- U.S. Regional Data was excluded on 2026-11-01 and is now being
-    fetched -- and asserting a particular entry would just encode whichever volume
-    decision was current when the test was written.
-    """
-    for category_id, reason in VOLUME_EXCLUDED.items():
-        assert isinstance(category_id, int)
-        # A flag without a reason is exactly what this column exists to prevent: an
-        # omission nobody can tell from a bug.
-        assert isinstance(reason, str) and len(reason) > 40, category_id
-
-
-def test_an_empty_exclusion_table_means_fetch_everything():
-    """
-    Emptying the table must be a valid configuration, because that is how a branch gets
-    included again. `mark_exclusions` reconciles in both directions for the same reason:
-    emptying it has to CLEAR the stored marks, or a branch that is wanted again stays
-    invisible to `pending_categories` and the fetch skips it silently.
-    """
-    assert isinstance(VOLUME_EXCLUDED, dict)
 
 
 # ------------------------------------------------------------------------------- key

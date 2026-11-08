@@ -16,9 +16,10 @@ requests and changes no rows:
 
 - `walk` skips categories whose `walked_at` is set, queueing their children from the
   database so a resume continues past the previous frontier rather than stopping at it.
-- `fetch` skips categories whose scan is already `ok`.
+- `fetch` skips categories whose scan is already `ok`, and `ok` means every series FRED
+  reports was written. There is no partial-fetch setting, so a gap is always a fault.
 - series are upserted, memberships inserted on-conflict-do-nothing.
-- `paths` and `exclusions` update only where the value actually differs.
+- `paths` updates only where the value actually differs.
 
 That is what makes `notebooks/data/fred/fred_meta_data.ipynb` safe to re-run, and it is
 asserted by `tests/unit/test_fred_discovery.py`.
@@ -61,11 +62,9 @@ from sqlalchemy import text  # noqa: E402
 from apps.agentic.db.fred_catalogue import _engine  # noqa: E402
 from apps.agentic.db.fred_subcategory import SCOPES  # noqa: E402
 from apps.agentic.db.fred_discovery import (  # noqa: E402
-    VOLUME_EXCLUDED,
     FredApi,
     FredApiError,
     fetch_category,
-    mark_exclusions,
     pending_categories,
     rebuild_paths,
     refresh_derived,
@@ -92,11 +91,6 @@ def cmd_status(args: argparse.Namespace) -> dict:
             "walked": c.execute(
                 text("SELECT count(*) FROM fred_category WHERE walked_at IS NOT NULL")
             ).scalar_one(),
-            "excluded": c.execute(
-                text(
-                    "SELECT count(*) FROM fred_category WHERE excluded_reason IS NOT NULL"
-                )
-            ).scalar_one(),
             "scans_ok": c.execute(
                 text("SELECT count(*) FROM fred_category_scan WHERE status = 'ok'")
             ).scalar_one(),
@@ -112,18 +106,20 @@ def cmd_status(args: argparse.Namespace) -> dict:
                     "SELECT COALESCE(sum(fetched_series_count), 0) FROM fred_category_scan"
                 )
             ).scalar_one(),
-            "deferred_by_cap": c.execute(
+            # The whole reconciliation, in one number. Nothing can make this a choice,
+            # so anything but zero is something to look at.
+            "shortfall": c.execute(
                 text(
                     """
                     SELECT COALESCE(sum(api_series_count - fetched_series_count), 0)
-                      FROM fred_category_scan WHERE page_limit IS NOT NULL
+                      FROM fred_category_scan
+                     WHERE fetched_series_count < api_series_count
                     """
                 )
             ).scalar_one(),
         }
     counts["unwalked"] = counts["categories"] - counts["walked"]
     counts["pending_fetch"] = len(pending_categories(engine))
-    counts["volume_excluded_roots"] = sorted(VOLUME_EXCLUDED)
 
     # The other direction. `scans_bad` catches a category holding LESS than FRED reports;
     # it is structurally blind to one holding MORE, because it compares against what a run
@@ -151,7 +147,6 @@ def cmd_walk(args: argparse.Namespace) -> dict:
     api = FredApi()
     result = {"tree": walk_categories(engine, api, revisit=args.revisit)}
     result["paths"] = rebuild_paths(engine)
-    result["exclusions"] = mark_exclusions(engine)
     result["requests"] = api.requests
     return result
 
@@ -167,10 +162,10 @@ def cmd_fetch(args: argparse.Namespace) -> dict:
 
     api = FredApi()
     started = time.monotonic()
-    done = incomplete = failed = capped = 0
-    for index, (category_id, page_limit) in enumerate(pending, 1):
+    done = incomplete = failed = 0
+    for index, category_id in enumerate(pending, 1):
         try:
-            outcome = fetch_category(engine, api, category_id, page_limit)
+            outcome = fetch_category(engine, api, category_id)
         except FredApiError:
             raise  # key or protocol failure: stop rather than grind through it
         except Exception as error:  # noqa: BLE001
@@ -179,7 +174,6 @@ def cmd_fetch(args: argparse.Namespace) -> dict:
             continue
         done += 1
         incomplete += outcome["status"] == "incomplete"
-        capped += bool(outcome["capped"])
         if index % 50 == 0:
             rate = api.requests / max(time.monotonic() - started, 1) * 60
             logger.info(
@@ -189,7 +183,7 @@ def cmd_fetch(args: argparse.Namespace) -> dict:
 
     result = {
         "attempted": len(pending), "completed": done, "incomplete": incomplete,
-        "capped": capped, "failed": failed, "requests": api.requests,
+        "failed": failed, "requests": api.requests,
         "elapsed_s": round(time.monotonic() - started, 1),
     }
     if done:

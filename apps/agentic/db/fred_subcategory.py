@@ -895,6 +895,13 @@ def pending_builds(
     under each is not a tree. Both are checked, because either one alone would let a
     stale tree read as finished.
 
+    **So does a changed series count.** `series_count` records how many series the build
+    actually saw, and FRED keeps adding them, so a tree built before a fetch describes a
+    catalogue that no longer exists. Without this the drift is permanent and silent: the
+    build row says `ok` forever while the category grows underneath it. Found on
+    2026-11-08, when lifting the country page cap added series to 38 categories and
+    nothing re-queued them.
+
     `scope` bounds which half of the catalogue is considered; see `SCOPES`. It defaults
     to `non-regional` because that is the half the cost and quality were measured on --
     the unfiltered version this replaces returned all 4,606 over-cap categories, so
@@ -912,13 +919,15 @@ def pending_builds(
                       FROM fred_category AS c
                       JOIN fred_series_category AS sc USING (category_id)
                       LEFT JOIN fred_subcategory_build AS b USING (category_id)
-                     WHERE c.excluded_reason IS NULL
+                     WHERE TRUE
                        {SCOPES[scope]}
-                       AND (b.status IS NULL
-                            OR b.status NOT IN ('ok', 'skipped')
-                            OR b.prompt_version IS DISTINCT FROM :version
-                            OR b.split_version IS DISTINCT FROM :split)
-                     GROUP BY c.category_id
+                     GROUP BY c.category_id, b.status, b.prompt_version,
+                              b.split_version, b.series_count
+                    HAVING b.status IS NULL
+                        OR b.status NOT IN ('ok', 'skipped')
+                        OR b.prompt_version IS DISTINCT FROM :version
+                        OR b.split_version IS DISTINCT FROM :split
+                        OR b.series_count IS DISTINCT FROM count(DISTINCT sc.series_id)
                      ORDER BY count(DISTINCT sc.series_id)
                     """
                 ),
@@ -996,7 +1005,7 @@ def _scoped_categories(engine: Engine, scope: str) -> list[int]:
                 text(
                     f"""
                     SELECT c.category_id FROM fred_category AS c
-                     WHERE c.excluded_reason IS NULL
+                     WHERE TRUE
                        {SCOPES[scope]}
                     """
                 )

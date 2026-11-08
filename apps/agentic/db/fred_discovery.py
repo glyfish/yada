@@ -73,37 +73,18 @@ ROOT_CATEGORY = 0
 #: spin forever, and a silent infinite loop in a paced fetch looks like slow progress.
 MAX_DEPTH = 12
 
-#: Subtrees recorded but deliberately not fetched, with the reason stored in
-#: `fred_category.excluded_reason`. These are decisions, not gaps: state and county data
-#: was left out of the original export on purpose because of its volume, and nothing
-#: recorded that, so a later reader mistook it for a defect.
+#: **The catalogue is fetched whole, and there is deliberately no way to ask for less.**
+#: `excluded_reason` and `page_limit` used to live here. They carried two volume decisions
+#: inherited from the YAML export -- skip state and county, keep one page per country --
+#: made when the data was collected by hand, where volume meant somebody's afternoon.
+#: Collection is now paced, resumable and idempotent, so that cost is wall-clock nobody
+#: waits on: the entire country shortfall was 69 requests.
 #:
-#: **Empty as of 2026-11-07.** `3008` (U.S. Regional Data) was excluded on 2026-11-01 and
-#: is now included: measuring the catalogue showed we held 424,634 of FRED's 853,320
-#: series, and that the missing half was almost entirely this branch -- seven of FRED's
-#: eight largest releases are state, county or metro. The fetch is ~10,400 requests and
-#: about two hours, which was judged worth it. The mechanism stays because the next
-#: volume decision will want it, and `mark_exclusions` reconciles in both directions, so
-#: emptying this dict clears the marks rather than stranding them.
-VOLUME_EXCLUDED: dict[int, str] = {}
-
-#: Deliberate page ceilings, matched against `category_path` by prefix. Countries stay at
-#: one page for the same volume reason the branch above is out. Recorded per category in
-#: `fred_category_scan.page_limit` so a capped fetch reads as a choice rather than as the
-#: truncation this module exists to undo.
-PAGE_LIMITS: tuple[tuple[str, int], ...] = (
-    ("International Data > Countries", 1),
-)
-
-
-def page_limit_for(category_path: str | None) -> int | None:
-    """The deliberate page ceiling for this category, or None to fetch everything."""
-    if not category_path:
-        return None
-    for prefix, limit in PAGE_LIMITS:
-        if category_path.startswith(prefix):
-            return limit
-    return None
+#: Removing them is what makes the reconciliation unconditional. `fetched_series_count`
+#: below `api_series_count` is a defect, with no configuration that could make it a
+#: choice. A limit would reintroduce exactly one thing: data missing on purpose, for a
+#: reason nobody remembers, found years later by someone debugging a gap. That is the
+#: failure this module was written to undo, and it is not worth a flag nobody sets.
 
 
 class FredApiError(RuntimeError):
@@ -196,8 +177,7 @@ def walked_categories(engine: Engine) -> set[int]:
 
 
 def walk_categories(
-    engine: Engine, api: FredApi, excluded: dict[int, str] | None = None,
-    revisit: bool = False,
+    engine: Engine, api: FredApi, revisit: bool = False
 ) -> dict[str, int]:
     """
     Breadth-first from FRED's root, writing `(category_id, category_name, parent_id)`.
@@ -207,10 +187,6 @@ def walk_categories(
     parentage, so a subtree fetched from its own id -- as `Countries` was -- lost the
     levels above it with nothing to detect the loss.
 
-    An excluded category is **recorded and not descended into**. It stays in the tree
-    carrying its reason, so the branch is visible as a decision rather than a gap, and
-    the walk costs one request for it instead of several thousand.
-
     `revisit=False` (the default) **resumes**: a category whose `walked_at` is set is not
     asked for children again, which is what makes an interrupted regional walk cheap to
     restart. It also means children FRED has added since are not noticed, so a *refresh*
@@ -218,13 +194,11 @@ def walk_categories(
     makes every later run a no-op, revisiting always makes resume pointless -- so the
     caller states which it wants.
     """
-    excluded = VOLUME_EXCLUDED if excluded is None else excluded
     categories = _table(engine, "fred_category")
     already = set() if revisit else walked_categories(engine)
     seen: set[int] = set()
     queue: deque[tuple[int, int]] = deque([(ROOT_CATEGORY, 0)])
     written = 0
-    stopped: list[int] = []
     skipped = 0
 
     while queue:
@@ -232,12 +206,6 @@ def walk_categories(
         if category_id in seen or depth > MAX_DEPTH:
             continue
         seen.add(category_id)
-
-        if category_id in excluded:
-            # Recorded by mark_exclusions, which also covers anything already walked
-            # beneath it from an earlier, unscoped run.
-            stopped.append(category_id)
-            continue
 
         if category_id in already:
             # Visited by an earlier run. Its children are already recorded, so they are
@@ -302,90 +270,9 @@ def walk_categories(
 
     logger.info(
         f"FRED tree walk complete: {written} categories written, {skipped} skipped as "
-        f"already walked, {len(stopped)} excluded subtrees not descended into"
+        f"already walked"
     )
-    return {
-        "visited": len(seen), "written": written, "skipped": skipped,
-        "excluded_roots": len(stopped),
-    }
-
-
-def mark_exclusions(engine: Engine, excluded: dict[int, str] | None = None) -> dict[str, int]:
-    """
-    Make `excluded_reason` in the database match `excluded`, in both directions.
-
-    Marking is applied to descendants, because an unscoped walk may already have written
-    thousands of categories beneath an excluded root. Those are kept -- they cost
-    nothing, they record that the branch exists, and keeping them means a later decision
-    to include the branch is a fetch rather than another hour of walking.
-
-    **Clearing matters as much as marking.** Emptying `VOLUME_EXCLUDED` has to clear the
-    marks, or a branch that is now wanted stays invisible to `pending_categories` and the
-    fetch silently skips it -- an exclusion outliving its decision, which is the failure
-    this column was added to prevent. So anything carrying a reason that no longer
-    belongs to an excluded subtree is cleared.
-
-    A descendant that already holds series is never marked: `Census`, `BEA` and `BLS
-    Regions` came through the original export with data, and calling them excluded would
-    contradict the rows beneath them.
-    """
-    excluded = VOLUME_EXCLUDED if excluded is None else excluded
-    marked = cleared = 0
-    with engine.begin() as connection:
-        keep: set[int] = set()
-        for root_id, reason in excluded.items():
-            ids = [
-                row[0]
-                for row in connection.execute(
-                    text(
-                        """
-                        WITH RECURSIVE subtree AS (
-                            SELECT category_id, 1 AS depth FROM fred_category
-                             WHERE category_id = :root
-                            UNION ALL
-                            SELECT child.category_id, subtree.depth + 1
-                              FROM fred_category AS child
-                              JOIN subtree ON child.parent_id = subtree.category_id
-                             WHERE subtree.depth < :max_depth
-                        )
-                        SELECT category_id FROM subtree
-                        """
-                    ),
-                    {"root": root_id, "max_depth": MAX_DEPTH},
-                )
-            ]
-            keep.update(ids)
-            marked += connection.execute(
-                text(
-                    """
-                    UPDATE fred_category AS target SET excluded_reason = :reason
-                     WHERE target.category_id = ANY(:ids)
-                       AND NOT EXISTS (
-                           SELECT 1 FROM fred_series_category sc
-                            WHERE sc.category_id = target.category_id
-                       )
-                       AND target.excluded_reason IS DISTINCT FROM :reason
-                    """
-                ),
-                {"reason": reason, "ids": ids},
-            ).rowcount
-
-        cleared = connection.execute(
-            text(
-                """
-                UPDATE fred_category SET excluded_reason = NULL
-                 WHERE excluded_reason IS NOT NULL
-                   AND NOT (category_id = ANY(:keep))
-                """
-            ),
-            {"keep": sorted(keep) or [0]},
-        ).rowcount
-
-    if marked or cleared:
-        logger.info(
-            f"exclusions reconciled: {marked} marked, {cleared} cleared"
-        )
-    return {"marked": marked, "cleared": cleared}
+    return {"visited": len(seen), "written": written, "skipped": skipped}
 
 
 def rebuild_paths(engine: Engine) -> dict[str, int]:
@@ -482,7 +369,7 @@ def _series_row(raw: dict) -> dict:
 
 
 def iter_category_series(
-    api: FredApi, category_id: int, page_limit: int | None = None
+    api: FredApi, category_id: int
 ) -> Iterator[tuple[list[dict], int]]:
     """
     Yield `(page_of_series, api_count)` until the reported count is covered.
@@ -490,11 +377,10 @@ def iter_category_series(
     Pagination is the whole fix. `offset` advances by the page FRED actually returned,
     not by `PAGE`, so a short page cannot cause an infinite loop or a skipped window.
 
-    `page_limit` stops early on purpose. It is the mechanism behind the country cap, and
-    the caller records it so the short result is attributable.
+    There is no early stop. Every page FRED reports is read, which is what lets the
+    caller treat any disagreement between the count and the rows as a fault.
     """
     offset = 0
-    pages = 0
     while True:
         payload = api.get(
             "category/series", category_id=category_id, limit=PAGE, offset=offset
@@ -504,16 +390,13 @@ def iter_category_series(
         yield page, count
         if not page:
             return
-        pages += 1
-        if page_limit is not None and pages >= page_limit:
-            return
         offset += len(page)
         if offset >= count:
             return
 
 
 def fetch_category(
-    engine: Engine, api: FredApi, category_id: int, page_limit: int | None = None
+    engine: Engine, api: FredApi, category_id: int
 ) -> dict[str, Any]:
     """
     Fetch the pages for one category, write series and memberships, record the scan.
@@ -521,25 +404,21 @@ def fetch_category(
     The scan row is written even when the fetch raises, because the failure is the thing
     worth keeping: an absent row is indistinguishable from a category nobody tried.
 
-    `status` answers "did we write what we asked for", not "did we write everything FRED
-    has". With a `page_limit` those differ on purpose, and conflating them would make
-    every capped country look broken and be retried on every resume.
+    `status` is `ok` only when every series FRED reports was written. Nothing can make a
+    short write acceptable, so `incomplete` always means something to look at.
     """
     series_table = _table(engine, "fred_series")
     membership = _table(engine, "fred_series_category")
     scan = _table(engine, "fred_category_scan")
 
     started = _now()
-    _record_scan(
-        engine, scan, category_id, status="pending", started_at=started,
-        page_limit=page_limit,
-    )
+    _record_scan(engine, scan, category_id, status="pending", started_at=started)
 
     fetched: set[str] = set()
     api_count = 0
     pages = 0
     try:
-        for page, count in iter_category_series(api, category_id, page_limit):
+        for page, count in iter_category_series(api, category_id):
             api_count = count
             if not page:
                 break
@@ -575,29 +454,25 @@ def fetch_category(
             engine, scan, category_id, status="error", started_at=started,
             finished_at=_now(), api_series_count=api_count or None,
             fetched_series_count=len(fetched), pages=pages, error=str(error)[:2000],
-            page_limit=page_limit,
         )
         raise
 
-    # The reconciliation this whole module exists for. `requested` is what we set out to
-    # write: everything FRED has, unless a cap says otherwise.
-    requested = api_count if page_limit is None else min(api_count, page_limit * PAGE)
-    status = "ok" if len(fetched) >= requested else "incomplete"
+    # The reconciliation this whole module exists for, and it has no exceptions: what
+    # FRED reported, against what we wrote.
+    status = "ok" if len(fetched) >= api_count else "incomplete"
     _record_scan(
         engine, scan, category_id, status=status, started_at=started,
         finished_at=_now(), api_series_count=api_count,
         fetched_series_count=len(fetched), pages=pages, error=None,
-        page_limit=page_limit,
     )
     if status == "incomplete":
         logger.warning(
-            f"category {category_id}: asked for {requested} series, wrote "
-            f"{len(fetched)} over {pages} pages (FRED reports {api_count})"
+            f"category {category_id}: FRED reports {api_count} series, wrote "
+            f"{len(fetched)} over {pages} pages"
         )
     return {
         "category_id": category_id, "api_series_count": api_count,
         "fetched_series_count": len(fetched), "pages": pages, "status": status,
-        "page_limit": page_limit, "capped": page_limit is not None and api_count > requested,
     }
 
 
@@ -685,25 +560,23 @@ def refresh_derived(engine: Engine) -> dict[str, Any]:
 # --------------------------------------------------------------------------- run
 
 
-def pending_categories(engine: Engine) -> list[tuple[int, int | None]]:
+def pending_categories(engine: Engine) -> list[int]:
     """
-    Categories still needing a fetch, as `(category_id, page_limit)`.
+    Categories still needing a fetch.
 
-    Excluded by two things: a scan already `ok`, and an `excluded_reason`. The second is
-    why the exclusion lives in the table -- the fetch loop reads the decision instead of
-    hard-coding it, so changing `VOLUME_EXCLUDED` and re-marking is the whole change.
+    One condition, because there is only one reason to skip a category: its scan already
+    says `ok`. A category is complete or it is pending, and nothing can mark it neither.
     """
     with engine.connect() as connection:
         return [
-            (row[0], page_limit_for(row[1]))
+            row[0]
             for row in connection.execute(
                 text(
                     """
-                    SELECT c.category_id, c.category_path
+                    SELECT c.category_id
                       FROM fred_category AS c
                       LEFT JOIN fred_category_scan AS s USING (category_id)
                      WHERE s.status IS DISTINCT FROM 'ok'
-                       AND c.excluded_reason IS NULL
                      ORDER BY c.category_id
                     """
                 )
@@ -734,8 +607,8 @@ def surplus_categories(engine: Engine) -> list[tuple[int, str, int, int]]:
     export's page size.
 
     Reporting only. Pruning needs a complete scan to be safe and is a separate pass: a
-    surplus here is evidence FRED dropped something, but a failed or capped fetch would
-    look the same if this were ever run against partial data.
+    surplus here is evidence FRED dropped something, but a failed fetch would look the
+    same if this were ever run against partial data -- hence the `status = 'ok'` filter.
     """
     with engine.connect() as connection:
         return [
@@ -750,7 +623,6 @@ def surplus_categories(engine: Engine) -> list[tuple[int, str, int, int]]:
                               FROM fred_series_category
                              GROUP BY category_id) AS h USING (category_id)
                      WHERE s.status = 'ok'
-                       AND s.page_limit IS NULL
                        AND h.held > s.api_series_count
                      ORDER BY h.held - s.api_series_count DESC
                     """
@@ -777,20 +649,17 @@ def discover(
 
     if walk:
         result["tree"] = walk_categories(engine, api)
-        # Paths before exclusions: marking matches on the subtree, and the path is what
-        # page_limit_for reads to decide the country cap.
         result["paths"] = rebuild_paths(engine)
-    result["excluded"] = mark_exclusions(engine)
 
     pending = pending_categories(engine)
     if limit is not None:
         pending = pending[:limit]
     logger.info(f"FRED discovery: {len(pending)} categories to fetch")
 
-    done, incomplete, failed, capped = 0, 0, 0, 0
-    for index, (category_id, page_limit) in enumerate(pending, 1):
+    done, incomplete, failed = 0, 0, 0
+    for index, category_id in enumerate(pending, 1):
         try:
-            outcome = fetch_category(engine, api, category_id, page_limit)
+            outcome = fetch_category(engine, api, category_id)
         except FredApiError:
             raise                      # key or protocol failure: stop, do not grind on
         except Exception as error:     # noqa: BLE001
@@ -799,7 +668,6 @@ def discover(
             continue
         done += 1
         incomplete += outcome["status"] == "incomplete"
-        capped += bool(outcome["capped"])
         if index % 25 == 0:
             logger.info(
                 f"FRED discovery: {index}/{len(pending)} categories, "
@@ -808,7 +676,7 @@ def discover(
 
     result["fetch"] = {
         "attempted": len(pending), "completed": done, "incomplete": incomplete,
-        "capped": capped, "failed": failed, "requests": api.requests,
+        "failed": failed, "requests": api.requests,
     }
     if done:
         result["derived"] = refresh_derived(engine)
