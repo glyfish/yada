@@ -23,7 +23,7 @@ The pipeline, per category:
    search `concepts` that deliberately includes synonyms absent from the titles.
 
 Step 3 is why this works at all. The names and concepts become a full-text index --
-~43,000 rows for the non-regional half -- that answers conceptual queries the 846,628
+27,385 rows for the non-regional half -- that answers conceptual queries the 846,628
 titles cannot: measured on a sample,
 "steel making capacity", "heavy industry plant buildout" and "coal and coke production"
 all reached **first place** for a topic whose titles contain none of those words, while
@@ -113,8 +113,9 @@ NAMING_OUTPUT_RATE = 0.50
 NAMING_CONCURRENCY = 8
 
 #: Attempts the SDK makes for 429 and 5xx before raising. The default of 2 is thin for a
-#: run of ~36,000 calls: one unretried overload marks a whole category `error`, and a
-#: retry re-spends every name already generated for it.
+#: run of tens of thousands of calls: one unretried overload marks a whole category
+#: `error`, and a retry re-spends every name already generated for it. Measured over the
+#: 26,922 calls of the non-regional run: 0 categories failed.
 NAMING_MAX_RETRIES = 8
 
 # ---------------------------------------------------------------------------
@@ -663,7 +664,8 @@ def _name_tree(
     That dependency is the *only* ordering the tree needs. Siblings do not see each other
     (`§4.4 sibling-blind naming`), so a level can be named all at once, and the recursive
     one-at-a-time version this replaces spent the entire run waiting on HTTP: 1.37 s per
-    call measured, ~36,000 calls, ~13.6 hours of it for the non-regional half alone.
+    call measured, which was 10.4 hours for the non-regional half alone. Measured again on
+    the completed run: 27,385 names in 1 h 57 m at 8 concurrent, a 5.3x speedup.
 
     Names do not depend on the order within a level, so the tree this produces is the
     same tree the sequential version produced -- a concurrent build is reproducible for

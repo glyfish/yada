@@ -59,6 +59,7 @@ load_dotenv()
 from sqlalchemy import text  # noqa: E402
 
 from apps.agentic.db.fred_catalogue import _engine  # noqa: E402
+from apps.agentic.db.fred_subcategory import SCOPES  # noqa: E402
 from apps.agentic.db.fred_discovery import (  # noqa: E402
     VOLUME_EXCLUDED,
     FredApi,
@@ -205,8 +206,11 @@ def cmd_resync(args: argparse.Namespace) -> dict:
 
     result = {"walk": cmd_walk(args), "fetch": cmd_fetch(args)}
     if not args.dry_run:
+        # Scope passed explicitly rather than inherited. Only the rebuild half of a resync
+        # costs money, and which half of the catalogue it may rebuild should be visible
+        # here rather than read out of another module's default.
         result["subcategories"] = subcategory_resync(
-            args.url, split_over_cap=args.split_over_cap
+            args.url, split_over_cap=args.split_over_cap, scope=args.scope
         )
     return result
 
@@ -243,6 +247,11 @@ def main() -> int:
         help="Re-ask every category for its children instead of resuming. Needed to "
              "notice categories FRED has ADDED; without it a walk skips what it has "
              "already visited.",
+    )
+    parser.add_argument(
+        "--scope", default="non-regional", choices=sorted(SCOPES),
+        help="resync only, and only with --split-over-cap: which half of the catalogue a "
+             "subcategory rebuild may touch. See clients/bin/fred_subcategories.py.",
     )
     parser.add_argument(
         "--split-over-cap", action="store_true",
