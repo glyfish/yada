@@ -112,6 +112,19 @@ NAMING_OUTPUT_RATE = 0.50
 #: independent, so the only ordering the tree requires is child-before-parent.
 NAMING_CONCURRENCY = 8
 
+#: Attempts at getting a *parsable* reply for one node, across all failure kinds. This is
+#: not the SDK's retry below -- that one covers transport (429, 5xx) and never sees a reply
+#: that arrived intact and simply was not JSON.
+#:
+#: Raised from an effective 2 on 2026-11-08. The loop retried a truncated reply and
+#: returned immediately on an unparsable one, so a single bad draw degraded a node
+#: permanently. Measured: 50 of 29,661 calls (0.17%) across two runs, with 0 truncations --
+#: so every observed failure was in the branch that had no retry. It is a formatting miss
+#: rather than a property of the input: rebuilding 38 countries cleared 12 failures and
+#: produced 24 new ones in different places, which is a dice roll, not a hard case. At
+#: 0.17% a second draw should take 50 to well under 1.
+NAMING_ATTEMPTS = 3
+
 #: Attempts the SDK makes for 429 and 5xx before raising. The default of 2 is thin for a
 #: run of tens of thousands of calls: one unretried overload marks a whole category
 #: `error`, and a retry re-spends every name already generated for it. Measured over the
@@ -343,6 +356,9 @@ class Namer:
         self.calls = 0
         self.input_tokens = 0
         self.output_tokens = 0
+        #: Nodes that could not be named within `NAMING_ATTEMPTS`, not bad replies. A
+        #: single bad draw is now retried, so this counts only exhaustion -- which is what
+        #: makes a non-zero value worth investigating rather than absorbing.
         self.failures = 0
         #: Replies discarded for hitting the token ceiling. Counted separately from
         #: `failures` because a rising count means the budget is wrong, not the model.
@@ -368,15 +384,20 @@ class Namer:
 
     def _call(self, system: str, user: str) -> dict[str, str]:
         """
-        One naming call, retried once on a truncated reply.
+        One naming call, retried up to `NAMING_ATTEMPTS` times on either failure kind.
 
         `stop_reason == 'max_tokens'` is checked *before* parsing, and the reply is
         discarded rather than parsed. A JSON object cut off mid-string can still yield a
         name that reads perfectly while its concepts are silently half-missing -- a
         plausible wrong answer, which is worse than a visible failure.
+
+        An unparsable-but-complete reply is retried too. It was not until 2026-11-08, and
+        since truncations measured zero over two runs, that branch was the only one any
+        observed failure took.
         """
         budget = NAMING_MAX_TOKENS
-        for attempt in range(2):
+        outcome = "naming failed"
+        for _ in range(NAMING_ATTEMPTS):
             message = self._ensure_client().messages.create(
                 model=self._model,
                 max_tokens=budget,
@@ -393,15 +414,18 @@ class Namer:
                 with self._lock:
                     self.truncated += 1
                 budget *= 2
+                outcome = "reply truncated"
                 continue
             named = parse_naming_reply(extract_text(message))
-            if named["name"].startswith("UNNAMED"):
-                with self._lock:
-                    self.failures += 1
-            return named
+            if not named["name"].startswith("UNNAMED"):
+                return named
+            # An intact reply that is not the JSON asked for. Retried rather than
+            # returned, which is the 2026-11-08 fix: see NAMING_ATTEMPTS for why this is
+            # worth another draw and truncation is not the same thing.
+            outcome = "naming failed"
         with self._lock:
             self.failures += 1
-        return {"name": "UNNAMED (reply truncated)", "concepts": ""}
+        return {"name": f"UNNAMED ({outcome})", "concepts": ""}
 
     def name_leaf(self, titles: Sequence[str]) -> dict[str, str]:
         return self._call(LEAF_SYSTEM_PROMPT, leaf_user_prompt(titles[:NAMING_SAMPLE]))

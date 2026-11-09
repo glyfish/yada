@@ -262,13 +262,52 @@ def test_a_truncated_reply_is_retried_with_a_bigger_budget():
 def test_a_truncated_reply_is_never_parsed():
     """Counting it as truncated rather than parsing it is the whole point."""
     stub = StubAnthropic([
-        Reply([Block("text", '{"name": "Plausible but cut')], stop_reason="max_tokens"),
-        Reply([Block("text", '{"name": "Plausible but cut')], stop_reason="max_tokens"),
+        Reply([Block("text", '{"name": "Plausible but cut')], stop_reason="max_tokens")
+        for _ in range(sub.NAMING_ATTEMPTS)
     ])
     namer = Namer(client=stub)
     assert namer.name_leaf(["t"])["name"] == "UNNAMED (reply truncated)"
-    assert namer.truncated == 2
+    assert namer.truncated == sub.NAMING_ATTEMPTS
     assert namer.failures == 1
+
+
+def test_an_unparsable_reply_is_retried():
+    """
+    The 2026-11-08 fix. A complete reply that is not the JSON asked for used to return
+    immediately, so one bad draw degraded a node permanently -- and since truncations
+    measured zero over two runs, this was the branch every real failure took.
+    """
+    stub = StubAnthropic([
+        Reply([Block("text", "Sure! Here is a name for that group:")]),
+        Reply([Block("text", '{"name": "Good name", "concepts": "a, b"}')]),
+    ])
+    namer = Namer(client=stub)
+    assert namer.name_leaf(["a title"])["name"] == "Good name"
+    assert namer.calls == 2
+    assert namer.truncated == 0
+    assert namer.failures == 0
+
+
+def test_an_unparsable_reply_is_not_retried_with_a_bigger_budget():
+    """Only truncation means the budget was wrong. Doubling it here would waste tokens."""
+    stub = StubAnthropic([
+        Reply([Block("text", "not json")]),
+        Reply([Block("text", '{"name": "N", "concepts": "c"}')]),
+    ])
+    Namer(client=stub).name_leaf(["t"])
+    assert stub.budgets == [NAMING_MAX_TOKENS, NAMING_MAX_TOKENS]
+
+
+def test_exhausting_the_attempts_on_bad_json_is_one_failure():
+    stub = StubAnthropic([
+        Reply([Block("text", "still not json")]) for _ in range(sub.NAMING_ATTEMPTS)
+    ])
+    namer = Namer(client=stub)
+    assert namer.name_leaf(["t"])["name"] == "UNNAMED (naming failed)"
+    assert namer.calls == sub.NAMING_ATTEMPTS
+    # One per NODE, not one per bad reply -- the count has to mean "could not be named".
+    assert namer.failures == 1
+    assert namer.truncated == 0
 
 
 def test_tokens_are_counted_across_retries():
