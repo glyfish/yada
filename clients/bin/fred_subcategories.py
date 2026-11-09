@@ -8,12 +8,15 @@ levels FRED does not have. Until now `build()` was a library function with no ca
 which is the same defect the discovery procedure was written to fix — a documented step
 nobody can invoke is not reproducible.
 
-**Scope is explicit, and `non-regional` is the default.** Regional data is 4,173 of 5,201
-categories, and the semantic scheme does not fit it: county titles are one measure with a
-place name substituted, so clustering groups Alabama's counties together instead of
-grouping unemployment measures. See `SCOPES` in the module, and section 4.4 of
-`sefer/planning/yada-fred-subcategory-procedure.md`. Passing `--scope regional` is
-possible and costs real money; it is not recommended until that is settled.
+**Scope defaults to `all`, and is a way to split a run rather than a judgement about
+where the scheme works.** It defaulted to `non-regional` until 2026-11-09, on the grounds
+that regional titles differ by place rather than by measure. Both halves are now built,
+and the measurement says the opposite: siblings share a name in 6.3% of regional nodes
+against 16.0% of non-regional ones. A default that silently skipped 80% of the catalogue
+on a refuted premise is worse than one that costs money on purpose, so it is gone. See
+`SCOPES` in the module for the figures and section 4.4 of
+`sefer/planning/yada-fred-subcategory-procedure.md` for the facet split that is still
+owed.
 
 **Every subcommand is idempotent.** `pending_builds` skips what is already `ok` or
 `skipped`, so a second run makes no model calls and spends nothing, and an interrupted
@@ -337,10 +340,11 @@ def main() -> int:
         help="Database URL. Defaults to the one YADA_ENV selects.",
     )
     parser.add_argument(
-        "--scope", default="non-regional", choices=sorted(SCOPES),
-        help="Which half of the catalogue to build. Defaults to the half the cost and "
-             "quality were measured on; 'regional' spends real money on a scheme that "
-             "does not fit it (see section 4.4 of the procedure).",
+        "--scope", default=None, choices=sorted(SCOPES),
+        help="Which part of the catalogue to build, for splitting a long run in two. "
+             "Required for `build` and `resync`, which spend money: there is no default, "
+             "so a caller always states what it is paying for. 'all' is the whole "
+             "catalogue and the two halves are measured equally well (see SCOPES).",
     )
     parser.add_argument(
         "--limit", type=int, default=None,
@@ -377,6 +381,11 @@ def main() -> int:
              "or a write.",
     )
     args = parser.parse_args()
+    # No default scope for the subcommands that spend: a silent `non-regional` once hid
+    # 80% of the catalogue, and a silent `all` would spend the whole budget by accident.
+    # Neither is recoverable by reading the output, so it is stated or it is an error.
+    if args.command in ("build", "resync") and args.scope is None:
+        parser.error(f"{args.command} requires --scope ({', '.join(sorted(SCOPES))})")
 
     result = COMMANDS[args.command](args)
     print(json.dumps(result, indent=2, default=str))

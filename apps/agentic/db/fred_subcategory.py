@@ -23,7 +23,7 @@ The pipeline, per category:
    search `concepts` that deliberately includes synonyms absent from the titles.
 
 Step 3 is why this works at all. The names and concepts become a full-text index --
-27,385 rows for the non-regional half -- that answers conceptual queries the 846,628
+58,227 rows over the whole catalogue -- that answers conceptual queries the 854,318
 titles cannot: measured on a sample,
 "steel making capacity", "heavy industry plant buildout" and "coal and coke production"
 all reached **first place** for a topic whose titles contain none of those words, while
@@ -39,10 +39,11 @@ sharper because the input is already homogeneous, and it keeps FRED's own curati
 spine rather than replacing it with tens of thousands of derived nodes and no human
 structure above them.
 
-**Scope.** `SCOPES` splits the catalogue, and `pending_builds` defaults to
-`non-regional`. Regional data is 4,173 of 5,201 categories and the semantic scheme does
-not fit it -- see `SCOPES` for why, and section 4.4 of
-`sefer/planning/yada-fred-subcategory-procedure.md` for what it would need instead.
+**Scope.** `SCOPES` splits the catalogue so a caller can build one half at a time.
+It is no longer a quality judgement: both halves are built, and the facet defect the
+regional half was once excluded for turns out to be *worse* in the half that was kept.
+See `SCOPES`, and section 4.4 of
+`sefer/planning/yada-fred-subcategory-procedure.md` for what a facet split would need.
 """
 
 from __future__ import annotations
@@ -177,16 +178,21 @@ SPLIT_VERSION = "2026-11-08.balanced"
 
 #: Which half of the catalogue a build covers, as a `category_path` predicate.
 #:
-#: The split is not cosmetic. The semantic scheme clusters series by title text, which
-#: works where titles differ by WHAT is measured and fails where they differ by WHERE:
-#: county titles are one measure with a place name substituted, so clustering groups
-#: Alabama's counties together instead of grouping unemployment measures together.
-#: Regional data is 4,173 of 5,201 categories, it already sits 5 levels deep in FRED's
-#: own tree (3,078 of those are `States > * > Counties > *`), and building a semantic
-#: tree under it would reach 8 levels to browse data whose natural shape is two facets.
-#: See `sefer/planning/yada-fred-subcategory-procedure.md` section 4.4. Until that is
-#: settled, `non-regional` is the only scope with a measured basis, so there is no
-#: default: a caller states which half it is paying for.
+#: **This is a way to split a run in two, not a statement about where the scheme works.**
+#: It used to be the latter, and that was wrong. The semantic scheme clusters series by
+#: title text, so it fails where titles differ by WHERE rather than by WHAT -- county
+#: titles are one measure with a place name substituted -- and `regional` was excluded on
+#: the grounds that this described the regional branch.
+#:
+#: Both halves are now built, which made the claim measurable, and it does not hold.
+#: Siblings that share a name are the symptom, and the excluded half has fewer of them:
+#: 6.3% of regional nodes against 16.0% of non-regional. Holding category size equal does
+#: not rescue it either (2.6% vs 9.4% under 100 series, 6.4% vs 18.4% to 499, 13.0% vs
+#: 18.1% to 1,999). The facet shape is real, but it belongs to particular categories --
+#: `Production & Business Activity > Housing` alone holds 522 colliding nodes -- and not
+#: to a branch of the taxonomy. A facet split is still the fix; see section 4.4 of
+#: `sefer/planning/yada-fred-subcategory-procedure.md`. It just cannot be targeted by
+#: path prefix.
 SCOPES = {
     "all": "",
     "non-regional": "AND c.category_path NOT LIKE 'U.S. Regional Data%'",
@@ -907,7 +913,7 @@ def build_category(
 
 
 def pending_builds(
-    engine: Engine, scope: str = "non-regional",
+    engine: Engine, *, scope: str,
     prompt_version: str = PROMPT_VERSION, split_version: str = SPLIT_VERSION,
 ) -> list[int]:
     """
@@ -961,7 +967,7 @@ def pending_builds(
 
 
 def build(
-    url: str | None = None, scope: str = "non-regional", limit: int | None = None,
+    url: str | None = None, *, scope: str, limit: int | None = None,
     cap: int = LEAF_CAP, max_series: int | None = None,
     workers: int = NAMING_CONCURRENCY,
 ) -> dict[str, Any]:
@@ -1230,7 +1236,7 @@ def refresh_counts(engine: Engine) -> dict[str, int]:
 
 def resync(
     url: str | None = None, split_over_cap: bool = False,
-    scope: str = "non-regional", workers: int = NAMING_CONCURRENCY,
+    *, scope: str, workers: int = NAMING_CONCURRENCY,
 ) -> dict[str, Any]:
     """
     Bring the derived tree back in step with the catalogue after a FRED discovery run.

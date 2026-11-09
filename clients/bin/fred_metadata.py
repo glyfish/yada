@@ -243,9 +243,10 @@ def main() -> int:
              "already visited.",
     )
     parser.add_argument(
-        "--scope", default="non-regional", choices=sorted(SCOPES),
-        help="resync only, and only with --split-over-cap: which half of the catalogue a "
-             "subcategory rebuild may touch. See clients/bin/fred_subcategories.py.",
+        "--scope", default=None, choices=sorted(SCOPES),
+        help="resync only, and only with --split-over-cap: which part of the catalogue a "
+             "subcategory rebuild may touch. Required when it would rebuild, since that "
+             "spends money. See clients/bin/fred_subcategories.py.",
     )
     parser.add_argument(
         "--split-over-cap", action="store_true",
@@ -257,6 +258,10 @@ def main() -> int:
         help="Report what would be done without making a request or a write.",
     )
     args = parser.parse_args()
+    # Only the rebuild half of a resync spends, so the scope is required exactly when it
+    # would be used. See the same guard in clients/bin/fred_subcategories.py.
+    if args.command == "resync" and args.split_over_cap and args.scope is None:
+        parser.error(f"resync --split-over-cap requires --scope ({', '.join(sorted(SCOPES))})")
 
     try:
         result = COMMANDS[args.command](args)

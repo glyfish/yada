@@ -610,16 +610,23 @@ def test_the_scopes_partition_the_catalogue():
     assert prefix in SCOPES["non-regional"] and prefix in SCOPES["regional"]
 
 
-def test_there_is_no_implicit_whole_catalogue_default():
+def test_scope_has_no_default_at_all():
     """
-    `pending_builds` used to return every over-cap category, so `build()` with no
-    argument would have spent the regional budget by accident.
+    Both defaults this ever had were wrong in opposite directions, so there is none.
+
+    `pending_builds` once returned every over-cap category, so `build()` with no
+    argument would have spent the regional budget by accident. The fix was to default to
+    `non-regional`, which then silently hid 80% of the catalogue behind a claim about
+    facet categories that measurement refuted (see `SCOPES`). Neither mistake is visible
+    in the output of a run, so the scope is stated by the caller or it is a `TypeError`.
     """
     import inspect
 
-    default = inspect.signature(sub.pending_builds).parameters["scope"].default
-    assert default == "non-regional"
-    assert inspect.signature(sub.build).parameters["scope"].default == "non-regional"
+    for fn in (sub.pending_builds, sub.build, sub.resync):
+        scope = inspect.signature(fn).parameters["scope"]
+        assert scope.default is inspect.Parameter.empty, fn.__name__
+        # Keyword-only too: positionally it would be easy to pass the wrong half.
+        assert scope.kind is inspect.Parameter.KEYWORD_ONLY, fn.__name__
 
 
 # ------------------------------------------------------------------------ cost model
