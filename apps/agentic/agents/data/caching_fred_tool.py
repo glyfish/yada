@@ -41,7 +41,7 @@ class CachingFredTool(CachingDataTool):
             "series_id": kwargs["series_id"],
             "limit": kwargs.get("limit", 10000),
         })
-        return json.loads(raw)
+        return self._parse_mcp_json(raw)
 
     def _obs_range(self, data: dict) -> tuple[str, str, int]:
         observations = data.get("observations", [])
@@ -53,8 +53,12 @@ class CachingFredTool(CachingDataTool):
         if self._info_tool is None:
             return {}
         raw = await self._info_tool.ainvoke({"series_id": native_id})
-        info = json.loads(raw)
-        series_list = info.get("seriess", [])  # "seriess" is the FRED API's key
+        info = self._parse_mcp_json(raw)
+        # meida's fred_series_info normalises FRED's "seriess" to "series". Read
+        # either: the raw REST key still reaches the collection path (fred_catalogue,
+        # fred_discovery), while this tool is fed by MCP. Reading only "seriess" here
+        # returned {} and silently dropped title/frequency/units from the cache.
+        series_list = info.get("series") or info.get("seriess") or []
         if not series_list:
             return {}
         s = series_list[0]

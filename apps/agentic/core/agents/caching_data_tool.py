@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from abc import abstractmethod
 from typing import Any
 
@@ -26,6 +27,25 @@ class CachingDataTool(BaseTool):
     """
 
     source: str
+
+    @staticmethod
+    def _parse_mcp_json(raw: Any) -> dict:
+        """
+        Parse a reply from an MCP tool into a dict.
+
+        langchain's in-tree bridge (`langchain.mcp`, via the `mcp` extra) returns a
+        LIST of content blocks — [{"type": "text", "text": "..."}] — where the
+        retired langchain-mcp-adapters returned the text itself. Accept either, for
+        the same reason lib.mcp_client reads input_schema or inputSchema: navi is
+        installed into repos on both sides of that upgrade.
+        """
+        if isinstance(raw, list):
+            raw = "".join(
+                block.get("text", "")
+                for block in raw
+                if isinstance(block, dict) and block.get("type") == "text"
+            )
+        return json.loads(raw)
 
     def _run(self, *args: Any, **kwargs: Any) -> str:
         raise NotImplementedError("Use async")

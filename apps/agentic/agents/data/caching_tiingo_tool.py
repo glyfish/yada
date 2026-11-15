@@ -45,7 +45,7 @@ class CachingTiingoTool(CachingDataTool):
             "ticker": self._native_id(**kwargs),
             "start_date": "1900-01-01",  # far-past start → full available history
         })
-        payload = json.loads(raw)
+        payload = self._parse_mcp_json(raw)
         observations = [
             {
                 "date": p["date"][:10],          # ISO timestamp → YYYY-MM-DD for the plotter
@@ -77,7 +77,7 @@ class CachingTiingoTool(CachingDataTool):
         if self._info_tool is None:
             return {}
         raw = await self._info_tool.ainvoke({"ticker": native_id})
-        info = json.loads(raw)
+        info = self._parse_mcp_json(raw)
         return {
             "title": info.get("name"),
             "frequency": "daily",
