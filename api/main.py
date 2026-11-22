@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 import langsmith
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
@@ -41,10 +41,27 @@ from apps.core.environment import current_environment, verify_database
 from api.document_router import router as document_router
 from mcp_server import identity
 
+#: Secure cookies are dropped by the browser over plain http, which is how this is
+#: served locally. On anything but localhost the cookie must be Secure or the token
+#: travels in clear text.
+_COOKIE_SECURE = os.environ.get("YADA_COOKIE_SECURE", "0") not in ("0", "false", "False")
+
 
 # ---------------------------------------------------------------------------
 # Who is calling
 # ---------------------------------------------------------------------------
+#: Where the browser keeps its token. The cookie carries the TOKEN ITSELF, not an
+#: opaque session id, and the server stores nothing against it -- resolution is the same
+#: per-request hash-and-lookup the Authorization header gets. So this is not a session:
+#: revocation still lands on the next request, a restart logs nobody out, and there is
+#: no session table to expire or invalidate.
+#:
+#: It exists because the browser should not hold the token anywhere JavaScript can read
+#: it. The feed renders model-authored markdown into innerHTML by design, which is an
+#: injection path that sessionStorage would be exposed to and HttpOnly is not.
+SESSION_COOKIE = "yada_token"
+
+
 async def current_owner(request: Request) -> str | None:
     """Resolve the bearer token to an owner, or None when no users are configured.
 
@@ -58,8 +75,9 @@ async def current_owner(request: Request) -> str | None:
     with a WWW-Authenticate challenge, which is what a browser and any OAuth-capable
     client expect.
     """
+    token = identity.bearer_of(request.headers) or request.cookies.get(SESSION_COOKIE)
     try:
-        return identity.resolve(identity.bearer_of(request.headers)).user_id
+        return identity.resolve(token).user_id
     except identity.AuthRequired as exc:
         raise HTTPException(status_code=401, detail=str(exc),
                             headers={"WWW-Authenticate": "Bearer"})
@@ -438,6 +456,59 @@ async def resume_request(req: ResumePayload):
             }
 
     return EventSourceResponse(event_generator())
+
+
+class SessionPayload(BaseModel):
+    token: str
+
+
+@app.post("/api/session")
+async def create_session(req: SessionPayload, response: Response):
+    """Exchange a token for the cookie the browser will send from then on.
+
+    Not a login in the session sense -- nothing is created server-side. This validates
+    the token once so the UI can report a bad one immediately rather than on the next
+    data request, and parks it somewhere JavaScript cannot read.
+    """
+    try:
+        caller = identity.resolve(req.token)
+    except identity.AuthRequired as exc:
+        raise HTTPException(status_code=401, detail=str(exc),
+                            headers={"WWW-Authenticate": "Bearer"})
+    if caller.user_id is None:
+        # No users configured, so the server is not checking anything. Say so rather
+        # than setting a cookie that means nothing.
+        return {"authenticated": False, "name": caller.name,
+                "detail": "This server has no users configured; no token is required."}
+    response.set_cookie(
+        SESSION_COOKIE, req.token,
+        httponly=True,       # the whole point: JS, including injected JS, cannot read it
+        samesite="strict",   # the cookie is sent automatically, so this is the CSRF guard
+        secure=_COOKIE_SECURE,
+        path="/",
+    )
+    return {"authenticated": True, "name": caller.name, "user_id": caller.user_id}
+
+
+@app.delete("/api/session", status_code=204)
+async def end_session(response: Response):
+    response.delete_cookie(SESSION_COOKIE, path="/")
+
+
+@app.get("/api/session")
+async def whoami(request: Request):
+    """Who the browser currently is, without 401ing when it is nobody.
+
+    The UI calls this on load to decide whether to prompt, so it must distinguish
+    "no token" from "bad token" without the failure being an error.
+    """
+    token = identity.bearer_of(request.headers) or request.cookies.get(SESSION_COOKIE)
+    try:
+        caller = identity.resolve(token)
+    except identity.AuthRequired as exc:
+        return {"authenticated": False, "required": True, "detail": str(exc)}
+    return {"authenticated": caller.user_id is not None, "required": caller.user_id is not None,
+            "name": caller.name, "user_id": caller.user_id}
 
 
 @app.post("/api/reports/{report_id}/plot")

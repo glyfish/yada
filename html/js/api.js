@@ -1,5 +1,6 @@
 import { isLoading, statusText, sessionId, inputEl, textValue } from "./state.js";
 import { prependResultCard, fillLastCardMeta } from "./feed.js";
+import { request } from "./auth.js";
 
 export const YADA_REQUEST_STREAM = "/api/request/stream";
 export const YADA_REQUEST_RESUME = "/api/request/resume";
@@ -8,7 +9,7 @@ export async function handleResumeRequest(resumeSessionId, formData, promptLabel
     isLoading.val = true;
     statusText.val = "Processing...";
     try {
-        const response = await fetch(YADA_REQUEST_RESUME, {
+        const response = await request(YADA_REQUEST_RESUME, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ session_id: resumeSessionId, form_data: formData }),

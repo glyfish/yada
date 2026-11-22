@@ -111,9 +111,10 @@ def resolve(token: str | None) -> Caller:
             # ordinary local case, and logging it every message would be noise.
             return ANONYMOUS
         if not token:
-            raise AuthRequired(
-                "This server requires a token. Send it as an Authorization: Bearer "
-                "header on the MCP extension.")
+            # Channel-neutral: this message reaches an MCP client, which sends a
+            # header, and a browser, which exchanges the token for a cookie at
+            # POST /api/session. Naming one of them is wrong for the other.
+            raise AuthRequired("This server requires a token.")
         digest = hashlib.sha256(token.encode()).hexdigest()
         row = conn.execute(sa.text("""
             SELECT user_id, name, disabled_at FROM app_user WHERE token_sha256 = :h"""),

@@ -3,6 +3,7 @@ import { isLoading, statusText, feedCount, sessionId, textValue, inputEl } from 
 import { prependResultCard, startNewChat, updateResponsesHeader, fillLastCardMeta } from "./feed.js";
 import { handleResumeRequest, YADA_REQUEST_STREAM } from "./api.js";
 import { showFormDialog } from "./forms.js";
+import { request } from "./auth.js";
 
 const { div, span, textarea, button, h3 } = van.tags;
 const { add } = van;
@@ -17,7 +18,7 @@ const handleYadaRequestSubmit = async () => {
         const payload = { input: promptBeforeSend };
         if (sessionId.val) payload.session_id = sessionId.val;
 
-        const response = await fetch(YADA_REQUEST_STREAM, {
+        const response = await request(YADA_REQUEST_STREAM, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),

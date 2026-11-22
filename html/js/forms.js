@@ -1,6 +1,7 @@
 import { handleResumeRequest } from "./api.js";
 import { prependResultCard, fillLastCardMeta } from "./feed.js";
 import { sessionId as sessionIdState, clearInput } from "./state.js";
+import { request } from "./auth.js";
 
 // Build a <td> whose text is TEXT, never markup.
 //
@@ -195,7 +196,7 @@ function showSeriesSelectionTable(dialog, formSchema, sessionId, promptLabel) {
                 const q = s.query || "";
                 if (!src || !q) return [];
                 const url = `/api/series/search?source=${encodeURIComponent(src)}&q=${encodeURIComponent(q)}`;
-                const resp = await fetch(url);
+                const resp = await request(url);
                 if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
                 return (await resp.json()).rows || [];
             }));
@@ -235,7 +236,7 @@ function showSeriesSelectionTable(dialog, formSchema, sessionId, promptLabel) {
         const failed = [];
         for (const p of picks) {
             try {
-                const resp = await fetch("/api/series/fetch", {
+                const resp = await request("/api/series/fetch", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ source: p.source, native_id: p.native_id }),
@@ -483,7 +484,7 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
             if (filterSource) params.set("source", filterSource);
             const url = params.toString() ? `/api/reports?${params}` : "/api/reports";
             try {
-                const resp = await fetch(url);
+                const resp = await request(url);
                 if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
                 allReports = await resp.json();
                 applyTextFilter();
@@ -519,7 +520,7 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
             close();  // abandons the suspended graph; plotting is deterministic below
             // Deterministic plot — no agent, no LLM tokens.
             try {
-                const resp = await fetch(`/api/reports/${id}/plot`, { method: "POST" });
+                const resp = await request(`/api/reports/${id}/plot`, { method: "POST" });
                 if (!resp.ok) {
                     const err = await resp.json().catch(() => ({}));
                     throw new Error(err.detail || `HTTP ${resp.status}`);
@@ -537,7 +538,7 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
         const openEditDialog = async (reportId) => {
             let report;
             try {
-                const resp = await fetch(`/api/reports/${reportId}`);
+                const resp = await request(`/api/reports/${reportId}`);
                 if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
                 report = await resp.json();
             } catch (e) {
@@ -601,7 +602,7 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
                     time_range_to:      toInput.value || null,
                 };
                 try {
-                    const resp = await fetch(`/api/reports/${reportId}`, {
+                    const resp = await request(`/api/reports/${reportId}`, {
                         method: "PUT",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify(payload),
@@ -628,7 +629,7 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
             if (!selectedId) return;
             if (!confirm("Delete this report? This cannot be undone.")) return;
             try {
-                const resp = await fetch(`/api/reports/${selectedId}`, { method: "DELETE" });
+                const resp = await request(`/api/reports/${selectedId}`, { method: "DELETE" });
                 if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             } catch (e) {
                 alert(`Failed to delete report: ${e.message}`);
