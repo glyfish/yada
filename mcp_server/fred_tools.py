@@ -239,7 +239,12 @@ def _search(query: str | None, category: str | None,
             where.append("sc.category_id = ANY(:ids)")
             params["ids"] = ids
         if query:
-            where.append("s.title_tsv @@ plainto_tsquery('english', :q)")
+            # Also match an EXACT series_id, because a query is often just one: "GDP",
+            # "UNRATE", "CPIAUCSL". Exact only -- `series_id ILIKE 'GDP%'` matches 12,487
+            # series and ILIKE 'C%' matches 56,441, so a prefix is not a search, it is a
+            # scan. Exact matches exactly one, and popularity then puts it on top.
+            where.append("(s.title_tsv @@ plainto_tsquery('english', :q)"
+                         " OR upper(s.series_id) = upper(:q))")
             params["q"] = query
         if frequency:
             where.append("s.frequency_class = :f")
@@ -283,7 +288,8 @@ def _search(query: str | None, category: str | None,
         filters_applied=applied, series=series, total=total, limit=limit,
         detail=detail or (None if series else "Nothing matched. FRED titles use formal "
                           "names -- try the measure's published name, e.g. 'consumer "
-                          "price index' rather than 'inflation'."))
+                          "price index' rather than 'inflation', 'gross domestic "
+                          "product' rather than 'GDP'."))
 
 
 def _series_total(conn) -> int:
@@ -399,11 +405,17 @@ def register(server) -> None:
             f"({_counts()}) and return ranked series with the metadata needed to choose "
             f"one. Returns descriptions only — use fred_series_observations to fetch the "
             f"data once a series_id is chosen.\n"
-            "- query: what to look for, matched against series titles. FRED titles use "
-            "formal published names, so prefer the measure's real name over the "
-            "colloquial one — 'consumer price index' rather than 'inflation', "
-            "'unemployment rate' rather than 'jobless claims'. Matching is literal: a "
-            "word that does not appear in the title does not match.\n"
+            "- query: what to look for, matched against series titles, plus an exact "
+            "series_id if the query is one ('GDP', 'UNRATE'). Matching is LITERAL — a "
+            "word absent from the title does not match — and FRED titles use formal "
+            "spelled-out names, so:\n"
+            "    * expand acronyms: 'gross domestic product', not 'GDP'; 'consumer price "
+            "index', not 'CPI'. Titles that DO contain an acronym are usually ratios "
+            "*about* it — searching 'GDP' returns 'Household Debt to GDP' and misses "
+            "'Gross Domestic Product' itself.\n"
+            "    * use the published name, not the colloquial one: 'consumer price index' "
+            "rather than 'inflation', 'unemployment rate' rather than 'jobless claims'.\n"
+            "    * when unsure, search the spelled-out form AND the acronym and compare.\n"
             "- category: a category name or path as describe_fred reports it. Includes "
             "everything beneath it, which is usually what is meant — the most popular "
             "housing series sit in children of 'Housing', not on it."
