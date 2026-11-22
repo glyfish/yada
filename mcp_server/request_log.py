@@ -35,6 +35,8 @@ from time import perf_counter
 from typing import Any
 
 from mcp.server.lowlevel.server import ServerMiddleware
+from mcp.shared.exceptions import MCPError
+from mcp_types import INVALID_REQUEST
 
 from mcp_server import identity
 
@@ -182,7 +184,18 @@ class RequestLogMiddleware(ServerMiddleware[Any]):
             caller, reset = identity.bind(headers)
         except identity.AuthRequired as exc:
             logger.warning(f"rpc {ctx.method}{who} -> refused: {exc}")
-            raise
+            # Translated to MCPError rather than raised as-is. A refusal is a policy
+            # outcome, not a crash, and the dispatcher only skips its traceback for an
+            # exception carrying its own ErrorData (shared/jsonrpc_dispatcher.py:102).
+            # A bare AuthRequired fell through to `logger.exception("handler for %r
+            # raised")`, so every message from an unauthenticated client printed a
+            # 40-line traceback -- which buries the one line saying what happened and
+            # makes a working guard look like a bug.
+            #
+            # identity.py stays free of SDK types on purpose: the FastAPI surface
+            # translates the same exception into a 401. Each boundary says it in its
+            # own protocol.
+            raise MCPError(INVALID_REQUEST, str(exc)) from None
         if caller.user_id:
             who = f"{who} [{caller.name}]" if who else f" [{caller.name}]"
 
