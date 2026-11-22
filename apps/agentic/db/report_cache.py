@@ -251,8 +251,9 @@ class ReportCache:
 
 
     @classmethod
-    async def get_by_report_id(cls, report_id: str) -> dict | None:
-        return await asyncio.to_thread(cls._get_by_report_id_sync, report_id)
+    async def get_by_report_id(cls, report_id: str,
+                               owner: str | None = None) -> dict | None:
+        return await asyncio.to_thread(cls._get_by_report_id_sync, report_id, owner)
 
 
     @classmethod
@@ -265,11 +266,12 @@ class ReportCache:
         time_range_from: str,
         time_range_to: str | None = None,
         metadata: dict | None = None,
+        owner: str | None = None,
     ) -> dict | None:
         return await asyncio.to_thread(
             cls._update_report_sync,
             report_id, report_title, report_description,
-            time_series_info, time_range_from, time_range_to, metadata,
+            time_series_info, time_range_from, time_range_to, metadata, owner,
         )
 
 
@@ -293,15 +295,17 @@ class ReportCache:
 
 
     @classmethod
-    async def delete_report(cls, report_id: str) -> bool:
-        return await asyncio.to_thread(cls._delete_report_sync, report_id)
+    async def delete_report(cls, report_id: str, owner: str | None = None) -> bool:
+        return await asyncio.to_thread(cls._delete_report_sync, report_id, owner)
 
 
     @classmethod
-    async def list_reports(cls, source: str | None = None, where: dict | None = None) -> list[dict[str, Any]]:
-        return await asyncio.to_thread(cls._list_reports_sync, source, where)
+    async def list_reports(cls, source: str | None = None, where: dict | None = None,
+                           owner: str | None = None) -> list[dict[str, Any]]:
+        return await asyncio.to_thread(cls._list_reports_sync, source, where, owner)
 
 
     @classmethod
-    async def search_by_title(cls, title_fragment: str) -> list[dict[str, Any]]:
-        return await asyncio.to_thread(cls._search_by_title_sync, title_fragment)
+    async def search_by_title(cls, title_fragment: str,
+                              owner: str | None = None) -> list[dict[str, Any]]:
+        return await asyncio.to_thread(cls._search_by_title_sync, title_fragment, owner)

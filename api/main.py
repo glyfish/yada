@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 import langsmith
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
@@ -39,6 +39,30 @@ from apps.agentic.agents.document.document_agent import search_series_rows
 from apps.agentic.core.pricing import estimate_cost
 from apps.core.environment import current_environment, verify_database
 from api.document_router import router as document_router
+from mcp_server import identity
+
+
+# ---------------------------------------------------------------------------
+# Who is calling
+# ---------------------------------------------------------------------------
+async def current_owner(request: Request) -> str | None:
+    """Resolve the bearer token to an owner, or None when no users are configured.
+
+    Shares `mcp_server.identity` with the MCP server so there is one credential story
+    and one place revocation takes effect, rather than an HTTP surface that drifts from
+    the tool surface. Returns None -- scoping off -- while `app_user` is empty, which is
+    what keeps the single-user local setup working untouched.
+
+    Unlike the MCP path, this CAN answer 401. `ServerMiddleware` runs after the request
+    is accepted, so a bad token there is a JSON-RPC error; here it is the real status
+    with a WWW-Authenticate challenge, which is what a browser and any OAuth-capable
+    client expect.
+    """
+    try:
+        return identity.resolve(identity.bearer_of(request.headers)).user_id
+    except identity.AuthRequired as exc:
+        raise HTTPException(status_code=401, detail=str(exc),
+                            headers={"WWW-Authenticate": "Bearer"})
 
 # ---------------------------------------------------------------------------
 # LangSmith trace URL helper — lazy-cached per process
@@ -417,13 +441,17 @@ async def resume_request(req: ResumePayload):
 
 
 @app.post("/api/reports/{report_id}/plot")
-async def plot_report(report_id: str):
+async def plot_report(report_id: str, owner: str | None = Depends(current_owner)):
     """
     Render a report's plot deterministically — no LLM, no agent hops. This is the
     cheap path the UI 'Plot Report' button uses instead of resuming the agent graph.
+
+    Note the path segment reaches a resolver that also accepts a title SUBSTRING, so
+    this route is a title search as much as an id lookup. Scoping it matters more than
+    it looks: unscoped, `/api/reports/GDP/plot` would reach any user's "GDP Overview".
     """
     try:
-        return await render_report_plot(report_id)
+        return await render_report_plot(report_id, owner=owner)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -432,14 +460,15 @@ async def plot_report(report_id: str):
 
 
 @app.get("/api/reports/{report_id}")
-async def get_report(report_id: str):
-    record = await ReportCache.get_by_report_id(report_id)
+async def get_report(report_id: str, owner: str | None = Depends(current_owner)):
+    record = await ReportCache.get_by_report_id(report_id, owner=owner)
     if record is None:
         raise HTTPException(status_code=404, detail="Report not found")
     return {
         "report_id": str(record["report_id"]),
         "report_title": record["report_title"],
         "report_description": record.get("report_description") or "",
+        "created_by": str(record["created_by"]) if record.get("created_by") else None,
         "metadata": dict(record.get("metadata") or {}),
         "time_range_from": str(record.get("time_range_from") or ""),
         "time_range_to": str(record["time_range_to"]) if record.get("time_range_to") else None,
@@ -464,7 +493,8 @@ class UpdateReportPayload(BaseModel):
 
 
 @app.put("/api/reports/{report_id}")
-async def update_report(report_id: str, req: UpdateReportPayload):
+async def update_report(report_id: str, req: UpdateReportPayload,
+                        owner: str | None = Depends(current_owner)):
     ids = [s.strip() for s in req.time_series_ids.split(",") if s.strip()]
 
     time_series_info: list[TimeSeriesInfoEntry] = []
@@ -498,20 +528,24 @@ async def update_report(report_id: str, req: UpdateReportPayload):
         time_range_from=req.time_range_from,
         time_range_to=req.time_range_to or None,
         metadata=report_metadata_from_series(time_series_info),
+        owner=owner,
     )
+    # 404 whether the report is absent or belongs to someone else. Distinguishing them
+    # would turn this into a probe for other people's report ids.
     if updated is None:
         raise HTTPException(status_code=404, detail="Report not found")
     return updated
 
 
 @app.delete("/api/reports/{report_id}", status_code=204)
-async def delete_report(report_id: str):
-    deleted = await ReportCache.delete_report(report_id)
+async def delete_report(report_id: str, owner: str | None = Depends(current_owner)):
+    deleted = await ReportCache.delete_report(report_id, owner=owner)
     if not deleted:
         raise HTTPException(status_code=404, detail="Report not found")
 
 
-async def _reports_matching_filter(phrase: str, source: str = "") -> list[dict]:
+async def _reports_matching_filter(phrase: str, source: str = "",
+                                   owner: str | None = None) -> list[dict]:
     """
     Reports whose merged metadata satisfies a natural-language constraint (e.g.
     'government bonds', 'VanEck funds'), reusing the document-search filter extractors
@@ -536,7 +570,8 @@ async def _reports_matching_filter(phrase: str, source: str = "") -> list[dict]:
         if where is None:
             continue
         any_filter = True
-        for r in await ReportCache.list_reports(source=cache_source, where=where):
+        for r in await ReportCache.list_reports(source=cache_source, where=where,
+                                                owner=owner):
             matched[r["report_id"]] = r
     if any_filter:
         return sorted(matched.values(), key=lambda r: r["report_title"])
@@ -544,7 +579,7 @@ async def _reports_matching_filter(phrase: str, source: str = "") -> list[dict]:
     # The phrase didn't map to the scoped store's vocabulary. Still honor an explicit
     # source by returning reports that contain that store's data; with no source given,
     # the request is genuinely unfilterable, so show everything.
-    all_reports = await ReportCache.list_reports()
+    all_reports = await ReportCache.list_reports(owner=owner)
     src_key = {"etf": "tiingo", "fred": "fred"}.get(source)
     if src_key:
         return [r for r in all_reports if src_key in (r.get("metadata") or {})]
@@ -556,8 +591,12 @@ async def list_reports(
     q: str = Query("", description="Filter by title or description"),
     metadata_filter: str = Query("", alias="filter", description="Natural-language metadata filter, e.g. 'government bonds'"),
     source: str = Query("", description="Restrict the metadata filter to a store: 'etf' or 'fred'"),
+    owner: str | None = Depends(current_owner),
 ):
-    reports = await _reports_matching_filter(metadata_filter, source) if metadata_filter else await ReportCache.list_reports()
+    # `q` filters in Python AFTER the fetch, so the fetch itself has to be scoped --
+    # otherwise a title search would narrow a list it should never have been given.
+    reports = (await _reports_matching_filter(metadata_filter, source, owner=owner)
+               if metadata_filter else await ReportCache.list_reports(owner=owner))
     if q:
         q_lower = q.lower()
         reports = [
