@@ -20,6 +20,81 @@ function td(text, className) {
     return cell;
 }
 
+/**
+ * Ask for a token in a modal, exchange it for the cookie, resolve true on success.
+ *
+ * Lives here rather than in auth.js because this is where the app's dialogs are, and
+ * auth.js reaches it by dynamic import -- forms.js already imports `request` from
+ * auth.js, so a static import back would be a load-time cycle.
+ *
+ * `type="password"` so a pasted token is not left legible on a shared screen or in a
+ * screenshot; it is a bearer credential, not a username.
+ */
+export function showSignInDialog(message) {
+    return new Promise((resolve) => {
+        const dialog = document.createElement("dialog");
+        dialog.className = "modal";
+        dialog.innerHTML = `
+            <form method="dialog" novalidate autocomplete="off">
+                <label for="auth-token">Token:</label>
+                <input id="auth-token" name="token" type="password" placeholder="yada token"
+                       autocomplete="off" autocapitalize="off" spellcheck="false" required>
+                <menu>
+                    <button type="button" class="btn" id="authCancelBtn">Cancel</button>
+                    <button type="button" class="btn primary" id="authSubmitBtn">Sign in</button>
+                </menu>
+            </form>
+        `;
+        const form   = dialog.querySelector("form");
+        const field  = dialog.querySelector("#auth-token");
+        const submit = dialog.querySelector("#authSubmitBtn");
+
+        const note = document.createElement("div");
+        note.style.cssText = "grid-column:1/-1; color:#b00; min-height:1.2em; margin-bottom:.5rem;";
+        note.textContent = message || "";
+        form.insertBefore(note, form.firstChild);
+
+        let settled = false;
+        const finish = (ok) => {
+            if (settled) return;
+            settled = true;
+            dialog.close();
+            dialog.remove();
+            resolve(ok);
+        };
+
+        const attempt = async () => {
+            const token = field.value.trim();
+            if (!token) { note.textContent = "Enter a token."; return; }
+            submit.disabled = true;
+            try {
+                const { signIn } = await import("./auth.js");
+                await signIn(token);
+                finish(true);
+            } catch (e) {
+                // Stay open and say why -- a mistyped token should cost one keystroke,
+                // not a dismissed dialog and a repeated request.
+                note.textContent = e.message;
+                field.select();
+            } finally {
+                submit.disabled = false;
+            }
+        };
+
+        submit.addEventListener("click", attempt);
+        field.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") { e.preventDefault(); attempt(); }
+        });
+        dialog.querySelector("#authCancelBtn").addEventListener("click", () => finish(false));
+        dialog.addEventListener("cancel", (e) => { e.preventDefault(); finish(false); });
+
+        document.body.appendChild(dialog);
+        dialog.showModal();
+        field.focus();
+    });
+}
+
+
 // Render the create-time-series-report form into `dialog`. Works both as a fresh
 // dialog (from the form dispatcher) and as an in-place transition from the series
 // selection table (dialog already open) — it only appends/opens when needed.

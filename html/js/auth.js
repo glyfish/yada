@@ -34,11 +34,17 @@ export async function signIn(token) {
         const body = await r.json().catch(() => ({}));
         throw new Error(body.detail || `Sign-in failed (${r.status})`);
     }
-    return r.json();
+    const session = await r.json();
+    // Announced rather than returned to a caller, because a sign-in raised by a 401
+    // deep inside request() has no path back to whatever is displaying the identity.
+    window.dispatchEvent(new CustomEvent("yada:identity", { detail: session }));
+    return session;
 }
 
 export async function signOut() {
     await fetch("/api/session", { method: "DELETE" });
+    window.dispatchEvent(new CustomEvent("yada:identity",
+                                         { detail: { authenticated: false } }));
 }
 
 function askForToken(message) {
@@ -46,17 +52,12 @@ function askForToken(message) {
     if (promptOpen) return promptOpen;
     promptOpen = (async () => {
         try {
-            for (;;) {
-                const token = window.prompt(
-                    `${message}\n\nPaste your yada token:`);
-                if (!token) return false;                  // cancelled -- give up, do not loop
-                try {
-                    await signIn(token.trim());
-                    return true;
-                } catch (e) {
-                    message = e.message;                   // show why, ask again
-                }
-            }
+            // Dynamic import: forms.js imports `request` from here, so a static import
+            // back would be a load-time cycle. The dialog lives there because that is
+            // where this app's dialogs are, and it retries internally -- a mistyped
+            // token costs a keystroke rather than a dismissed prompt.
+            const { showSignInDialog } = await import("./forms.js");
+            return await showSignInDialog(message);
         } finally {
             promptOpen = null;
         }

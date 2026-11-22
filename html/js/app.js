@@ -2,10 +2,11 @@ import van from "../vendor/van-1.5.5.min.js";
 import { isLoading, statusText, feedCount, sessionId, textValue, inputEl } from "./state.js";
 import { prependResultCard, startNewChat, updateResponsesHeader, fillLastCardMeta } from "./feed.js";
 import { handleResumeRequest, YADA_REQUEST_STREAM } from "./api.js";
-import { showFormDialog } from "./forms.js";
-import { request } from "./auth.js";
+import { showFormDialog, showSignInDialog } from "./forms.js";
+import { request, whoami, signOut } from "./auth.js";
 
 const { div, span, textarea, button, h3 } = van.tags;
+const { state } = van;
 const { add } = van;
 
 const handleYadaRequestSubmit = async () => {
@@ -108,6 +109,27 @@ inputEl.ref = textarea({
     },
 });
 
+// Who the browser currently is. `required` distinguishes a server with no users --
+// where signing in is meaningless -- from one that wants a token we do not have, which
+// a single "are we authenticated" boolean cannot express.
+const identity = state({ authenticated: false, required: false, name: "" });
+
+async function refreshIdentity() {
+    identity.val = await whoami();
+}
+
+async function handleSignOut() {
+    await signOut();
+    // The next request will 401 and raise the dialog, rather than this clearing the
+    // feed -- signing out is not the same as discarding what is on screen.
+}
+
+// Any successful sign-in refreshes this, including one raised by a 401 inside
+// request() that this module never sees.
+window.addEventListener("yada:identity", refreshIdentity);
+refreshIdentity();
+
+
 add(document.getElementById("app"),
     div(
         div({ class: "input-container" },
@@ -115,6 +137,23 @@ add(document.getElementById("app"),
             div({ class: "button-wrapper", style: "margin-top: .5rem; display:flex; gap:.5rem;" },
                 button({ class: "btn primary", onclick: handleYadaRequestSubmit, disabled: () => isLoading.val }, "Submit"),
                 button({ class: "btn secondary", onclick: startNewChat, disabled: () => isLoading.val }, "New Chat"),
+                // Only shown when the server actually wants a token; on a single-user
+                // local server there is nobody to be, and an idle "Sign in" button
+                // would imply otherwise.
+                span({ style: () => identity.val.required
+                        ? "margin-left:auto; display:flex; align-items:center; gap:.5rem;"
+                        : "display:none" },
+                    span({ style: "color:#666" },
+                          () => identity.val.authenticated ? identity.val.name : "signed out"),
+                    // Opens the dialog directly. GET /api/session deliberately never
+                    // 401s -- it has to report "signed out" without that being an error
+                    // -- so routing this through request() would raise nothing.
+                    button({ class: "btn secondary",
+                             onclick: () => identity.val.authenticated
+                                 ? handleSignOut()
+                                 : showSignInDialog("") },
+                           () => identity.val.authenticated ? "Sign out" : "Sign in"),
+                ),
             ),
             div({
                 class: "status-bar",
