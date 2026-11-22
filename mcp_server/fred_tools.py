@@ -270,6 +270,30 @@ def _search(query: str | None, category: str | None,
             f"SELECT * FROM ({base}) t ORDER BY popularity DESC NULLS LAST, series_id "
             f"LIMIT :lim"), params).all()
 
+        # Nothing matched ALL the query's words. Before answering "no", find what matches
+        # SOME of them and offer those as a next step. Measured on the case that prompted
+        # this: "jobless claims" matches nothing, while any-word matching puts ICSA,
+        # CCSA and IC4WSA at the top -- which is what the client took three round trips
+        # to reach on its own, the first of which only learned "try harder".
+        #
+        # These are SUGGESTIONS, never results. document-mcp-design 2.6 records what
+        # happens when a failed filter silently retries unfiltered: the widened answer
+        # reads as success. So the status stays no_match, `series` stays empty, and the
+        # relaxed hits appear under `available` where a dead end is meant to become a
+        # next step.
+        suggestions: list[str] = []
+        if query and not rows:
+            try:
+                suggestions = [
+                    f"{r[0]} — {r[1]}" for r in conn.execute(sa.text("""
+                        SELECT series_id, series_title FROM fred_series
+                         WHERE title_tsv @@ to_tsquery('english',
+                               replace(plainto_tsquery('english', :q)::text, '&', '|'))
+                         ORDER BY popularity DESC NULLS LAST LIMIT 5"""), {"q": query}).all()
+                ]
+            except Exception as exc:            # a query that will not parse relaxed
+                logger.debug(f"relaxed suggestion query failed for {query!r}: {exc}")
+
     series = [
         FredSeries(
             rank=i, series_id=r[0], title=r[1], frequency=r[2], frequency_class=r[3],
@@ -283,13 +307,23 @@ def _search(query: str | None, category: str | None,
         # No silent caps: the top 10 of 53,187 reads exactly like the top 10 of 10.
         detail = (f"Showing the {limit} most popular of {total:,} matches. "
                   f"Narrow with category or frequency, or raise limit.")
+    available: dict[str, list[str]] = {}
+    if not series:
+        if suggestions:
+            available["series matching SOME of your terms"] = suggestions
+            detail = (f"Nothing matched all of {query!r}. The series above under "
+                      f"`available` match some of those words and were NOT returned as "
+                      f"results — search again with wording taken from one of them. "
+                      f"FRED titles use formal published names.")
+        else:
+            detail = ("Nothing matched. FRED titles use formal published names -- try "
+                      "the measure's name as FRED spells it, e.g. 'consumer price index' "
+                      "rather than 'inflation', 'gross domestic product' rather than 'GDP'.")
+
     return FredHits(
         status="ok" if series else "no_match", request=shown, filters_requested=requested,
         filters_applied=applied, series=series, total=total, limit=limit,
-        detail=detail or (None if series else "Nothing matched. FRED titles use formal "
-                          "names -- try the measure's published name, e.g. 'consumer "
-                          "price index' rather than 'inflation', 'gross domestic "
-                          "product' rather than 'GDP'."))
+        available=available, detail=detail)
 
 
 def _series_total(conn) -> int:
