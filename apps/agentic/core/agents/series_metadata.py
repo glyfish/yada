@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import sqlalchemy as sa
+
 from apps.agentic.core.document_loaders.etf.finance_database_loader import FinanceDatabaseLoader
-from apps.agentic.core.document_loaders.fred_document_loader import FREDChromaDocumentLoader
+from apps.core.environment import db_url
 from lib.logger import get_logger
 
 logger = get_logger("YADA")
@@ -16,12 +18,46 @@ _CATALOG = {
         "key": "ticker",
         "fields": ("family", "category_group", "category", "exchange"),
     },
-    "fred": {
-        "loader": FREDChromaDocumentLoader,
-        "key": "series_id",
-        "fields": ("category_name", "category_path", "seasonal_adjustment", "frequency"),
-    },
 }
+
+#: FRED is read from Postgres, not from a document store. It used to go through
+#: FREDChromaDocumentLoader, which is built from the YAML dump in clients/fred/ --
+#: meida's superseded catalogue, which deliberately skipped States, Federal Reserve
+#: Districts and Freddie Mac Regions. Measured over a 120-series sample before this
+#: changed: 42% of non-regional series enriched, 0% of regional ones, 15% overall. The
+#: other 85% got {}, which is a legal return, so nothing ever reported it.
+_FRED_FIELDS = ("category_name", "category_path", "seasonal_adjustment", "frequency")
+
+_engine = None
+
+
+def _fred_engine():
+    global _engine
+    if _engine is None:
+        _engine = sa.create_engine(db_url(), pool_pre_ping=True)
+    return _engine
+
+
+def _fred_catalog(series_id: str) -> dict:
+    """The shallowest category a series belongs to, plus its own frequency and adjustment.
+
+    Shallowest because a series sits in every category it belongs to and the shortest
+    path is the most general -- the same tie-break search_fred uses for provenance.
+    """
+    with _fred_engine().connect() as conn:
+        row = conn.execute(sa.text("""
+            SELECT c.category_name, c.category_path,
+                   s.seasonal_adjustment, s.frequency
+              FROM fred_series s
+              JOIN fred_series_category sc USING (series_id)
+              JOIN fred_category c ON c.category_id = sc.category_id
+             WHERE s.series_id = :sid
+             ORDER BY length(c.category_path)
+             LIMIT 1"""), {"sid": series_id}).fetchone()
+    if row is None:
+        return {}
+    return {f: [str(v)] for f, v in zip(_FRED_FIELDS, row)
+            if v not in (None, "", "N/A")}
 
 _loaders: dict = {}
 
@@ -43,6 +79,14 @@ def catalog_metadata(source: str, native_id: str) -> dict:
     matches — enrichment is best-effort.
     """
     source = source.strip().lower()
+    if source == "fred":
+        try:
+            fields = _fred_catalog(native_id)
+        except Exception as exc:
+            logger.warning(f"catalog_metadata: FRED lookup failed for {native_id}: {exc}")
+            return {}
+        return {"fred": fields} if fields else {}
+
     spec = _CATALOG.get(source)
     if spec is None:
         return {}
