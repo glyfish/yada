@@ -186,11 +186,15 @@ def _categories_for(conn, ids: list[int], limit: int) -> list[FredCategory]:
 
 # ----------------------------------------------------------------------------- the tools
 
-def _search(query: str | None, category: str | None,
-            frequency: str | None, limit: int) -> FredHits:
-    requested = {k: v for k, v in
-                 (("query", query), ("category", category), ("frequency", frequency))
-                 if v}
+def _search(query: str | None, category: str | None, frequency: str | None,
+            seasonally_adjusted: bool | None, limit: int) -> FredHits:
+    # Values are stringified because filters_requested is dict[str, str] -- the
+    # envelope echoes what was ASKED FOR, in the form a reader can compare against
+    # filters_applied, not in the argument's original type.
+    requested = {k: str(v) for k, v in
+                 (("query", query), ("category", category), ("frequency", frequency),
+                  ("seasonally_adjusted", seasonally_adjusted))
+                 if v is not None}
     shown = " ".join(f"{k}={v!r}" for k, v in requested.items())
 
     if not query and not category:
@@ -230,6 +234,12 @@ def _search(query: str | None, category: str | None,
 
         if frequency:
             applied["frequency"] = f"frequency_class = {frequency.lower()}"
+        if seasonally_adjusted is not None:
+            applied["seasonally_adjusted"] = (
+                "seasonal_adjustment is one of Seasonally Adjusted / Seasonally Adjusted "
+                "Annual Rate / Smoothed Seasonally Adjusted" if seasonally_adjusted else
+                "seasonal_adjustment is one of Not Seasonally Adjusted / Not Seasonally "
+                "Adjusted Annual Rate")
         if query:
             applied["query"] = "title full-text"
 
@@ -249,6 +259,16 @@ def _search(query: str | None, category: str | None,
         if frequency:
             where.append("s.frequency_class = :f")
             params["f"] = frequency.lower()
+        if seasonally_adjusted is not None:
+            # A boolean, not a string match, because the column holds FIVE values and
+            # three of them mean adjusted: "Seasonally Adjusted", "Seasonally Adjusted
+            # Annual Rate" and "Smoothed Seasonally Adjusted". A client filtering the
+            # rows itself got this wrong -- it dropped TOTLQ, an Annual Rate series that
+            # IS adjusted -- and it could only filter the page it had been sent, so the
+            # count it quoted described 2,836 series it never saw. Only "Not ..." is
+            # unadjusted, which is what this tests.
+            where.append("s.seasonal_adjustment " +
+                         ("NOT ILIKE 'Not %'" if seasonally_adjusted else "ILIKE 'Not %'"))
         clause = " AND ".join(where)
 
         # DISTINCT ON collapses the many-to-many: a series in three categories of the
@@ -417,11 +437,14 @@ def register(server) -> None:
         logger.addFilter(_EndpointFilter())
 
     def search_fred(query: str | None = None, category: str | None = None,
-                    frequency: str | None = None, limit: int = 10) -> FredHits:
+                    frequency: str | None = None,
+                    seasonally_adjusted: bool | None = None,
+                    limit: int = 10) -> FredHits:
         return _tool_call("search_fred",
-                          {"query": query, "category": category,
-                           "frequency": frequency, "limit": limit},
-                          lambda: _search(query, category, frequency, limit))
+                          {"query": query, "category": category, "frequency": frequency,
+                           "seasonally_adjusted": seasonally_adjusted, "limit": limit},
+                          lambda: _search(query, category, frequency,
+                                          seasonally_adjusted, limit))
 
     def describe_fred(category: str | None = None,
                       limit: int = DESCRIBE_LIMIT) -> FredCategories:
@@ -460,6 +483,12 @@ def register(server) -> None:
             "candidates and no search is run; 'Housing' is four different categories, "
             "one of them housing inflation.\n"
             f"- frequency: one of {', '.join(FREQUENCY_CLASSES)}.\n"
+            "- seasonally_adjusted: true or false. Use this rather than filtering the "
+            "results yourself — the underlying column has five values and three of them "
+            "mean adjusted ('Seasonally Adjusted', 'Seasonally Adjusted Annual Rate', "
+            "'Smoothed Seasonally Adjusted'), so filtering by eye drops adjusted series. "
+            "Filtering server-side also makes `total` count what you asked for; filtering "
+            "a returned page cannot, because the page is already truncated.\n"
             "- limit: how many series to return (default 10).\n"
             "Ranked by FRED's own popularity score, highest first, which surfaces the "
             "headline series ahead of the thousands of metro-level variants. Give query, "
