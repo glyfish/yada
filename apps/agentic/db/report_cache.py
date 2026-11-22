@@ -62,6 +62,7 @@ class ReportCache:
         time_range_from: str,
         time_range_to: str | None = None,
         metadata: dict | None = None,
+        created_by: str | None = None,
     ) -> str:
         engine = cls._engine_or_raise()
         report_id = uuid.uuid4()
@@ -74,6 +75,10 @@ class ReportCache:
         stmt = (
             insert(cls._table_or_raise())
             .values(
+                # created_by is None when no users are configured, which is the
+                # unauthenticated local case. A model must never supply it -- it comes
+                # from the token on the request, or it is NULL.
+                created_by=uuid.UUID(created_by) if created_by else None,
                 report_id=report_id,
                 report_title=report_title,
                 report_description=report_description,
@@ -92,11 +97,31 @@ class ReportCache:
 
 
     @classmethod
-    def _get_by_report_id_sync(cls, report_id: str) -> dict | None:
+    def _owned_by(cls, owner: str | None):
+        """A WHERE term scoping rows to `owner`, or None when scoping is off.
+
+        Strict equality: a row whose `created_by` is NULL belongs to nobody, not to
+        everybody. Those rows can only predate the first user, and handing them to
+        whoever asks first is a worse default than leaving them unreachable until
+        someone claims them with an UPDATE. There are none today, so the rule is free
+        to settle now and expensive to change later.
+        """
+        if owner is None:
+            return None
+        return cls._table_or_raise().c.created_by == uuid.UUID(owner)
+
+
+    @classmethod
+    def _get_by_report_id_sync(cls, report_id: str, owner: str | None = None) -> dict | None:
         engine = cls._engine_or_raise()
         stmt = select(cls._table_or_raise()).where(
             cls._table_or_raise().c.report_id == uuid.UUID(report_id)
         )
+        scope = cls._owned_by(owner)
+        if scope is not None:
+            # A report_id is an unguessable UUID, but unguessable is not an access rule
+            # -- ids travel in logs, links and transcripts.
+            stmt = stmt.where(scope)
         with engine.connect() as conn:
             row = conn.execute(stmt).mappings().first()
         if row is None:
@@ -105,7 +130,8 @@ class ReportCache:
 
 
     @classmethod
-    def _list_reports_sync(cls, source: str | None = None, where: dict | None = None) -> list[dict[str, Any]]:
+    def _list_reports_sync(cls, source: str | None = None, where: dict | None = None,
+                           owner: str | None = None) -> list[dict[str, Any]]:
         engine = cls._engine_or_raise()
         t = cls._table_or_raise()
         stmt = select(
@@ -122,6 +148,9 @@ class ReportCache:
             mw = metadata_where(t.c.metadata, source, where)
             if mw is not None:
                 stmt = stmt.where(mw)
+        scope = cls._owned_by(owner)
+        if scope is not None:
+            stmt = stmt.where(scope)
         stmt = stmt.order_by(t.c.report_title)
         with engine.connect() as conn:
             rows = conn.execute(stmt).mappings().all()
@@ -139,14 +168,27 @@ class ReportCache:
 
 
     @classmethod
-    def _search_by_title_sync(cls, title_fragment: str) -> list[dict[str, Any]]:
+    def _search_by_title_sync(cls, title_fragment: str,
+                              owner: str | None = None) -> list[dict[str, Any]]:
+        """Reports whose title CONTAINS the fragment, scoped to one owner.
+
+        The scope is not an optimisation. Titles are not unique -- nothing enforces it,
+        and the match is a substring, so "GDP" already finds both "GDP Overview" and
+        "GDP Deflator" for one user. Unscoped, two owners' identical titles make the
+        ambiguity insoluble AND put one person's titles and report ids into the other
+        person's disambiguation list, which is a disclosure rather than an annoyance.
+        """
         engine = cls._engine_or_raise()
         stmt = select(
             cls._table_or_raise().c.report_id,
             cls._table_or_raise().c.report_title,
         ).where(
             cls._table_or_raise().c.report_title.ilike(f"%{title_fragment}%")
-        ).order_by(cls._table_or_raise().c.report_title)
+        )
+        scope = cls._owned_by(owner)
+        if scope is not None:
+            stmt = stmt.where(scope)
+        stmt = stmt.order_by(cls._table_or_raise().c.report_title)
         with engine.connect() as conn:
             rows = conn.execute(stmt).mappings().all()
         return [{"report_id": str(r["report_id"]), "report_title": r["report_title"]} for r in rows]
@@ -177,6 +219,7 @@ class ReportCache:
         time_range_from: str,
         time_range_to: str | None = None,
         metadata: dict | None = None,
+        owner: str | None = None,
     ) -> dict | None:
         engine = cls._engine_or_raise()
 
@@ -186,6 +229,7 @@ class ReportCache:
             return date.fromisoformat(v[:10])
 
         t = cls._table_or_raise()
+        scope = cls._owned_by(owner)
         stmt = (
             update(t)
             .where(t.c.report_id == uuid.UUID(report_id))
@@ -198,10 +242,12 @@ class ReportCache:
                 time_range_to=_as_date(time_range_to),
             )
         )
+        if scope is not None:
+            stmt = stmt.where(scope)
         with engine.begin() as conn:
             conn.execute(stmt)
         logger.debug(f"ReportCache: updated report {report_id} → '{report_title}'")
-        return cls._get_by_report_id_sync(report_id)
+        return cls._get_by_report_id_sync(report_id, owner=owner)
 
 
     @classmethod
@@ -228,10 +274,16 @@ class ReportCache:
 
 
     @classmethod
-    def _delete_report_sync(cls, report_id: str) -> bool:
+    def _delete_report_sync(cls, report_id: str, owner: str | None = None) -> bool:
         engine = cls._engine_or_raise()
         t = cls._table_or_raise()
         stmt = delete(t).where(t.c.report_id == uuid.UUID(report_id))
+        scope = cls._owned_by(owner)
+        if scope is not None:
+            # Returns False rather than raising when the row belongs to someone else,
+            # which is the same answer as "no such report" -- deliberately, so a
+            # caller cannot probe for the existence of other people's reports.
+            stmt = stmt.where(scope)
         with engine.begin() as conn:
             result = conn.execute(stmt)
         deleted = result.rowcount > 0

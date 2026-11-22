@@ -138,7 +138,7 @@ def _select_plot_type(units: list[str]) -> str:
     return "stack"
 
 
-async def render_report_plot(report_id_or_title: str) -> dict:
+async def render_report_plot(report_id_or_title: str, owner: str | None = None) -> dict:
     """
     Render a report's plot deterministically — no LLM, no agent. Resolves the report,
     refreshes and loads each series, then picks the plot type (count + distinct units)
@@ -151,13 +151,24 @@ async def render_report_plot(report_id_or_title: str) -> dict:
     record = None
     try:
         _uuid.UUID(report_id_or_title)
-        record = ReportCache._get_by_report_id_sync(report_id_or_title)
+        record = ReportCache._get_by_report_id_sync(report_id_or_title, owner=owner)
     except ValueError:
         pass
     if record is None:
-        matches = ReportCache._search_by_title_sync(report_id_or_title)
+        # Title match is a SUBSTRING, so more than one report can match for a single
+        # user -- "GDP" finds both "GDP Overview" and "GDP Deflator". The previous
+        # `len(matches) == 1` gate fell through on any ambiguity and raised "No report
+        # found", which is a false statement about a request that found two. Say which
+        # it was, and name the candidates so the caller can pick one.
+        matches = ReportCache._search_by_title_sync(report_id_or_title, owner=owner)
         if len(matches) == 1:
-            record = ReportCache._get_by_report_id_sync(matches[0]["report_id"])
+            record = ReportCache._get_by_report_id_sync(matches[0]["report_id"],
+                                                        owner=owner)
+        elif len(matches) > 1:
+            listed = "; ".join(f"{m['report_title']} ({m['report_id']})" for m in matches)
+            raise ValueError(
+                f"{len(matches)} reports match '{report_id_or_title}' — plot one by its "
+                f"id: {listed}")
     if record is None:
         raise ValueError(f"No report found matching '{report_id_or_title}'.")
 

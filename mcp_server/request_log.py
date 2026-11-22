@@ -36,6 +36,8 @@ from typing import Any
 
 from mcp.server.lowlevel.server import ServerMiddleware
 
+from mcp_server import identity
+
 from lib.logger import get_logger
 
 logger = get_logger("YADA")
@@ -168,6 +170,22 @@ class RequestLogMiddleware(ServerMiddleware[Any]):
     async def __call__(self, ctx, call_next):
         started = perf_counter()
         who = _caller_of(ctx.params)
+
+        # Identity is resolved HERE because this is the one place that sees every
+        # inbound message with its transport request attached. `ctx.request` is the
+        # Starlette request on HTTP transports and None on stdio, and the headers are
+        # the ones sent with THIS message -- a later tools/call can carry a different
+        # token from the one sent at initialize, so this cannot be hoisted to session
+        # setup. See mcp_server/identity.py.
+        headers = getattr(getattr(ctx, "request", None), "headers", None)
+        try:
+            caller, reset = identity.bind(headers)
+        except identity.AuthRequired as exc:
+            logger.warning(f"rpc {ctx.method}{who} -> refused: {exc}")
+            raise
+        if caller.user_id:
+            who = f"{who} [{caller.name}]" if who else f" [{caller.name}]"
+
         logger.info(f"rpc {ctx.method}{who} <- {_render(_without_meta(ctx.params))}".rstrip())
         try:
             result = await call_next(ctx)
@@ -175,6 +193,7 @@ class RequestLogMiddleware(ServerMiddleware[Any]):
             # The case the tool-level log cannot see: refused before the handler ran.
             logger.warning(f"rpc {ctx.method}{who} -> {type(e).__name__}: {e} "
                            f"in {perf_counter() - started:.2f}s")
+            identity.release(reset)
             raise
         # A failing tool reports in band rather than raising, so "the handler
         # returned" is not "the call succeeded" -- an unknown tool name and a
@@ -193,6 +212,7 @@ class RequestLogMiddleware(ServerMiddleware[Any]):
         body = _body(result, ctx.method)
         if body:
             logger.debug(f"rpc {ctx.method}{who} body:{body}")
+        identity.release(reset)
         return result
 
 

@@ -90,6 +90,7 @@ from apps.agentic.db.series_cache import SeriesCache  # noqa: E402
 from apps.agentic.db.vocabulary import Vocabulary  # noqa: E402
 from apps.core.environment import current_environment, verify_database  # noqa: E402
 from mcp_server.document_tools import register as register_document_tools  # noqa: E402
+from mcp_server.identity import current_user_id  # noqa: E402
 from mcp_server.fred_tools import register as register_fred_tools  # noqa: E402
 from mcp_server.request_log import install as install_request_log  # noqa: E402
 from mcp_server.plot_app import HTML as PLOT_APP_HTML, meta_for  # noqa: E402
@@ -299,7 +300,10 @@ async def plot_report(report_id_or_title: str) -> list[TextContent | ImageConten
     _initialize()
 
     try:
-        result = await render_report_plot(report_id_or_title)
+        # The owner comes from the token on THIS message, resolved by the request-log
+        # middleware -- never from an argument, which a model could supply. None when
+        # no users are configured, which leaves the lookup unscoped exactly as before.
+        result = await render_report_plot(report_id_or_title, owner=current_user_id())
     except ValueError as exc:
         # Report missing, or no series could be loaded. Fail loudly rather than
         # returning an empty success the model might paper over with prose.
