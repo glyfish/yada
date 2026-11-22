@@ -112,8 +112,12 @@ class FredCategory(BaseModel):
         description="Series attached to THIS category. 177 categories hold series and "
                     "have children, so this and `children` are both non-zero there")
     series_in_subtree: int = Field(
-        description="Series anywhere beneath it, deduplicated. What search_fred(category=) "
-                    "would search")
+        description="Series anywhere beneath it, deduplicated WITHIN this subtree. What "
+                    "search_fred(category=) would search. Do NOT add these up across "
+                    "categories: subtrees overlap, because a series is filed under every "
+                    "category it belongs to. 95,765 series sit under more than one "
+                    "top-level category, so summing the eight roots gives 949,083 for a "
+                    "catalogue of 854,318. Use series_total instead")
 
 
 class FredCategories(FredOutcome):
@@ -122,3 +126,8 @@ class FredCategories(FredOutcome):
     categories: list[FredCategory] = Field(default_factory=list)
     total: int = Field(default=0, description="Categories matched before the limit")
     limit: int = Field(default=25)
+    series_total: int = Field(
+        default=0,
+        description="Distinct series in the whole catalogue. Published because the only "
+                    "arithmetic otherwise available -- summing series_in_subtree -- "
+                    "overcounts by 11%, and the result looks right")

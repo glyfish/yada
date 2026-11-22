@@ -286,23 +286,31 @@ def _search(query: str | None, category: str | None,
                           "price index' rather than 'inflation'."))
 
 
+def _series_total(conn) -> int:
+    return conn.execute(sa.text("SELECT count(*) FROM fred_series")).scalar() or 0
+
+
 def _describe(category: str | None, limit: int) -> FredCategories:
     shown = f"category={category!r}" if category else "(no arguments)"
     with _conn() as conn:
+        total_series = _series_total(conn)
         if not category:
             ids = [r[0] for r in conn.execute(sa.text(
                 "SELECT category_id FROM fred_category WHERE parent_id IS NULL"))]
             cats = _categories_for(conn, ids, limit)
-            return FredCategories(status="ok", request=shown, categories=cats,
-                                  total=len(ids), limit=limit,
-                                  detail="The eight top-level categories. Call again with "
-                                         "one to see what is beneath it.")
+            return FredCategories(
+                status="ok", request=shown, categories=cats, total=len(ids), limit=limit,
+                series_total=total_series,
+                detail=f"The {len(ids)} top-level categories, of {total_series:,} series "
+                       f"in the catalogue. Do not add series_in_subtree across rows -- "
+                       f"subtrees overlap and the sum overcounts by about 11%.")
 
         resolved, how, candidates = _resolve_category(conn, category)
         if candidates:
             return FredCategories(
                 status="ok", request=shown, categories=candidates, limit=limit,
                 total=len(candidates), filters_applied={"category": how},
+                series_total=total_series,
                 detail=f"'{category}' matches {len(candidates)} categories. Use the "
                        f"category_path of the one you want.")
         if not resolved:
@@ -310,6 +318,7 @@ def _describe(category: str | None, limit: int) -> FredCategories:
                 "SELECT category_name FROM fred_category WHERE parent_id IS NULL ORDER BY 1"))]
             return FredCategories(
                 status="unresolvable_filter", request=shown, limit=limit,
+                series_total=total_series,
                 available={"category (top level)": roots},
                 detail=f"No category matches '{category}'.")
 
@@ -321,7 +330,7 @@ def _describe(category: str | None, limit: int) -> FredCategories:
         note = (f"{len(kids)} categories beneath '{category}'."
                 if kids else f"'{category}' has no child categories.")
         return FredCategories(status="ok", request=shown, categories=cats,
-                              total=len(shown_ids), limit=limit,
+                              total=len(shown_ids), limit=limit, series_total=total_series,
                               filters_applied={"category": how}, detail=note)
 
 
@@ -420,7 +429,11 @@ def register(server) -> None:
             "`series_here` counts series attached to that category itself and "
             "`series_in_subtree` counts everything beneath it. The two differ sharply and "
             "both matter: 177 categories hold series AND have children, so a category is "
-            "often both a folder and a file. Call this before search_fred whenever a "
+            "often both a folder and a file.\n"
+            "Do NOT sum series_in_subtree across rows to get a catalogue total. Subtrees "
+            "overlap — a Pennsylvania housing series is filed under both Housing and "
+            "U.S. Regional Data — so the sum overcounts by about 11%. The true total is "
+            "published as `series_total`. Call this before search_fred whenever a "
             "category name is uncertain."),
     )
 
