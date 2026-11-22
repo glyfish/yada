@@ -2,6 +2,23 @@ import { handleResumeRequest } from "./api.js";
 import { prependResultCard, fillLastCardMeta } from "./feed.js";
 import { sessionId as sessionIdState, clearInput } from "./state.js";
 
+// Build a <td> whose text is TEXT, never markup.
+//
+// The tables below show strings that come from the database and, through
+// create_time_series_report, ultimately from a model: report titles and descriptions,
+// series titles from vendor catalogues. Interpolating those into a template literal and
+// assigning innerHTML -- which is what these rows used to do -- renders anything they
+// contain, so a report titled `<img src=x onerror=...>` executes when the list draws.
+//
+// textContent rather than an escape() helper on purpose: escaping is a step someone can
+// forget at the next call site, while a cell that only ever takes text cannot be misused.
+function td(text, className) {
+    const cell = document.createElement("td");
+    if (className) cell.className = className;
+    cell.textContent = text == null ? "" : String(text);
+    return cell;
+}
+
 // Render the create-time-series-report form into `dialog`. Works both as a fresh
 // dialog (from the form dispatcher) and as an in-place transition from the series
 // selection table (dialog already open) — it only appends/opens when needed.
@@ -129,14 +146,19 @@ function showSeriesSelectionTable(dialog, formSchema, sessionId, promptLabel) {
         for (const r of rows) {
             const tr = document.createElement("tr");
             tr.className = "report-picker-row";
-            tr.innerHTML = `
-                <td><input type="checkbox"></td>
-                <td><code>${r.native_id}</code></td>
-                <td>${r.title || ""}</td>
-                <td>${r.source || ""}</td>
-                <td>${r.observation_start || ""}</td>
-                <td>${r.observation_end || ""}</td>
-            `;
+
+            const checkCell = document.createElement("td");
+            const box = document.createElement("input");
+            box.type = "checkbox";
+            checkCell.appendChild(box);
+
+            const idCell = document.createElement("td");
+            const code = document.createElement("code");
+            code.textContent = r.native_id == null ? "" : String(r.native_id);
+            idCell.appendChild(code);
+
+            tr.append(checkCell, idCell, td(r.title), td(r.source),
+                      td(r.observation_start), td(r.observation_end));
             const key = `${r.source}:${r.native_id}`;  // native_id alone can collide across sources
             const cb = tr.querySelector("input[type=checkbox]");
             // Restore prior selection so checks survive filtering / re-render.
@@ -429,7 +451,8 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
                 tr.className = "report-picker-row";
                 tr.dataset.reportId = r.report_id;
                 const to   = r.time_range_to || "latest";
-                tr.innerHTML = `<td>${r.report_title}</td><td class="rp-desc">${r.report_description || ""}</td><td>${r.time_range_from}</td><td>${to}</td>`;
+                tr.append(td(r.report_title), td(r.report_description, "rp-desc"),
+                          td(r.time_range_from), td(to));
                 tr.addEventListener("click", () => {
                     tbody.querySelectorAll("tr").forEach(row => row.classList.remove("selected"));
                     tr.classList.add("selected");
@@ -465,7 +488,14 @@ export function showFormDialog(formSchema, sessionId, promptLabel) {
                 allReports = await resp.json();
                 applyTextFilter();
             } catch (e) {
-                tbody.innerHTML = `<tr><td colspan="4" style="color:red">Failed to load reports: ${e.message}</td></tr>`;
+                // An error message can carry a server response body, so it is text too.
+                tbody.innerHTML = "";
+                const row = document.createElement("tr");
+                const cell = td(`Failed to load reports: ${e.message}`);
+                cell.colSpan = 4;
+                cell.style.color = "red";
+                row.appendChild(cell);
+                tbody.appendChild(row);
             }
         };
 
