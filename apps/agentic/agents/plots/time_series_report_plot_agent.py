@@ -21,6 +21,7 @@ from apps.agentic.core.agents.react_agent import ReactAgent
 from apps.agentic.agents.data.series_fetch import fetch_series_into_cache
 from apps.agentic.db.series_cache import SeriesCache
 from apps.agentic.db.report_cache import ReportCache
+from apps.core.identity import current_user_id
 from apps.plots.time_series_plots import (
     generate_time_series_plot,
     generate_time_series_stack,
@@ -437,12 +438,14 @@ class TimeSeriesReportPlotAgent(ReactAgent):
         record = None
         try:
             _uuid.UUID(report_id_or_title)
-            record = ReportCache._get_by_report_id_sync(report_id_or_title)
+            record = ReportCache._get_by_report_id_sync(report_id_or_title,
+                                                       owner=current_user_id())
         except ValueError:
             pass
 
         if record is None:
-            matches = ReportCache._search_by_title_sync(report_id_or_title)
+            matches = ReportCache._search_by_title_sync(report_id_or_title,
+                                                       owner=current_user_id())
             if not matches:
                 return json.dumps({"error": f"No report found matching '{report_id_or_title}'."})
             if len(matches) > 1:
@@ -450,7 +453,8 @@ class TimeSeriesReportPlotAgent(ReactAgent):
                     "matches": matches,
                     "message": "Multiple reports match. Please ask the user to select one by report_id.",
                 })
-            record = ReportCache._get_by_report_id_sync(matches[0]["report_id"])
+            record = ReportCache._get_by_report_id_sync(matches[0]["report_id"],
+                                                       owner=current_user_id())
 
         if record is None:
             return json.dumps({"error": f"No report found matching '{report_id_or_title}'."})

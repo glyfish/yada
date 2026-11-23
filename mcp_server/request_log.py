@@ -38,7 +38,7 @@ from mcp.server.lowlevel.server import ServerMiddleware
 from mcp.shared.exceptions import MCPError
 from mcp_types import INVALID_REQUEST
 
-from mcp_server import identity
+from apps.core import identity
 
 from lib.logger import get_logger
 

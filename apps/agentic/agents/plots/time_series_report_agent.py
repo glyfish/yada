@@ -15,6 +15,7 @@ from apps.agentic.core.agents.series_metadata import report_metadata_from_series
 from apps.agentic.core.llm_factory import router_llm_model
 from apps.agentic.db.report_cache import ReportCache
 from apps.agentic.db.series_cache import SeriesCache
+from apps.core.identity import current_user_id
 from apps.agentic.agents.plots.time_series_report_plot_agent import TimeSeriesReportPlotAgent
 
 from lib.logger import get_logger
@@ -235,6 +236,10 @@ class TimeSeriesReportAgent(ReactAgent):
             time_range_from=time_range_from,
             time_range_to=time_range_to,
             metadata=report_metadata_from_series(time_series_info),
+            # The owner of the request being served, installed by the API before the
+            # agent ran. None when no users are configured, which writes a NULL owner
+            # exactly as before. Never an argument: a model must not choose an owner.
+            created_by=current_user_id(),
         )
         logger.debug(f"TimeSeriesReportAgent: created report '{report_title}' → {report_id}")
         detail_lines = "\n".join(
@@ -267,7 +272,7 @@ class TimeSeriesReportAgent(ReactAgent):
     )
     @staticmethod
     def get_time_series_report(report_id: str) -> str:
-        record = ReportCache._get_by_report_id_sync(report_id)
+        record = ReportCache._get_by_report_id_sync(report_id, owner=current_user_id())
         if record is None:
             return f"No report found with ID `{report_id}`."
         info = record.get("time_series_info") or []
@@ -310,7 +315,7 @@ class TimeSeriesReportAgent(ReactAgent):
     )
     @staticmethod
     def list_time_series_reports() -> str:
-        reports = ReportCache._list_reports_sync()
+        reports = ReportCache._list_reports_sync(owner=current_user_id())
         if not reports:
             return "No time series reports found."
         rows = "\n".join(
@@ -341,7 +346,7 @@ class TimeSeriesReportAgent(ReactAgent):
     )
     @staticmethod
     def delete_time_series_report(report_id: str) -> str:
-        deleted = ReportCache._delete_report_sync(report_id)
+        deleted = ReportCache._delete_report_sync(report_id, owner=current_user_id())
         if deleted:
             return f"Report `{report_id}` deleted successfully."
         return f"No report found with ID `{report_id}`."

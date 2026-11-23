@@ -39,7 +39,7 @@ from apps.agentic.agents.document.document_agent import search_series_rows
 from apps.agentic.core.pricing import estimate_cost
 from apps.core.environment import current_environment, verify_database
 from api.document_router import router as document_router
-from mcp_server import identity
+from apps.core import identity
 
 #: Secure cookies are dropped by the browser over plain http, which is how this is
 #: served locally. On anything but localhost the cookie must be Secure or the token
@@ -62,6 +62,21 @@ _COOKIE_SECURE = os.environ.get("YADA_COOKIE_SECURE", "0") not in ("0", "false",
 SESSION_COOKIE = "yada_token"
 
 
+async def current_caller(request: Request) -> identity.Caller:
+    """Resolve the bearer token to a caller, or ANONYMOUS when no users are configured.
+
+    The chat endpoints need the whole `Caller`, not just the id: they install it for the
+    duration of the agent run so the report tools -- plain `@staticmethod`s with no
+    request context -- can read it, and the name is what makes the log line legible.
+    """
+    token = identity.bearer_of(request.headers) or request.cookies.get(SESSION_COOKIE)
+    try:
+        return identity.resolve(token)
+    except identity.AuthRequired as exc:
+        raise HTTPException(status_code=401, detail=str(exc),
+                            headers={"WWW-Authenticate": "Bearer"})
+
+
 async def current_owner(request: Request) -> str | None:
     """Resolve the bearer token to an owner, or None when no users are configured.
 
@@ -75,12 +90,7 @@ async def current_owner(request: Request) -> str | None:
     with a WWW-Authenticate challenge, which is what a browser and any OAuth-capable
     client expect.
     """
-    token = identity.bearer_of(request.headers) or request.cookies.get(SESSION_COOKIE)
-    try:
-        return identity.resolve(token).user_id
-    except identity.AuthRequired as exc:
-        raise HTTPException(status_code=401, detail=str(exc),
-                            headers={"WWW-Authenticate": "Bearer"})
+    return (await current_caller(request)).user_id
 
 # ---------------------------------------------------------------------------
 # LangSmith trace URL helper — lazy-cached per process
@@ -172,16 +182,18 @@ PDF_HINT_RE = re.compile(
 
 
 @app.post("/api/request")
-async def generate_markdown(req: RequestPayload):
+async def generate_markdown(req: RequestPayload,
+                            caller: identity.Caller = Depends(current_caller)):
     session_id = req.session_id or str(uuid.uuid4())
-    logger.debug(f"YADA request [{session_id}]: {req.input}")
+    logger.debug(f"YADA request [{session_id}] ({caller.name}): {req.input}")
 
     orchestrator = await OrchestratorAgent.create()
     config = RunnableConfig(configurable={"thread_id": session_id}, recursion_limit=50)
-    state = await orchestrator.agent.ainvoke(
-        {"messages": [HumanMessage(content=req.input)]},
-        config,
-    )
+    with identity.scoped(caller):
+        state = await orchestrator.agent.ainvoke(
+            {"messages": [HumanMessage(content=req.input)]},
+            config,
+        )
 
     # Get the last AIMessage (the orchestrator's final response),
     # skipping any trailing ToolMessages
@@ -206,9 +218,10 @@ async def generate_markdown(req: RequestPayload):
 
 
 @app.post("/api/request/stream")
-async def stream_request(req: RequestPayload):
+async def stream_request(req: RequestPayload,
+                         caller: identity.Caller = Depends(current_caller)):
     session_id = req.session_id or str(uuid.uuid4())
-    logger.debug(f"YADA stream request [{session_id}]: {req.input}")
+    logger.debug(f"YADA stream request [{session_id}] ({caller.name}): {req.input}")
 
     orchestrator = await OrchestratorAgent.create()
     config = RunnableConfig(configurable={"thread_id": session_id}, recursion_limit=50)
@@ -223,7 +236,7 @@ async def stream_request(req: RequestPayload):
             config = RunnableConfig(configurable={"thread_id": session_id}, recursion_limit=50)
             logger.debug(f"Stream: stale interrupt on [{req.session_id}], fresh thread [{session_id}]")
 
-    async def event_generator():
+    async def _stream_events():
         final_result = ""
         root_run_id = None
 
@@ -332,6 +345,14 @@ async def stream_request(req: RequestPayload):
                 "data": json.dumps({"message": str(e)}),
             }
 
+    async def event_generator():
+        # The caller is installed around the generator's whole run, not around the
+        # endpoint: the body is produced after the endpoint returns, and the report
+        # tools the agent may call read the owner from this contextvar.
+        with identity.scoped(caller):
+            async for item in _stream_events():
+                yield item
+
     return EventSourceResponse(event_generator())
 
 
@@ -341,13 +362,14 @@ class ResumePayload(BaseModel):
 
 
 @app.post("/api/request/resume")
-async def resume_request(req: ResumePayload):
-    logger.debug(f"YADA resume request [{req.session_id}]: {req.form_data}")
+async def resume_request(req: ResumePayload,
+                         caller: identity.Caller = Depends(current_caller)):
+    logger.debug(f"YADA resume request [{req.session_id}] ({caller.name}): {req.form_data}")
 
     orchestrator = await OrchestratorAgent.create()
     config = RunnableConfig(configurable={"thread_id": req.session_id})
 
-    async def event_generator():
+    async def _resume_events():
         final_result = ""
         root_run_id = None
 
@@ -454,6 +476,13 @@ async def resume_request(req: ResumePayload):
                 "event": "error",
                 "data": json.dumps({"message": str(e)}),
             }
+
+    async def event_generator():
+        # Same as the stream endpoint: installed around the generator, because the
+        # agent -- and any report tool it calls -- runs while the body is streamed.
+        with identity.scoped(caller):
+            async for item in _resume_events():
+                yield item
 
     return EventSourceResponse(event_generator())
 

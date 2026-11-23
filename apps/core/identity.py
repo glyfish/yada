@@ -1,5 +1,11 @@
 """Who is calling: resolve a bearer token to an `app_user` row, per message.
 
+Lives in `apps.core` rather than beside either surface because both use it: the MCP
+server binds from an `Authorization` header, the HTTP API from that header or the
+`yada_token` cookie. One credential story, one place revocation lands. (It was under
+`mcp_server/` first; moving it kept `apps.agentic` -- which the agent tools live in --
+from importing a delivery surface that imports `apps.agentic` back.)
+
 Not per session. On streamable HTTP the SDK hands middleware the Starlette request for
 the message being processed, and a `tools/call` on an established session carries *that
 POST's* ``Authorization`` header rather than the one sent at ``initialize`` -- verified
@@ -37,6 +43,7 @@ not a set of working credentials.
 from __future__ import annotations
 
 import hashlib
+from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 
@@ -127,6 +134,23 @@ def resolve(token: str | None) -> Caller:
     if row[2] is not None:
         raise AuthRequired("Token not recognised.")
     return Caller(user_id=str(row[0]), name=row[1])
+
+
+@contextmanager
+def scoped(caller: Caller):
+    """Install `caller` for the duration of the block.
+
+    For the HTTP path, where the agent runs inside a StreamingResponse generator. A
+    FastAPI dependency cannot do this: a `yield` dependency is torn down before the
+    streamed body is consumed, so the agent would run with the caller already reset.
+    Binding at the call site is explicit and holds whatever the framework does with
+    tasks and contexts around it.
+    """
+    token = _current.set(caller)
+    try:
+        yield caller
+    finally:
+        _current.reset(token)
 
 
 def bind(headers) -> tuple[Caller, object]:

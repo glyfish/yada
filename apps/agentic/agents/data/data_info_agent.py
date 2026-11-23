@@ -21,6 +21,7 @@ from apps.agentic.core.document_loaders.research_library_document_loader import 
 
 from apps.agentic.db.series_cache import SeriesCache
 from apps.agentic.db.report_cache import ReportCache
+from apps.core.identity import current_user_id
 
 from lib.logger import get_logger
 
@@ -528,7 +529,7 @@ class DataInfoAgent(ReactAgent):
         state: Annotated[dict, InjectedState] | None = None,
     ) -> str:
         cache_source, where = await _resolve_cache_filter(source, state)
-        rows = ReportCache._list_reports_sync(cache_source, where)
+        rows = ReportCache._list_reports_sync(cache_source, where, owner=current_user_id())
         if not rows:
             return "No time series reports found."
         lines = [
@@ -567,9 +568,10 @@ class DataInfoAgent(ReactAgent):
         import uuid as _uuid
         try:
             uid = _uuid.UUID(report_id_or_title)
-            record = ReportCache._get_by_report_id_sync(str(uid))
+            record = ReportCache._get_by_report_id_sync(str(uid), owner=current_user_id())
         except ValueError:
-            matches = ReportCache._search_by_title_sync(report_id_or_title)
+            matches = ReportCache._search_by_title_sync(report_id_or_title,
+                                                           owner=current_user_id())
             if not matches:
                 return f"No report found matching `{report_id_or_title}`."
             if len(matches) > 1:
@@ -577,7 +579,8 @@ class DataInfoAgent(ReactAgent):
                 for m in matches:
                     lines.append(f"- **{m['report_title']}** (`{m['report_id']}`)")
                 return "\n".join(lines)
-            record = ReportCache._get_by_report_id_sync(matches[0]["report_id"])
+            record = ReportCache._get_by_report_id_sync(matches[0]["report_id"],
+                                                       owner=current_user_id())
 
         if record is None:
             return f"No report found matching `{report_id_or_title}`."
