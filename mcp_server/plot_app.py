@@ -18,6 +18,34 @@ The contract this page implements, all verified against Goose 1.52.0:
   defaults to 200px, so without this every chart is clipped.
 * ``ui/request-display-mode`` — self-promotion to fullscreen. Its reply is useless
   (it returns the *previous* mode), so never branch on it.
+
+How Goose decides to render an App at all
+-----------------------------------------
+Read out of the shipped 1.52.0 binary, because getting this wrong is silent — the
+chart still arrives, just folded into an accordion:
+
+* ``get_tool_resource_uri`` reads **``_meta["ui"]["resourceUri"]`` and nothing else**.
+  The flat ``ui/resourceUri`` string does not occur anywhere in the agent binary; it is
+  honoured only by a bundled mcp-apps SDK helper the desktop path never reaches. So the
+  flat and namespaced keys below are for *other* hosts, and are worth exactly nothing
+  here. ``is_tool_visible_to_app`` likewise reads only ``_meta["ui"]["visibility"]``.
+* It reads that off the **tool definition** from its cached ``tools/list``, matched by
+  name — never off the call result. ``remove_untrusted_mcp_app_meta`` deletes any
+  server-sent binding from the result's ``_meta`` before Goose inserts its own, so
+  stamping the result is not merely unnecessary, it is defeated on purpose.
+* Nothing is required of the server's ``initialize`` result. The capability check is
+  host-side: Goose looks up ``io.modelcontextprotocol/ui`` in its *own* declared
+  capabilities.
+* The "Output" accordion is **not** a fallback — it renders for every result block
+  regardless. With a binding the App mounts in addition, below it. "Chart appears only
+  inside Output" therefore means no binding was found, not that rendering failed.
+
+A caveat left unresolved: Goose caches ``tools/list`` in process, and this server
+advertises ``tools.listChanged: false``, so a changed ``_meta`` may not reach a running
+client until the extension is toggled or Goose restarts. When the nested key was added
+nobody called the tool in the eight minutes between the server restart and the client
+restart, so which one carried the fix was never established. If a ``_meta`` edit ever
+looks ignored, restart Goose before doubting the server.
 """
 
 HTML = r"""<!doctype html>
@@ -184,7 +212,8 @@ reportSize();
 """
 
 #: The `_meta` shapes `Apps.tool` does NOT supply: flat (deprecated) and namespaced,
-#: so a host picks up whichever it reads.
+#: so a host picks up whichever it reads. Neither is read by Goose (see above) — they
+#: are here for hosts that are not Goose, and must never be mistaken for the binding.
 #:
 #: The *nested* form — ``_meta["ui"]`` — is the current spec, and it is the one Goose
 #: actually reads. `Apps.tool` stamps that itself and raises on a `meta` carrying a
