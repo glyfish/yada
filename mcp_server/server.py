@@ -335,7 +335,7 @@ server = MCPServer("yada", version=VERSION, extensions=[apps])
 _initialize()
 register_document_tools(server)
 register_fred_tools(server)
-register_series_tools(server)
+register_series_tools(server, PLOT_URI, meta_for(PLOT_URI, ["model", "app"]))
 install_request_log(server)
 
 

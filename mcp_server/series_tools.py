@@ -89,8 +89,12 @@ def _log(tool: str, arguments: dict, started: float, outcome: str) -> None:
     logger.info(f"{tool} <- {shown} | {outcome} in {perf_counter() - started:.2f}s")
 
 
-def register(server) -> None:
-    """Register fetch_fred_series and plot_series."""
+def register(server, plot_uri: str, plot_meta: dict) -> None:
+    """Register fetch_fred_series and plot_series.
+
+    `plot_uri`/`plot_meta` are passed in rather than imported because server.py defines
+    them and imports this module; taking them as arguments keeps the dependency one-way.
+    """
 
     async def fetch_fred_series(series_id: str) -> dict[str, Any]:
         started = perf_counter()
@@ -215,8 +219,17 @@ def register(server) -> None:
             "yourself whenever the data is going to be charted."),
     )
 
+    # Bound to the chart App, exactly as `plot` and `plot_report` are. A bare image
+    # block is a *tool result*, which means the CLIENT decides how it appears -- and
+    # Goose collapses those behind an "Output" expander, so a chart you asked for
+    # arrives folded away. An App means yada decides, and it renders inline. This is
+    # what plot_app.py was written for; plot_series simply was not wired to it.
+    #
+    # Registered with add_tool rather than @apps.tool because the decorator must run
+    # before MCPServer is constructed and this runs after. add_tool takes the same
+    # `meta`, which is how the Apps extension registers its own tools.
     server.add_tool(
-        plot_series, name="plot_series",
+        plot_series, name="plot_series", meta=plot_meta,
         description=(
             "Chart one or more FRED series and return the image. **This is the tool for "
             "charting economic data** — it fetches what it needs and draws only from "
