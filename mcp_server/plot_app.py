@@ -183,9 +183,13 @@ reportSize();
 </body></html>
 """
 
-#: Every known `_meta` shape at once — nested (current spec), flat (deprecated), and
-#: namespaced — so a host picks up whichever it reads. Goose reads the nested form
-#: with a flat fallback and checks no server capability, so this is belt and braces.
+#: The `_meta` shapes `Apps.tool` does NOT supply: flat (deprecated) and namespaced,
+#: so a host picks up whichever it reads.
+#:
+#: The *nested* form — ``_meta["ui"]`` — is the current spec, and it is the one Goose
+#: actually reads. `Apps.tool` stamps that itself and raises on a `meta` carrying a
+#: "ui" key, so this helper must leave it out. That makes this the decorator's
+#: companion and **incomplete on its own**; `app_meta` is the whole binding.
 def meta_for(resource_uri: str, visibility: list[str]) -> dict:
     return {
         "ui/resourceUri": resource_uri,
@@ -194,4 +198,20 @@ def meta_for(resource_uri: str, visibility: list[str]) -> dict:
             "resourceUri": resource_uri,
             "visibility": visibility,
         },
+    }
+
+
+def app_meta(resource_uri: str, visibility: list[str]) -> dict:
+    """The full App binding, for a tool registered with `server.add_tool`.
+
+    Needed by any tool defined *after* `MCPServer` is constructed, which cannot use
+    the decorator. Passing `meta_for` alone there looks right and does nothing: the
+    tool advertises `ui/resourceUri`, so every server-side check finds the App, while
+    Goose — reading only the nested entry — finds none, falls back to rendering the
+    tool result, and collapses the chart behind an "Output" expander. Which is the
+    exact failure the App exists to avoid.
+    """
+    return {
+        **meta_for(resource_uri, visibility),
+        "ui": {"resourceUri": resource_uri, "visibility": list(visibility)},
     }

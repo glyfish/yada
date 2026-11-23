@@ -227,7 +227,9 @@ def register(server, plot_uri: str, plot_meta: dict) -> None:
     #
     # Registered with add_tool rather than @apps.tool because the decorator must run
     # before MCPServer is constructed and this runs after. add_tool takes the same
-    # `meta`, which is how the Apps extension registers its own tools.
+    # `meta`, which is how the Apps extension registers its own tools -- but the
+    # decorator also stamps the nested `_meta["ui"]` entry, and that is the only one
+    # Goose reads. So the meta here must come from `app_meta`, not `meta_for`.
     server.add_tool(
         plot_series, name="plot_series", meta=plot_meta,
         description=(
