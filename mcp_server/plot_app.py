@@ -86,7 +86,7 @@ HTML = r"""<!doctype html>
 var note = document.getElementById('note'),
     figs = document.getElementById('figs'),
     meta = document.getElementById('meta'),
-    theme = 'light', lastH = -1;
+    theme = 'light', lastH = -1, hostCaps = '?';
 
 // Fullscreen is worth nothing if the chart stays capped, so the cap tracks the
 // display mode. 'none' lets the image fill whatever the host gives us.
@@ -163,7 +163,7 @@ function render(result){
   }
   meta.textContent = (images.length
     ? images.length + (images.length > 1 ? ' charts' : ' chart') + ' · ' + theme
-    : theme) + ' · build __BUILD__';
+    : theme) + ' · build __BUILD__ · host: ' + hostCaps;
   reportSize();
 }
 
@@ -174,7 +174,7 @@ window.addEventListener('message', function(e){
   if (!d || !d.method) return;
   if (d.method === 'ui/notifications/tool-result') render(d.params);
   if (d.method === 'ui/notifications/host-context-changed' && d.params) {
-    if (d.params.theme) { theme = d.params.theme; meta.textContent = theme; }
+    if (d.params.theme) { theme = d.params.theme; }
     // The reply to our own display-mode request reports the PREVIOUS mode, so
     // this notification is the only trustworthy signal that it changed.
     if (d.params.displayMode) setMode(d.params.displayMode);
@@ -194,10 +194,16 @@ rpc('ui/initialize', {
   appCapabilities: {availableDisplayModes: ['inline','fullscreen']}
 }, 8000).then(function(res){
   var ctx = (res && res.hostContext) || {};
+  // Diagnostic, and the answer to whether a picker App is possible at all. Goose
+  // bundles the MCP Apps schema for `serverTools` ("Host can proxy tool calls to the
+  // MCP server"), `message` (the view posts a user turn) and `updateModelContext` --
+  // but whether it ADVERTISES them is a different question, and the only place the
+  // answer appears is the ui/initialize reply. Remove once it has been read once.
+  hostCaps = Object.keys((res && res.hostCapabilities) || {}).join(',') || 'none';
   theme = ctx.theme || 'light';
   setMode(ctx.displayMode || 'inline');
   notify('ui/notifications/initialized', {});
-  meta.textContent = theme + ' · build __BUILD__';
+  meta.textContent = theme + ' · build __BUILD__ · host: ' + hostCaps;
   reportSize();
 }).catch(function(err){
   meta.textContent = 'handshake failed: ' + err.message;
