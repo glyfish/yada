@@ -111,11 +111,30 @@ class ReportCache:
         return cls._table_or_raise().c.created_by == uuid.UUID(owner)
 
 
+    @staticmethod
+    def _as_report_id(report_id: str) -> uuid.UUID | None:
+        """The id as a UUID, or None when it is not one.
+
+        A malformed id matches no row, so it is a miss -- the same answer this store
+        already gives for a report belonging to someone else. Raising instead made a
+        title crash the caller: `uuid.UUID("GDP Overview")` is a ValueError, LangGraph's
+        default handler re-raises anything that is not a ToolInvocationError, so "delete
+        the GDP Overview report" killed the chat turn, and GET /api/reports/<title>
+        answered 500 rather than 404. Both tools' own descriptions invite a title.
+        """
+        try:
+            return uuid.UUID(report_id)
+        except (ValueError, AttributeError, TypeError):
+            return None
+
     @classmethod
     def _get_by_report_id_sync(cls, report_id: str, owner: str | None = None) -> dict | None:
+        uid = cls._as_report_id(report_id)
+        if uid is None:
+            return None
         engine = cls._engine_or_raise()
         stmt = select(cls._table_or_raise()).where(
-            cls._table_or_raise().c.report_id == uuid.UUID(report_id)
+            cls._table_or_raise().c.report_id == uid
         )
         scope = cls._owned_by(owner)
         if scope is not None:
@@ -221,6 +240,9 @@ class ReportCache:
         metadata: dict | None = None,
         owner: str | None = None,
     ) -> dict | None:
+        uid = cls._as_report_id(report_id)
+        if uid is None:
+            return None
         engine = cls._engine_or_raise()
 
         def _as_date(v: str | None) -> date | None:
@@ -232,7 +254,7 @@ class ReportCache:
         scope = cls._owned_by(owner)
         stmt = (
             update(t)
-            .where(t.c.report_id == uuid.UUID(report_id))
+            .where(t.c.report_id == uid)
             .values(
                 report_title=report_title,
                 report_description=report_description,
@@ -277,9 +299,12 @@ class ReportCache:
 
     @classmethod
     def _delete_report_sync(cls, report_id: str, owner: str | None = None) -> bool:
+        uid = cls._as_report_id(report_id)
+        if uid is None:
+            return False
         engine = cls._engine_or_raise()
         t = cls._table_or_raise()
-        stmt = delete(t).where(t.c.report_id == uuid.UUID(report_id))
+        stmt = delete(t).where(t.c.report_id == uid)
         scope = cls._owned_by(owner)
         if scope is not None:
             # Returns False rather than raising when the row belongs to someone else,

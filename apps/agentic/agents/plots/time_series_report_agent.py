@@ -272,6 +272,9 @@ class TimeSeriesReportAgent(ReactAgent):
     )
     @staticmethod
     def get_time_series_report(report_id: str) -> str:
+        if ReportCache._as_report_id(report_id) is None:
+            return (f"`{report_id}` is not a report_id. Call list_time_series_reports "
+                    f"to find it, or list_time_series_report_details, which takes a title.")
         record = ReportCache._get_by_report_id_sync(report_id, owner=current_user_id())
         if record is None:
             return f"No report found with ID `{report_id}`."
@@ -346,6 +349,12 @@ class TimeSeriesReportAgent(ReactAgent):
     )
     @staticmethod
     def delete_time_series_report(report_id: str) -> str:
+        # The description invites a title ("Delete the GDP Overview report"), so say
+        # what to do about one. Deliberately not resolved here: a title match is
+        # ambiguous, and nothing should be deleted on an ambiguous match.
+        if ReportCache._as_report_id(report_id) is None:
+            return (f"`{report_id}` is not a report_id. Call list_time_series_reports "
+                    f"to find the id for that title, then delete by id.")
         deleted = ReportCache._delete_report_sync(report_id, owner=current_user_id())
         if deleted:
             return f"Report `{report_id}` deleted successfully."
