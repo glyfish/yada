@@ -91,8 +91,13 @@ class FredSeries(BaseModel):
         description="False for discontinued series. Not filtered by default: popularity "
                     "already sinks them, and a dead series is sometimes the one wanted")
     fetch_tool: str = Field(
-        default="fred_series_observations",
-        description="The MCP tool that returns this series' observations")
+        default="fetch_fred_series",
+        description="The tool that fetches this series. It returns a cache_id for "
+                    "plot_series, and deliberately NOT the observations: a chart drawn "
+                    "from values that passed through the model is a chart the model can "
+                    "misremember. meida's fred_series_observations returns the raw data "
+                    "and is the right call only when the numbers themselves are the "
+                    "answer and nothing is going to be plotted.")
 
 
 class FredHits(FredOutcome):

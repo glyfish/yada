@@ -179,15 +179,45 @@ async def render_report_plot(report_id_or_title: str, owner: str | None = None) 
     if not entries:
         raise ValueError("Report has no series to plot.")
 
+    result = await render_series_plot(entries, record["report_title"], date_from, date_to)
+    return {"report_id": str(record["report_id"]),
+            "report_title": record["report_title"], **result}
+
+
+async def render_series_plot(
+    entries: list[dict],
+    title: str,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    refresh: bool = True,
+) -> dict:
+    """
+    Render a chart from cache entries. No report, no LLM, no agent.
+
+    This is `render_report_plot`'s whole body after the report lookup, lifted so a
+    caller holding cache ids can reach it without inventing a report first. The three
+    places that read `record` -- the dates, the title, the entry list -- are parameters
+    now; everything else is unchanged, which is the point: a preview and a saved report
+    must render identically or the preview is not one.
+
+    `entries` is the 8-key cache projection (cache_id/title/source/native_id/frequency/
+    observation_start/observation_end/metadata) that report rows already store, so both
+    callers feed the same shape.
+
+    `refresh=False` skips the per-series re-fetch, for a caller that has just fetched.
+
+    Returns {plot_type, series_count, html}.
+    Raises ValueError when no series data can be loaded.
+    """
     # Refresh each series (re-fetches only past TTL; preserves cache_id). Best-effort:
     # loading below falls back to the persisted snapshot via include_expired.
-    for e in entries:
+    for e in entries if refresh else ():
         src, nid = e.get("source", ""), e.get("native_id", "")
         if src and nid:
             try:
                 await fetch_series_into_cache(src, nid)
             except Exception as exc:
-                logger.warning(f"render_report_plot: refresh failed for {src}:{nid}: {exc}")
+                logger.warning(f"render_series_plot: refresh failed for {src}:{nid}: {exc}")
 
     series: list[dict] = []
     for e in entries:
@@ -195,7 +225,7 @@ async def render_report_plot(report_id_or_title: str, owner: str | None = None) 
         try:
             times, values = _load_series_by_cache_id(cache_id, date_from, date_to)
         except Exception as exc:
-            logger.warning(f"render_report_plot: could not load {cache_id}: {exc}")
+            logger.warning(f"render_series_plot: could not load {cache_id}: {exc}")
             continue
         if not times:
             continue
@@ -214,7 +244,6 @@ async def render_report_plot(report_id_or_title: str, owner: str | None = None) 
     if not series:
         raise ValueError("No series data available to plot.")
 
-    title = record["report_title"]
     plot_type = _select_plot_type([s["units"] for s in series])
     axis = _axis_type_for([s["values"] for s in series])
 
@@ -256,8 +285,6 @@ async def render_report_plot(report_id_or_title: str, owner: str | None = None) 
         )
 
     return {
-        "report_id": str(record["report_id"]),
-        "report_title": title,
         "plot_type": plot_type,
         "series_count": len(series),
         "html": _series_table_html(series) + f'<div class="time-series-plot"><img src="{file}"></div>',

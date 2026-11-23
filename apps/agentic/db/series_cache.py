@@ -49,6 +49,58 @@ _FREQUENCY_TTL_DAYS: dict[str, int] = {
     "A": 365, "ANNUAL": 365,
 }
 
+def cache_entries_for(cache_ids: list[str]) -> list[dict]:
+    """The 8-key projection of each cache row, in the order asked for.
+
+    Shared because two callers build it -- a report being created and a chart being
+    previewed -- and a divergence between them is invisible until a plot silently
+    differs from the report it was meant to preview.
+
+    Ids are checked as UUIDs FIRST. `_get_by_cache_id_sync` calls `uuid.UUID(cache_id)`,
+    so a client passing a series_id ("GDP", "UNRATE") used to get
+    `ValueError: badly formed hexadecimal UUID string` out of the middle of a loop
+    rather than the message naming what was missing -- and a series_id is exactly what
+    `search_fred` hands a client, so it is the first mistake anyone makes.
+
+    `include_expired=True`: a saved report must still render after its series age out.
+    Raises ValueError naming every id that could not be resolved.
+    """
+    bad = [cid for cid in cache_ids if not _is_uuid(cid)]
+    if bad:
+        raise ValueError(
+            "Not cache IDs: " + ", ".join(bad) + ". A cache ID is a UUID returned by a "
+            "fetch; a series ID like 'GDP' identifies a series, not a fetched copy of it.")
+
+    entries, missing = [], []
+    for cache_id in cache_ids:
+        entry = SeriesCache._get_by_cache_id_sync(cache_id, include_expired=True)
+        if not entry:
+            missing.append(cache_id)
+            continue
+        raw = entry.get("metadata")
+        entries.append({
+            "cache_id": str(entry["cache_id"]),
+            "title": str(entry.get("title") or ""),
+            "source": str(entry.get("source") or ""),
+            "native_id": str(entry.get("native_id") or ""),
+            "frequency": str(entry.get("frequency") or ""),
+            "observation_start": str(entry.get("observation_start") or ""),
+            "observation_end": str(entry.get("observation_end") or ""),
+            "metadata": raw if isinstance(raw, dict) else {},
+        })
+    if missing:
+        raise ValueError("No cached series for: " + ", ".join(missing))
+    return entries
+
+
+def _is_uuid(value: str) -> bool:
+    try:
+        uuid.UUID(str(value))
+        return True
+    except (ValueError, AttributeError, TypeError):
+        return False
+
+
 class SeriesCache:
     """
     Singleton cache for time series data backed by PostgreSQL.

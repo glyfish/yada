@@ -92,6 +92,7 @@ from apps.core.environment import current_environment, verify_database  # noqa: 
 from mcp_server.document_tools import register as register_document_tools  # noqa: E402
 from mcp_server.identity import current_user_id  # noqa: E402
 from mcp_server.fred_tools import register as register_fred_tools  # noqa: E402
+from mcp_server.series_tools import register as register_series_tools  # noqa: E402
 from mcp_server.request_log import install as install_request_log  # noqa: E402
 from mcp_server.plot_app import HTML as PLOT_APP_HTML, meta_for  # noqa: E402
 
@@ -333,6 +334,7 @@ server = MCPServer("yada", version=VERSION, extensions=[apps])
 _initialize()
 register_document_tools(server)
 register_fred_tools(server)
+register_series_tools(server)
 install_request_log(server)
 
 
