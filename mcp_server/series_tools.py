@@ -131,14 +131,45 @@ def register(server) -> None:
                       "not in this reply, and should not be reproduced from memory.",
         }
 
-    async def plot_series(cache_ids: list[str], title: str = "Time Series",
+    async def plot_series(series_ids: list[str] | None = None,
+                          cache_ids: list[str] | None = None,
+                          title: str = "Time Series",
                           date_from: str | None = None,
                           date_to: str | None = None) -> list[TextContent | ImageContent]:
         started = perf_counter()
         ids = [str(c).strip() for c in (cache_ids or []) if str(c).strip()]
+
+        # Fetching here is what makes the honest path the SHORT one. Plotting a FRED
+        # series used to be three calls -- search, fetch, plot -- against `plot`'s one,
+        # and a tool that is cheaper to call wins regardless of what the other tools'
+        # descriptions say about provenance. "Plot US GDP" is one call now, and the
+        # observations still never enter the conversation.
+        for sid in [str(s).strip() for s in (series_ids or []) if str(s).strip()]:
+            if not await _ensure_registry():
+                return [TextContent(type="text", text=(
+                    f"Cannot reach the data server at {MCP_URL}, so '{sid}' could not "
+                    f"be fetched. Nothing was plotted."))]
+            try:
+                entry = await fetch_series_into_cache("fred", sid)
+            except Exception as exc:
+                # An unknown id comes back as a JSON parse failure from the vendor
+                # reply, which says nothing useful to whoever typed the id. Name the
+                # likely cause and keep the original for the log.
+                logger.warning(f"plot_series: fetch {sid!r} failed: {exc}")
+                return [TextContent(type="text", text=(
+                    f"Could not fetch '{sid}'. If that is not an exact FRED series id, "
+                    f"find it with search_fred — the id is the short code like 'GDP' or "
+                    f"'UNRATE', not the series title. Nothing was plotted."))]
+            if entry is None:
+                return [TextContent(type="text", text=(
+                    f"No series '{sid}' — check the id with search_fred. "
+                    f"Nothing was plotted."))]
+            ids.append(str(entry["cache_id"]))
+
         if not ids:
-            return [TextContent(type="text",
-                                text="cache_ids is required — fetch a series first.")]
+            return [TextContent(type="text", text=(
+                "Give series_ids (FRED ids like 'GDP') or cache_ids from "
+                "fetch_fred_series."))]
         try:
             entries = cache_entries_for(ids)
             # refresh=False: the caller has just fetched, and a second round trip per
@@ -187,16 +218,21 @@ def register(server) -> None:
     server.add_tool(
         plot_series, name="plot_series",
         description=(
-            "Chart one or more cached series and return the image. Draws ONLY from the "
-            "cache — values in the request are ignored, so a chart from this tool is "
-            "always the data that was fetched.\n"
-            "- cache_ids: ids from fetch_fred_series. Several are plotted together; the "
-            "plot type and axes are chosen from their count and units.\n"
+            "Chart one or more FRED series and return the image. **This is the tool for "
+            "charting economic data** — it fetches what it needs and draws only from "
+            "stored values, so the numbers are never ones the model supplied.\n"
+            "- series_ids: FRED ids, e.g. ['GDP'] or ['GDP','GDPC1']. Fetched "
+            "automatically if not already cached. This is the usual way to call it: "
+            "'plot US GDP' is one call.\n"
+            "- cache_ids: ids already returned by fetch_fred_series. Mixes freely with "
+            "series_ids.\n"
             "- title: chart title.\n"
             "- date_from / date_to: optional ISO dates to restrict the window.\n"
-            "Prefer this over `plot` for any series that exists in FRED. `plot` charts "
-            "whatever it is given and carries no provenance; if the data has to come "
-            "from somewhere, it will come from the model."),
+            "Several series are plotted together, with the plot type and axes chosen "
+            "from their count and units. Use this rather than `plot` for anything in "
+            "FRED: `plot` charts whatever it is handed, so if the data has to come from "
+            "somewhere it comes from the model, and the chart will look right and be "
+            "wrong."),
     )
 
     logger.info("Series tools registered: fetch_fred_series, plot_series")

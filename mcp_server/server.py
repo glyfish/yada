@@ -233,15 +233,16 @@ _plot_agent = None
     meta=meta_for(PLOT_URI, ["model", "app"]),
     name="plot",
     description=(
-        "Create a chart from data supplied in the request and return it as an image. "
-        "Handles time series (trends over time, comparisons, stacked series) and bar "
-        "charts (categorical or labelled data). Send a plain-language request such as "
-        "'Plot a time series for the population of Tennessee' or 'Compare the "
-        "population of Tennessee and Alabama over time'. Include the data points in "
-        "the request when you have them. "
-        "Note: this charts whatever it is given — it does not look anything up, and "
-        "the result carries no provenance. For a chart of stored series with a "
-        "report_id behind it, use plot_report instead."
+        "Chart data that YOU ALREADY HAVE, from the request, and return an image. "
+        "Handles bar charts (categorical or labelled data) and time series.\n"
+        "**Do not use this for economic or market data.** It looks nothing up, so any "
+        "series it draws must be supplied in the request — and values recalled rather "
+        "than fetched produce a chart that looks correct and is not. Measured: asked "
+        "for US GDP this way, the values came out 2.4% wrong on average and 6.8% at "
+        "worst, on a chart indistinguishable from a right one.\n"
+        "Use plot_series for anything in FRED (it fetches and draws from stored data), "
+        "or plot_report for a saved report. Reach for this only when the numbers come "
+        "from the user, or from a source with no fetch tool of its own."
     ),
 )
 async def plot(request: str) -> list[TextContent | ImageContent]:
