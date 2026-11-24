@@ -11,6 +11,14 @@ The server must be running. In VSCode: **yada MCP server (http)**. Or:
     YADA_MCP_TRANSPORT=streamable-http python -m mcp_server.server
 
 Override the endpoint with ``YADA_MCP_URL``.
+
+**Tokens.** The server's auth switch is the ``app_user`` table -- zero active rows and
+it is unauthenticated, one and every client must present a bearer token. Set
+``YADA_MCP_TOKEN`` (in the repo's ``.env``, which this module loads, or in the shell)
+to the same value Goose carries in
+``~/.config/goose/config.yaml`` under ``extensions.yada.headers.Authorization``. With
+no token set no header is sent at all, which is the right behaviour for an
+unauthenticated server.
 """
 
 import sys as _sys
@@ -27,13 +35,42 @@ import os
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from dotenv import load_dotenv
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
+from mcp.shared._httpx_utils import create_mcp_http_client
+from mcp.shared.exceptions import MCPError
 from mcp.types import CallToolResult, PaginatedRequestParams
 
 from lib.utils import print_json_vertical
 
+# Shell values win, matching apps/core/environment.py. Done at import rather than per
+# call so a kernel started outside the repo still sees the project's settings.
+load_dotenv(_Path(_YADA_ROOT) / ".env")
+
 MCP_URL = os.getenv("YADA_MCP_URL", "http://127.0.0.1:8081/mcp")
+
+
+def _token() -> str | None:
+    """The bearer token to send, or None to send no ``Authorization`` header.
+
+    Read per call, not captured at import, so a token can be exported from a notebook
+    cell and picked up without restarting the kernel.
+    """
+    return (os.getenv("YADA_MCP_TOKEN") or "").strip() or None
+
+
+def _leaves(exc: BaseException) -> list[BaseException]:
+    """Every non-group exception inside ``exc``, however deeply nested.
+
+    Both ``streamable_http_client`` and ``ClientSession`` open anyio task groups, so a
+    one-line server rejection surfaces as a ~40-line traceback of two nested
+    ``ExceptionGroup``s with the actual message on the last line. This exists so
+    `_with_session` can find that message and re-raise it on its own.
+    """
+    if isinstance(exc, BaseExceptionGroup):
+        return [leaf for sub in exc.exceptions for leaf in _leaves(sub)]
+    return [exc]
 
 
 def _caller(name: str, **extra: Any) -> dict[str, Any]:
@@ -64,11 +101,26 @@ async def _with_session(fn: Callable[[ClientSession], Awaitable[Any]]) -> Any:
     connects for the call. That is cheap because the server is already running;
     with stdio every call would re-import yada's agent tree.
     """
-    # 2.x yields (read, write); 1.x yielded a third get_session_id callable.
-    async with streamable_http_client(MCP_URL) as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            return await fn(session)
+    # mcp 2.x removed the `headers=` keyword: a caller that needs headers supplies the
+    # whole client. `create_mcp_http_client` is the transports' own factory, so this
+    # keeps their timeouts (30s, 300s read) and redirect handling rather than inventing
+    # new ones -- the only difference is the Authorization header.
+    token = _token()
+    headers = {"Authorization": f"Bearer {token}"} if token else None
+    try:
+        async with create_mcp_http_client(headers=headers) as http_client:
+            # 2.x yields (read, write); 1.x yielded a third get_session_id callable.
+            async with streamable_http_client(MCP_URL, http_client=http_client) as (read, write):
+                async with ClientSession(read, write) as session:
+                    await session.initialize()
+                    return await fn(session)
+    except BaseExceptionGroup as group:
+        for leaf in _leaves(group):
+            if isinstance(leaf, MCPError):
+                raise RuntimeError(
+                    f"{leaf} [{MCP_URL}, YADA_MCP_TOKEN "
+                    f"{'set' if token else 'unset'}]") from None
+        raise
 
 
 async def list_mcp_tools(prefix: str | tuple[str, ...] | None = None) -> None:
@@ -91,23 +143,47 @@ def _schema_type(spec: dict[str, Any]) -> str:
     return str(spec.get("type") or ("enum" if "enum" in spec else "any"))
 
 
-async def show_tool_schema(tool_name: str, raw: bool = False) -> dict[str, Any]:
+async def show_tool_schema(tool_name: str, raw: bool = False) -> dict[str, Any] | None:
     """Print one tool's arguments compactly: type, required/optional, default.
 
-    ``raw=True`` dumps the JSON schema instead — the authoritative shape an MCP
-    consumer actually parses.
+    ``raw=True`` dumps the tool **as ``tools/list`` carries it** -- name, description,
+    ``inputSchema``, ``outputSchema`` and ``_meta`` -- not just the argument schema.
+    That distinction cost real time: ``description`` and ``_meta`` are *siblings* of
+    ``inputSchema``, not nested inside it, so dumping the argument schema alone hid
+    both. ``_meta`` is where the MCP App binding lives, and a wrong nested
+    ``_meta["ui"]`` shape is exactly what made ``plot_series`` render collapsed in
+    Goose -- a field this helper previously could not show at all.
+
+    Worth knowing while reading the argument schema: this server writes **no**
+    descriptions into it, at either level. Every argument is documented in prose
+    inside the tool description instead, so ``properties`` carries bare
+    ``{'title', 'type'}`` entries and ``title`` is the SDK's generated
+    ``<tool>Arguments``, not anything anyone wrote. A client building input fields
+    from the schema has no help text to render.
+
+    The two branches return different things, on purpose. The default returns the
+    argument schema, which the notebooks call as a bare expression so the dict echoes
+    underneath the rendered table -- the compact view and the shape it was rendered
+    from, in one cell. ``raw=True`` returns nothing: it has already printed the whole
+    object, and echoing a second copy of a 90-to-290-line dump underneath the first
+    one helps no one.
     """
     listed = await _with_session(lambda s: s.list_tools(
         params=PaginatedRequestParams(meta=_caller("show_tool_schema", tool=tool_name))))
     tools = {tool.name: tool for tool in listed.tools}
     if tool_name not in tools:
         raise RuntimeError(f"no tool {tool_name!r} on the server. Available: {sorted(tools)}")
-    schema = dict(tools[tool_name].input_schema or {})
+    tool = tools[tool_name]
     if raw:
-        print_json_vertical(schema)
-        return schema
+        # by_alias: the wire spells these `inputSchema`/`outputSchema`/`_meta`, and the
+        # wire spelling is what a client parses -- python_case here would misreport the
+        # contract. exclude_none drops the fields this server never sets, which is most
+        # of them, rather than padding the dump with nulls.
+        print_json_vertical(tool.model_dump(by_alias=True, exclude_none=True))
+        return None
+    schema = dict(tool.input_schema or {})
     required = set(schema.get("required") or [])
-    print(f"{tool_name}\n  {tools[tool_name].description}\n")
+    print(f"{tool_name}\n  {tool.description}\n")
     for name, spec in (schema.get("properties") or {}).items():
         flag = "required" if name in required else "optional"
         default = spec.get("default")
@@ -120,6 +196,27 @@ async def call_tool(tool_name: str, arguments: dict[str, Any] | None = None) -> 
     """Call a tool and return the raw result, images and all."""
     return await _with_session(lambda s: s.call_tool(
         tool_name, arguments or {}, meta=_caller("call_tool")))
+
+
+def first_text(result: CallToolResult) -> str:
+    """The first text block's text, or ``""`` when the result carries none.
+
+    ``CallToolResult.content`` is a **union** -- ``TextContent | ImageContent |
+    AudioContent | ResourceLink | EmbeddedResource`` -- and only ``TextContent`` has
+    a ``.text`` attribute. So ``result.content[0].text``, the obvious thing to write,
+    is four attribute errors waiting to happen and Pylance flags all four. It also
+    assumes the text block is first, which is true of yada's plot tools (text, then
+    image) and not a guarantee.
+
+    Narrowing on the ``type`` discriminant is what makes this type-safe rather than
+    merely quiet: every block type carries a ``Literal`` ``type``, so the checker
+    knows ``block`` is a ``TextContent`` inside the branch. ``cast`` or
+    ``# type: ignore`` would silence the warning without making it true.
+    """
+    for block in result.content:
+        if block.type == "text":
+            return block.text
+    return ""
 
 
 def show_result(result: CallToolResult) -> None:
