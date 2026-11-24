@@ -270,7 +270,8 @@ async def render_series_plot(
     plot_type = _select_plot_type([s["units"] for s in series])
     axis = _axis_type_for([s["values"] for s in series])
 
-    # Every MULTI-SERIES branch passes one time array per series, as a list
+    # Every MULTI-SERIES branch passes one time array per series, as a list.
+    # The `report_plot_*` tools further down do the same, for the same reason
     # (`single` has only its own, so it passes it bare). Passing a single
     # array instead -- which the signatures also accept -- makes navi broadcast it
     # to every curve and pair values with dates by array index, so a series whose
@@ -604,7 +605,7 @@ class TimeSeriesReportPlotAgent(ReactAgent):
         try:
             loaded = [_load_series_by_cache_id(nid, date_from, date_to) for nid in cache_ids]
             file = generate_time_series_comparison(
-                time=numpy.array(loaded[0][0]),
+                time=[numpy.array(t[0]) for t in loaded],
                 values=[numpy.array(t[1]) for t in loaded],
                 title=title,
                 xlabel="Time",
@@ -645,10 +646,10 @@ class TimeSeriesReportPlotAgent(ReactAgent):
     ) -> str:
         try:
             left_times, left_values = _load_series_by_cache_id(left_cache_id, date_from, date_to)
-            _, right_values = _load_series_by_cache_id(right_cache_id, date_from, date_to)
+            right_times, right_values = _load_series_by_cache_id(right_cache_id, date_from, date_to)
             labels = [left_label, right_label] if left_label and right_label else None
             file = generate_time_series_twinx(
-                time=numpy.array(left_times),
+                time=[numpy.array(left_times), numpy.array(right_times)],
                 left=numpy.array(left_values),
                 right=numpy.array(right_values),
                 title=title,
@@ -693,7 +694,7 @@ class TimeSeriesReportPlotAgent(ReactAgent):
             left_loaded = [_load_series_by_cache_id(nid, date_from, date_to) for nid in left_cache_ids]
             right_loaded = [_load_series_by_cache_id(nid, date_from, date_to) for nid in right_cache_ids]
             file = generate_time_series_twinx_comparison(
-                time=numpy.array(left_loaded[0][0]),
+                time=[numpy.array(t[0]) for t in left_loaded + right_loaded],
                 left=[numpy.array(t[1]) for t in left_loaded],
                 right=[numpy.array(t[1]) for t in right_loaded],
                 title=title,
@@ -734,7 +735,7 @@ class TimeSeriesReportPlotAgent(ReactAgent):
         try:
             loaded = [_load_series_by_cache_id(nid, date_from, date_to) for nid in cache_ids]
             file = generate_time_series_stack(
-                time=numpy.array(loaded[0][0]),
+                time=[numpy.array(t[0]) for t in loaded],
                 values=[numpy.array(t[1]) for t in loaded],
                 title=title,
                 xlabel="Time",

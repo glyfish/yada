@@ -301,7 +301,7 @@ class TimeSeriesPlotAgent(ReactAgent):
                                      **kwargs) -> str:
         all_times, all_values = zip(*[_load_series(r, date_from, date_to) for r in series_refs])
         file = generate_time_series_stack(
-            time=numpy.array(all_times[0]),
+            time=[numpy.array(t) for t in all_times],
             values=[numpy.array(v) for v in all_values],
             title=title,
             xlabel=x_axis_label,
@@ -340,7 +340,7 @@ class TimeSeriesPlotAgent(ReactAgent):
                                           **kwargs) -> str:
         all_times, all_values = zip(*[_load_series(r, date_from, date_to) for r in series_refs])
         file = generate_time_series_comparison(
-            time=numpy.array(all_times[0]),
+            time=[numpy.array(t) for t in all_times],
             values=[numpy.array(v) for v in all_values],
             title=title,
             xlabel=x_axis_label,
