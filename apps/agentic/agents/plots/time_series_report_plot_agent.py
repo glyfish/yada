@@ -139,6 +139,26 @@ def _select_plot_type(units: list[str]) -> str:
     return "stack"
 
 
+def _apply_plot_style() -> None:
+    """Apply the project matplotlib style to this process.
+
+    The style was only ever set in the agent constructors
+    (`TimeSeriesReportPlotAgent.__init__` and its siblings), which works for the
+    agent-backed `plot` tool and not for anything else: `plot_series` and
+    `plot_report` reach the render functions below without constructing an agent,
+    and `mcp_server/server.py` builds `PlotAgent` lazily on the first `plot` call
+    so that listing tools does not create an LLM client.
+
+    The result was that a chart's appearance depended on what had been called
+    before it in the same process. On a freshly restarted server, `plot_series`
+    rendered in matplotlib's defaults -- black frame, no gridlines -- and only
+    picked up the project style once an unrelated `plot` call had set the
+    rcParams process-wide. Applied here, every render path gets it regardless of
+    call order. rcParams are global, so this is cheap and idempotent.
+    """
+    pyplot.style.use(config.glyfish_web_style)
+
+
 async def render_report_plot(report_id_or_title: str, owner: str | None = None) -> dict:
     """
     Render a report's plot deterministically — no LLM, no agent. Resolves the report,
@@ -149,6 +169,7 @@ async def render_report_plot(report_id_or_title: str, owner: str | None = None) 
     Returns {report_id, report_title, plot_type, series_count, html}.
     Raises ValueError when the report is missing or no series data can be loaded.
     """
+    _apply_plot_style()
     record = None
     try:
         _uuid.UUID(report_id_or_title)
@@ -210,6 +231,7 @@ async def render_series_plot(
     Returns {plot_type, series_count, html}.
     Raises ValueError when no series data can be loaded.
     """
+    _apply_plot_style()
     # Refresh each series (re-fetches only past TTL; preserves cache_id). Best-effort:
     # loading below falls back to the persisted snapshot via include_expired.
     for e in entries if refresh else ():
@@ -248,6 +270,15 @@ async def render_series_plot(
     plot_type = _select_plot_type([s["units"] for s in series])
     axis = _axis_type_for([s["values"] for s in series])
 
+    # Every MULTI-SERIES branch passes one time array per series, as a list
+    # (`single` has only its own, so it passes it bare). Passing a single
+    # array instead -- which the signatures also accept -- makes navi broadcast it
+    # to every curve and pair values with dates by array index, so a series whose
+    # dates differ from the first one's is drawn at the wrong times and silently
+    # truncated to the shortest. Index pairing is only correct when every series
+    # has identical dates: same frequency, same start, no gaps. Observed economic
+    # series satisfy none of that, and the `None`/"." filter in
+    # `_load_series_by_cache_id` creates gaps even between two series that agree.
     if plot_type == "single":
         s = series[0]
         file = generate_time_series_plot(
@@ -256,14 +287,15 @@ async def render_series_plot(
         )
     elif plot_type == "comparison":
         file = generate_time_series_comparison(
-            time=series[0]["time"], values=[s["values"] for s in series], title=title,
-            xlabel="Time", ylabel=series[0]["units"] or "Value",
+            time=[s["time"] for s in series], values=[s["values"] for s in series],
+            title=title, xlabel="Time", ylabel=series[0]["units"] or "Value",
             labels=[s["label"] for s in series], plot_axis_type=axis,
         )
     elif plot_type == "twinx":
         left, right = series[0], series[1]
         file = generate_time_series_twinx(
-            time=left["time"], left=left["values"], right=right["values"], title=title,
+            time=[left["time"], right["time"]],
+            left=left["values"], right=right["values"], title=title,
             xlabel="Time", left_ylabel=left["units"] or "Value",
             right_ylabel=right["units"] or "Value", plot_axis_type=axis,
             labels=[left["label"], right["label"]],
@@ -273,15 +305,15 @@ async def render_series_plot(
         left = [s for s in series if s["units"] == majority_unit]
         right = [s for s in series if s["units"] != majority_unit]
         file = generate_time_series_twinx_comparison(
-            time=left[0]["time"], left=[s["values"] for s in left],
+            time=[s["time"] for s in left + right], left=[s["values"] for s in left],
             right=[s["values"] for s in right], title=title, xlabel="Time",
             left_ylabel=left[0]["units"] or "Value", right_ylabel=right[0]["units"] or "Value",
             plot_axis_type=axis, labels=[s["label"] for s in left + right],
         )
     else:  # stack
         file = generate_time_series_stack(
-            time=series[0]["time"], values=[s["values"] for s in series], title=title,
-            xlabel="Time", ylabels=[s["units"] or "Value" for s in series],
+            time=[s["time"] for s in series], values=[s["values"] for s in series],
+            title=title, xlabel="Time", ylabels=[s["units"] or "Value" for s in series],
             labels=[s["label"] for s in series], plot_axis_type=axis,
         )
 

@@ -46,7 +46,7 @@ def generate_time_series_plot(time: NDArray, values: NDArray, title: str, xlabel
 
 
 
-def generate_time_series_stack(time: NDArray, values: list[NDArray], title: str, xlabel: str,
+def generate_time_series_stack(time: NDArray | list[NDArray], values: list[NDArray], title: str, xlabel: str,
                                 ylabels: list[str] | None, labels: list[str] | None,
                                 plot_axis_type: PlotType) -> str:
     """
@@ -85,7 +85,7 @@ def generate_time_series_stack(time: NDArray, values: list[NDArray], title: str,
     return generate_plot_file_name("time_series_stack", path="./plots", uuid=uuid)
 
 
-def generate_time_series_comparison(time: NDArray, values: list[NDArray], title: str, xlabel: str,
+def generate_time_series_comparison(time: NDArray | list[NDArray], values: list[NDArray], title: str, xlabel: str,
                                     ylabel: str, labels: list[str] | None,
                                     plot_axis_type: PlotType) -> str:
     """
@@ -124,7 +124,7 @@ def generate_time_series_comparison(time: NDArray, values: list[NDArray], title:
     return generate_plot_file_name("time_series_comparison", path="./plots", uuid=uuid)
 
 
-def generate_time_series_twinx(time: NDArray, left: NDArray, right: NDArray, title: str, xlabel: str,
+def generate_time_series_twinx(time: NDArray | list[NDArray], left: NDArray, right: NDArray, title: str, xlabel: str,
                                left_ylabel: str, right_ylabel: str, plot_axis_type: PlotType,
                                labels: list[str] | None = None) -> str:
     """
@@ -167,7 +167,7 @@ def generate_time_series_twinx(time: NDArray, left: NDArray, right: NDArray, tit
     return generate_plot_file_name("time_series_twinx", path="./plots", uuid=uuid)
 
 
-def generate_time_series_twinx_comparison(time: NDArray, left: list[NDArray], right: list[NDArray], title: str, xlabel: str,
+def generate_time_series_twinx_comparison(time: NDArray | list[NDArray], left: list[NDArray], right: list[NDArray], title: str, xlabel: str,
                                           left_ylabel: str, right_ylabel: str, plot_axis_type: PlotType,
                                           labels: list[str] | None = None) -> str:
     """
