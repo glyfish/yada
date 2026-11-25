@@ -104,6 +104,32 @@ def register(server) -> None:
         _log("search_reports", {"query": query}, started, f"{len(rows)} reports")
         return {"status": "ok", "count": len(rows), "reports": rows}
 
+    def delete_report(report_id: str) -> dict:
+        started = perf_counter()
+        # Owner-scoped, so this cannot reach another caller's report: an id that is
+        # not theirs is simply not found, which is the same answer the store gives
+        # for an id that does not exist. Takes an id and not a title on purpose --
+        # a substring that matched two reports would make deletion a guess.
+        gone = ReportCache._delete_report_sync(report_id, owner=current_user_id())
+        _log("delete_report", {"report_id": report_id}, started,
+             "deleted" if gone else "not found")
+        if not gone:
+            return {"status": "error",
+                    "detail": f"No report {report_id} to delete. Find it with "
+                              f"search_reports and pass its report_id."}
+        return {"status": "ok", "report_id": report_id}
+
+    server.add_tool(
+        delete_report, name="delete_report",
+        description=(
+            "Delete one of the caller's saved reports, permanently.\n"
+            "- report_id: the id, not a title — search_reports first if the user "
+            "named it. A title can match several reports, and deleting the wrong "
+            "one cannot be undone.\n"
+            "The series themselves are untouched; only the report that grouped them "
+            "is removed. Confirm with the user before calling this."),
+    )
+
     server.add_tool(
         create_report_tool, name="create_report",
         description=(
@@ -144,4 +170,4 @@ def register(server) -> None:
             "answer, not an error."),
     )
 
-    logger.info("Report tools registered: create_report, list_reports, search_reports")
+    logger.info("Report tools registered: create_report, list_reports, search_reports, delete_report")
