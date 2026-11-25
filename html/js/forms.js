@@ -147,7 +147,7 @@ function showCreateReportForm(dialog, prefill, sessionId, promptLabel) {
 
     const submit = async () => {
         if (!dialog.querySelector("form").reportValidity()) return;
-        close();
+        close();  // abandons the suspended graph; creation is deterministic below
         const payload = {
             report_title:       titleInput.value.trim(),
             report_description: descriptionInput.value.trim(),
@@ -155,7 +155,35 @@ function showCreateReportForm(dialog, prefill, sessionId, promptLabel) {
             time_range_from:    fromInput.value.trim(),
         };
         if (toInput.value.trim()) payload.time_range_to = toInput.value.trim();
-        await handleResumeRequest(sessionId, payload, promptLabel);
+        // Deterministic create — no agent, no LLM tokens. This used to resume the
+        // graph, which handed the cache_ids the user just picked to three router
+        // models as free text before anything checked them; a dropped or reordered
+        // id was silent. The same shape the report picker already uses to plot.
+        try {
+            const resp = await request("/api/reports", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            });
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                throw new Error(err.detail || `HTTP ${resp.status}`);
+            }
+            const data = await resp.json();
+            const rows = (data.time_series_info || [])
+                .map(r => `  - \`${r.cache_id}\` | ${r.source} | ${r.title}`)
+                .join("\n");
+            await prependResultCard(
+                promptLabel || `Create report: ${data.report_title}`,
+                `Report **${data.report_title}** created successfully.\n\n`
+                + `- **Report ID:** \`${data.report_id}\`\n`
+                + `- **Time Series Count:** ${(data.time_series_info || []).length}\n`
+                + `- **Series:**\n${rows}`);
+            fillLastCardMeta({ total_tokens: 0, input_tokens: 0, output_tokens: 0, cost_usd: 0 });
+            clearInput();
+        } catch (e) {
+            await prependResultCard("Create report", `Failed to create report: ${e.message}`);
+        }
     };
     dialog.querySelector("#submitFormBtn").addEventListener("click", submit);
     [titleInput, idsInput].forEach(

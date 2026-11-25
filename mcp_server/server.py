@@ -93,6 +93,7 @@ from mcp_server.document_tools import register as register_document_tools  # noq
 from apps.core.identity import current_user_id  # noqa: E402
 from mcp_server.fred_tools import register as register_fred_tools  # noqa: E402
 from mcp_server.series_tools import register as register_series_tools  # noqa: E402
+from mcp_server.report_tools import register as register_report_tools  # noqa: E402
 from mcp_server.request_log import install as install_request_log  # noqa: E402
 from mcp_server.plot_app import HTML as PLOT_APP_HTML, app_meta, meta_for  # noqa: E402
 
@@ -336,6 +337,7 @@ _initialize()
 register_document_tools(server)
 register_fred_tools(server)
 register_series_tools(server, PLOT_URI, app_meta(PLOT_URI, ["model", "app"]))
+register_report_tools(server)
 install_request_log(server)
 
 

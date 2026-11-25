@@ -11,7 +11,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from apps.agentic.core.tool_spec import PositiveExample, NegativeExample, ToolSpec, tool_spec
 from apps.agentic.core.agents.react_agent import ReactAgent
-from apps.agentic.core.agents.series_metadata import report_metadata_from_series
+from apps.agentic.agents.data.reports import create_report
 from apps.agentic.core.llm_factory import router_llm_model
 from apps.agentic.db.report_cache import ReportCache
 from apps.agentic.db.series_cache import SeriesCache
@@ -197,58 +197,25 @@ class TimeSeriesReportAgent(ReactAgent):
         time_range_from: str = "",
         time_range_to: str | None = None,
     ) -> str:
-        ids = [s.strip() for s in time_series_ids_csv.split(",") if s.strip()]
-        if not ids:
-            raise ValueError("No time series cache IDs were provided.")
-
-        time_series_info: list[TimeSeriesInfoEntry] = []
-        missing: list[str] = []
-        for cache_id in ids:
-            entry = SeriesCache._get_by_cache_id_sync(cache_id, include_expired=True)
-            if not entry:
-                missing.append(cache_id)
-                continue
-            raw_metadata = entry.get("metadata")
-            metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
-            time_series_info.append(
-                {
-                    "cache_id": str(entry["cache_id"]),
-                    "title": str(entry.get("title") or ""),
-                    "source": str(entry.get("source") or ""),
-                    "native_id": str(entry.get("native_id") or ""),
-                    "frequency": str(entry.get("frequency") or ""),
-                    "observation_start": str(entry.get("observation_start") or ""),
-                    "observation_end": str(entry.get("observation_end") or ""),
-                    "metadata": metadata,
-                }
-            )
-
-        if missing:
-            raise ValueError(
-                "Report creation aborted. Missing cache IDs: "
-                + ", ".join(missing)
-            )
-
-        report_id = ReportCache._put_sync(
+        # The writing is `create_report`, shared with POST /api/reports and the MCP
+        # create_report tool. What is left here is the model-facing shape: a csv of
+        # ids in, markdown out. Three doors, one writer, so a change to how a report
+        # resolves its series cannot reach one door and miss the others.
+        created = create_report(
             report_title=report_title,
             report_description=report_description,
-            time_series_info=time_series_info,
+            cache_ids=time_series_ids_csv.split(","),
             time_range_from=time_range_from,
             time_range_to=time_range_to,
-            metadata=report_metadata_from_series(time_series_info),
-            # The owner of the request being served, installed by the API before the
-            # agent ran. None when no users are configured, which writes a NULL owner
-            # exactly as before. Never an argument: a model must not choose an owner.
-            created_by=current_user_id(),
         )
-        logger.debug(f"TimeSeriesReportAgent: created report '{report_title}' → {report_id}")
+        time_series_info = created["time_series_info"]
         detail_lines = "\n".join(
             f"  - `{row['cache_id']}` | {row['source']} | {row['title']}"
             for row in time_series_info
         )
         return (
             f"Report **{report_title}** created successfully.\n\n"
-            f"- **Report ID:** `{report_id}`\n"
+            f"- **Report ID:** `{created['report_id']}`\n"
             f"- **Time Series Count:** {len(time_series_info)}\n"
             f"- **Series:**\n{detail_lines}"
         )

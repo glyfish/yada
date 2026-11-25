@@ -30,7 +30,8 @@ from apps.agentic.core.constants import TOOL_START_LABELS, TOOL_END_LABELS, MCP_
 from apps.agentic.core.mcp_tool_registry import MCPToolRegistry
 from apps.agentic.db.series_cache import SeriesCache
 from apps.agentic.db.report_cache import ReportCache
-from apps.agentic.agents.plots.time_series_report_agent import TimeSeriesInfoEntry
+from apps.agentic.agents.data.reports import (TimeSeriesInfoEntry, create_report,
+                                              resolve_series_entries)
 from apps.agentic.agents.plots.time_series_report_plot_agent import render_report_plot
 from apps.agentic.core.agents.series_metadata import report_metadata_from_series
 from apps.agentic.core.agents.llm_filter_extractor import extract_etf_filters, extract_fred_filters
@@ -584,6 +585,44 @@ async def get_report(report_id: str, owner: str | None = Depends(current_owner))
     }
 
 
+class CreateReportPayload(BaseModel):
+    report_title: str
+    report_description: str = ""
+    time_series_ids: str
+    time_range_from: str = ""
+    time_range_to: Optional[str] = None
+
+
+@app.post("/api/reports", status_code=201)
+async def create_report_route(req: CreateReportPayload,
+                              caller: identity.Caller = Depends(current_caller)):
+    """
+    Create a report deterministically -- no LLM, no agent graph.
+
+    Reports already had get, update, delete, list and plot; creation was the one verb
+    that existed only inside the chat agent, so the browser's create form had to resume
+    the graph to write a row. That route took the user's chosen cache_ids through three
+    router-model turns as free text before anything validated them, where a dropped or
+    reordered id is silent. This writes exactly what the form collected.
+
+    `identity.scoped` rather than an owner argument: `create_report` reads the installed
+    caller, which is the same rule the chat path and the MCP tools follow, and it keeps
+    "who owns this report" out of the request body.
+    """
+    with identity.scoped(caller):
+        try:
+            created = create_report(
+                report_title=req.report_title,
+                report_description=req.report_description,
+                cache_ids=req.time_series_ids.split(","),
+                time_range_from=req.time_range_from,
+                time_range_to=req.time_range_to or None,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+    return created
+
+
 class UpdateReportPayload(BaseModel):
     report_title: str
     report_description: str
@@ -597,28 +636,13 @@ async def update_report(report_id: str, req: UpdateReportPayload,
                         owner: str | None = Depends(current_owner)):
     ids = [s.strip() for s in req.time_series_ids.split(",") if s.strip()]
 
-    time_series_info: list[TimeSeriesInfoEntry] = []
-    missing: list[str] = []
-    for cache_id in ids:
-        entry = SeriesCache._get_by_cache_id_sync(cache_id, include_expired=True)
-        if not entry:
-            missing.append(cache_id)
-            continue
-        raw_metadata = entry.get("metadata")
-        metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
-        time_series_info.append({
-            "cache_id": str(entry["cache_id"]),
-            "title": str(entry.get("title") or ""),
-            "source": str(entry.get("source") or ""),
-            "native_id": str(entry.get("native_id") or ""),
-            "frequency": str(entry.get("frequency") or ""),
-            "observation_start": str(entry.get("observation_start") or ""),
-            "observation_end": str(entry.get("observation_end") or ""),
-            "metadata": metadata,
-        })
-
-    if missing:
-        raise HTTPException(status_code=400, detail=f"Unknown cache IDs: {', '.join(missing)}")
+    # Shared with create_report and the chat tool: one projection of a cache row into a
+    # report's stored snapshot, so an update cannot record a different shape than a
+    # create did.
+    try:
+        time_series_info: list[TimeSeriesInfoEntry] = resolve_series_entries(ids)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     updated = await ReportCache.update_report(
         report_id=report_id,

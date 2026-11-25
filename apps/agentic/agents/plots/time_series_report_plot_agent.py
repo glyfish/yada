@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 import sys
-import uuid as _uuid
 from datetime import datetime
 from html import escape
 
@@ -16,11 +15,11 @@ from pydantic import BaseModel, Field
 
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
-from apps.agentic.core.tool_spec import PositiveExample, ToolSpec, tool_spec
+from apps.agentic.core.tool_spec import PositiveExample, NegativeExample, ToolSpec, tool_spec
 from apps.agentic.core.agents.react_agent import ReactAgent
 from apps.agentic.agents.data.series_fetch import fetch_series_into_cache
 from apps.agentic.db.series_cache import SeriesCache
-from apps.agentic.db.report_cache import ReportCache
+from apps.agentic.agents.data.reports import resolve_report, resolve_report_or_raise
 from apps.core.identity import current_user_id
 from apps.plots.time_series_plots import (
     generate_time_series_plot,
@@ -170,29 +169,11 @@ async def render_report_plot(report_id_or_title: str, owner: str | None = None) 
     Raises ValueError when the report is missing or no series data can be loaded.
     """
     _apply_plot_style()
-    record = None
-    try:
-        _uuid.UUID(report_id_or_title)
-        record = ReportCache._get_by_report_id_sync(report_id_or_title, owner=owner)
-    except ValueError:
-        pass
-    if record is None:
-        # Title match is a SUBSTRING, so more than one report can match for a single
-        # user -- "GDP" finds both "GDP Overview" and "GDP Deflator". The previous
-        # `len(matches) == 1` gate fell through on any ambiguity and raised "No report
-        # found", which is a false statement about a request that found two. Say which
-        # it was, and name the candidates so the caller can pick one.
-        matches = ReportCache._search_by_title_sync(report_id_or_title, owner=owner)
-        if len(matches) == 1:
-            record = ReportCache._get_by_report_id_sync(matches[0]["report_id"],
-                                                        owner=owner)
-        elif len(matches) > 1:
-            listed = "; ".join(f"{m['report_title']} ({m['report_id']})" for m in matches)
-            raise ValueError(
-                f"{len(matches)} reports match '{report_id_or_title}' — plot one by its "
-                f"id: {listed}")
-    if record is None:
-        raise ValueError(f"No report found matching '{report_id_or_title}'.")
+    # Shared with the MCP report tools and the REST routes. A title match is a
+    # SUBSTRING and titles are not unique, so "GDP" legitimately means both "GDP
+    # Overview" and "GDP Deflator"; the resolver names the candidates rather than
+    # picking one, and every door reports that the same way.
+    record = resolve_report_or_raise(report_id_or_title, owner=owner, action="plot")
 
     date_from = str(record["time_range_from"]) if record.get("time_range_from") else None
     date_to = str(record["time_range_to"]) if record.get("time_range_to") else None
@@ -332,55 +313,6 @@ class GetReportInfoInput(BaseModel):
     )
 
 
-class ReportSinglePlotInput(BaseModel):
-    cache_id: str = Field(..., description="cache_id UUID of the series from get_report_info.")
-    date_from: str | None = Field(None, description="Start date YYYY-MM-DD (from report time_range_from).")
-    date_to: str | None = Field(None, description="End date YYYY-MM-DD (from report time_range_to, or None for latest).")
-    title: str = Field(default="Time Series", description="Plot title.")
-    ylabel: str = Field(default="Value", description="Y-axis label.")
-
-
-class ReportComparisonPlotInput(BaseModel):
-    cache_ids: list[str] = Field(..., description="List of cache_id UUIDs (2-5) from get_report_info.")
-    date_from: str | None = Field(None, description="Start date YYYY-MM-DD.")
-    date_to: str | None = Field(None, description="End date YYYY-MM-DD, or None for latest.")
-    title: str = Field(default="Time Series Comparison", description="Plot title.")
-    ylabel: str = Field(default="Value", description="Shared y-axis label.")
-    labels: list[str] | None = Field(None, description="Legend label per series.")
-
-
-class ReportTwinxPlotInput(BaseModel):
-    left_cache_id: str = Field(..., description="cache_id UUID for the left y-axis series.")
-    right_cache_id: str = Field(..., description="cache_id UUID for the right y-axis series.")
-    date_from: str | None = Field(None)
-    date_to: str | None = Field(None)
-    title: str = Field(default="Time Series", description="Plot title.")
-    left_ylabel: str = Field(default="Value", description="Left y-axis label.")
-    right_ylabel: str = Field(default="Value", description="Right y-axis label.")
-    left_label: str | None = Field(None, description="Legend label for the left series.")
-    right_label: str | None = Field(None, description="Legend label for the right series.")
-
-
-class ReportTwinxComparisonPlotInput(BaseModel):
-    left_cache_ids: list[str] = Field(..., description="cache_id UUIDs for the left y-axis series.")
-    right_cache_ids: list[str] = Field(..., description="cache_id UUIDs for the right y-axis series.")
-    date_from: str | None = Field(None)
-    date_to: str | None = Field(None)
-    title: str = Field(default="Time Series", description="Plot title.")
-    left_ylabel: str = Field(default="Value", description="Left y-axis label.")
-    right_ylabel: str = Field(default="Value", description="Right y-axis label.")
-    labels: list[str] | None = Field(None, description="Legend label per series (left series first, then right).")
-
-
-class ReportStackPlotInput(BaseModel):
-    cache_ids: list[str] = Field(..., description="List of cache_id UUIDs (2-5) from get_report_info.")
-    date_from: str | None = Field(None)
-    date_to: str | None = Field(None)
-    title: str = Field(default="Time Series Stack", description="Plot title.")
-    ylabels: list[str] | None = Field(None, description="Y-axis label per series.")
-    labels: list[str] | None = Field(None, description="Annotation label per series.")
-
-
 class TimeSeriesReportPlotAgent(ReactAgent):
 
     @classmethod
@@ -394,11 +326,7 @@ class TimeSeriesReportPlotAgent(ReactAgent):
 
         tools = [
             TimeSeriesReportPlotAgent.get_report_info,
-            TimeSeriesReportPlotAgent.report_plot_single,
-            TimeSeriesReportPlotAgent.report_plot_comparison,
-            TimeSeriesReportPlotAgent.report_plot_twinx,
-            TimeSeriesReportPlotAgent.report_plot_twinx_comparison,
-            TimeSeriesReportPlotAgent.report_plot_stack,
+            TimeSeriesReportPlotAgent.report_plot,
         ]
         super().__init__(tools, "time_series_report_plot_tool_node", mcp_tools=mcp_tools)
 
@@ -406,38 +334,29 @@ class TimeSeriesReportPlotAgent(ReactAgent):
     def create_prompt(self):
         system_prompt = """
             <instructions>
-            You are a time series report plot agent. Your job is to generate all plots for a report.
+            You are a time series report plot agent. You draw plots for saved reports.
 
-            Always follow this sequence:
-            1. Call get_report_info with the report ID or title to retrieve report metadata.
-               This returns time_range_from, time_range_to, and a time_series list with cache_id,
-               units, value_range, observation_start, and observation_end per series.
-               Never load raw observations — use only this metadata to choose plot types.
-            2. Group the series into batches of at most 5. For reports with more than 5 series,
-               emit multiple plot tool calls with successive groups.
-            3. For each group call the appropriate plot tool, always passing
-               date_from=time_range_from and date_to=time_range_to (pass None for date_to
-               when time_range_to is null — this means plot up to the latest available data).
+            To plot a report, call report_plot with the report's id or a substring of
+            its title. That is the whole sequence — one call. It resolves the report,
+            refreshes its series, chooses the plot type and axis scale from the data,
+            and returns the chart.
+
+            Do not choose a plot type. Do not pass dates: a report carries its own
+            time range, and report_plot reads it.
+
+            Call get_report_info only when the user asks ABOUT a report — which series
+            it holds, their units, their ranges — rather than to see it. It is not a
+            step on the way to a plot.
+
+            If report_plot reports that several reports match, do not pick one. Show
+            the user the candidates it named and ask which they meant.
             </instructions>
 
-            <plot_type_selection>
-            Choose the plot type for each group using these rules in order:
-
-            - 1 series → report_plot_single
-            - 2-5 series, same units → report_plot_comparison
-            - Exactly 2 series, different units → report_plot_twinx
-            - 3-5 series, exactly 2 distinct units (assign the majority-unit series to left,
-              the minority-unit series to right) → report_plot_twinx_comparison
-            - 2-5 series, more than 2 distinct units → report_plot_stack
-
-            Axis scale (LINEAR vs YLOG) is determined automatically by the plot tool
-            from the loaded data — do not pass a plot_axis_type parameter.
-            </plot_type_selection>
-
             <output_format>
-            CRITICAL: You MUST include the exact HTML string returned by each plot tool verbatim
-            in your response. Do not omit, paraphrase, or replace it with a description.
-            Provide markdown commentary above each chart.
+            CRITICAL: You MUST include the exact HTML string returned by report_plot
+            verbatim in your response. Do not omit, paraphrase, or replace it with a
+            description.
+            Provide markdown commentary above the chart.
             Place the HTML fragment on its own line with a blank line before and after it.
             Do not mix HTML fragments within the markdown text.
             Do not use the $ symbol for currency — use USD, EUR, etc. instead.
@@ -468,29 +387,18 @@ class TimeSeriesReportPlotAgent(ReactAgent):
     )
     @staticmethod
     async def get_report_info(report_id_or_title: str) -> str:
-        record = None
-        try:
-            _uuid.UUID(report_id_or_title)
-            record = ReportCache._get_by_report_id_sync(report_id_or_title,
-                                                       owner=current_user_id())
-        except ValueError:
-            pass
-
-        if record is None:
-            matches = ReportCache._search_by_title_sync(report_id_or_title,
-                                                       owner=current_user_id())
-            if not matches:
-                return json.dumps({"error": f"No report found matching '{report_id_or_title}'."})
-            if len(matches) > 1:
-                return json.dumps({
-                    "matches": matches,
-                    "message": "Multiple reports match. Please ask the user to select one by report_id.",
-                })
-            record = ReportCache._get_by_report_id_sync(matches[0]["report_id"],
-                                                       owner=current_user_id())
-
-        if record is None:
+        # Same resolver as render_report_plot and the MCP tools; only the reporting
+        # differs, because this tool answers a model and the others answer a caller.
+        resolution = resolve_report(report_id_or_title, owner=current_user_id())
+        if resolution.ambiguous:
+            return json.dumps({
+                "matches": resolution.candidates,
+                "message": "Multiple reports match. Please ask the user to select one by report_id.",
+            })
+        if not resolution.resolved:
             return json.dumps({"error": f"No report found matching '{report_id_or_title}'."})
+        record = resolution.record
+        assert record is not None
 
         date_from = str(record["time_range_from"]) if record.get("time_range_from") else None
         date_to = str(record["time_range_to"]) if record.get("time_range_to") else None
@@ -544,207 +452,49 @@ class TimeSeriesReportPlotAgent(ReactAgent):
 
 
     @tool_spec(
-        args_schema=ReportSinglePlotInput,
+        args_schema=GetReportInfoInput,
         metadata=ToolSpec(
             primary_function="""
-                Plot a single time series from the report using its cache_id.
-                Use when the group contains exactly one series.
-                Pass date_from and date_to from the report time_range.
+                Plot a report and return the chart as an HTML fragment. Accepts the
+                report's UUID or a case-insensitive substring of its title. Chooses the
+                plot type and axis scale from the report's own series -- do not choose
+                them, and do not pass dates: the report carries its own time range.
+                Returns the HTML to include verbatim in your reply.
             """,
             positive_examples=[
-                PositiveExample(input="Plot the single series in this report."),
+                PositiveExample(input="Plot the unemployment report."),
+                PositiveExample(input="Plot report 24c23e96-5e97-4c3d-bb4a-c85116839d36."),
+            ],
+            negative_examples=[
+                NegativeExample(
+                    input="What series are in the GDP report?",
+                    reason="Use get_report_info, which returns metadata without drawing anything.",
+                ),
             ],
         ),
     )
     @staticmethod
-    def report_plot_single(
-        cache_id: str,
-        date_from: str | None,
-        date_to: str | None,
-        title: str,
-        ylabel: str,
-    ) -> str:
+    async def report_plot(report_id_or_title: str) -> str:
+        """Plot a report through the same function every other surface calls.
+
+        This replaced five tools -- single, comparison, twinx, twinx_comparison and
+        stack -- that existed so the model could pick a plot type. `_select_plot_type`
+        already makes that choice from the series count and their distinct units, is
+        unit-tested, and is what the MCP tools and the REST route use.
+
+        Having both was not a redundancy, it was a second implementation, and the two
+        drifted: the agent's charts carried no legend key table, batched into groups of
+        five where the deterministic path draws one chart, refreshed a series only when
+        the model happened to call get_report_info first, and reported an ambiguous
+        title in a different shape. A per-series date fix had to be applied to both by
+        hand, and the copy here was missed for a commit.
+        """
         try:
-            times, values = _load_series_by_cache_id(cache_id, date_from, date_to)
-            file = generate_time_series_plot(
-                time=numpy.array(times),
-                values=numpy.array(values),
-                title=title,
-                xlabel="Time",
-                ylabel=ylabel,
-                plot_axis_type=_axis_type_for([values]),
-            )
-            logger.debug(f"report_plot_single: saved plot → {file}")
-            return f'<div class="time-series-plot"><img src="{file}"></div>'
-        except Exception as exc:
-            logger.error(f"report_plot_single failed for cache_id={cache_id}: {exc}", exc_info=True)
-            raise
-
-
-    @tool_spec(
-        args_schema=ReportComparisonPlotInput,
-        metadata=ToolSpec(
-            primary_function="""
-                Plot 2-5 report series overlaid on the same axis.
-                Use when all series share the same units.
-            """,
-            positive_examples=[
-                PositiveExample(input="Compare multiple GDP series from the report on the same axis."),
-            ],
-        ),
-    )
-    @staticmethod
-    def report_plot_comparison(
-        cache_ids: list[str],
-        date_from: str | None,
-        date_to: str | None,
-        title: str,
-        ylabel: str,
-        labels: list[str] | None,
-    ) -> str:
-        try:
-            loaded = [_load_series_by_cache_id(nid, date_from, date_to) for nid in cache_ids]
-            file = generate_time_series_comparison(
-                time=[numpy.array(t[0]) for t in loaded],
-                values=[numpy.array(t[1]) for t in loaded],
-                title=title,
-                xlabel="Time",
-                ylabel=ylabel,
-                labels=labels,
-                plot_axis_type=_axis_type_for([t[1] for t in loaded]),
-            )
-            logger.debug(f"report_plot_comparison: saved plot → {file}")
-            return f'<div class="time-series-plot"><img src="{file}"></div>'
-        except Exception as exc:
-            logger.error(f"report_plot_comparison failed for cache_ids={cache_ids}: {exc}", exc_info=True)
-            raise
-
-
-    @tool_spec(
-        args_schema=ReportTwinxPlotInput,
-        metadata=ToolSpec(
-            primary_function="""
-                Plot exactly 2 report series on dual y-axes (left and right).
-                Use when exactly 2 series have different units.
-            """,
-            positive_examples=[
-                PositiveExample(input="Plot GDP and unemployment rate on dual axes."),
-            ],
-        ),
-    )
-    @staticmethod
-    def report_plot_twinx(
-        left_cache_id: str,
-        right_cache_id: str,
-        date_from: str | None,
-        date_to: str | None,
-        title: str,
-        left_ylabel: str,
-        right_ylabel: str,
-        left_label: str | None,
-        right_label: str | None,
-    ) -> str:
-        try:
-            left_times, left_values = _load_series_by_cache_id(left_cache_id, date_from, date_to)
-            right_times, right_values = _load_series_by_cache_id(right_cache_id, date_from, date_to)
-            labels = [left_label, right_label] if left_label and right_label else None
-            file = generate_time_series_twinx(
-                time=[numpy.array(left_times), numpy.array(right_times)],
-                left=numpy.array(left_values),
-                right=numpy.array(right_values),
-                title=title,
-                xlabel="Time",
-                left_ylabel=left_ylabel,
-                right_ylabel=right_ylabel,
-                plot_axis_type=_axis_type_for([left_values, right_values]),
-                labels=labels,
-            )
-            logger.debug(f"report_plot_twinx: saved plot → {file}")
-            return f'<div class="time-series-plot"><img src="{file}"></div>'
-        except Exception as exc:
-            logger.error(f"report_plot_twinx failed for left={left_cache_id}, right={right_cache_id}: {exc}", exc_info=True)
-            raise
-
-
-    @tool_spec(
-        args_schema=ReportTwinxComparisonPlotInput,
-        metadata=ToolSpec(
-            primary_function="""
-                Plot 3-5 report series with exactly 2 distinct units on dual y-axes.
-                Assign series sharing the majority unit to left_cache_ids and the
-                remaining series to right_cache_ids.
-            """,
-            positive_examples=[
-                PositiveExample(input="Plot GDP (left) with CPI and PCE (right) on dual axes."),
-            ],
-        ),
-    )
-    @staticmethod
-    def report_plot_twinx_comparison(
-        left_cache_ids: list[str],
-        right_cache_ids: list[str],
-        date_from: str | None,
-        date_to: str | None,
-        title: str,
-        left_ylabel: str,
-        right_ylabel: str,
-        labels: list[str] | None,
-    ) -> str:
-        try:
-            left_loaded = [_load_series_by_cache_id(nid, date_from, date_to) for nid in left_cache_ids]
-            right_loaded = [_load_series_by_cache_id(nid, date_from, date_to) for nid in right_cache_ids]
-            file = generate_time_series_twinx_comparison(
-                time=[numpy.array(t[0]) for t in left_loaded + right_loaded],
-                left=[numpy.array(t[1]) for t in left_loaded],
-                right=[numpy.array(t[1]) for t in right_loaded],
-                title=title,
-                xlabel="Time",
-                left_ylabel=left_ylabel,
-                right_ylabel=right_ylabel,
-                plot_axis_type=_axis_type_for([t[1] for t in left_loaded + right_loaded]),
-                labels=labels,
-            )
-            logger.debug(f"report_plot_twinx_comparison: saved plot → {file}")
-            return f'<div class="time-series-plot"><img src="{file}"></div>'
-        except Exception as exc:
-            logger.error(f"report_plot_twinx_comparison failed for left={left_cache_ids}, right={right_cache_ids}: {exc}", exc_info=True)
-            raise
-
-
-    @tool_spec(
-        args_schema=ReportStackPlotInput,
-        metadata=ToolSpec(
-            primary_function="""
-                Plot 2-5 report series on vertically stacked axes sharing a common time axis.
-                Use when series have more than 2 distinct units.
-            """,
-            positive_examples=[
-                PositiveExample(input="Stack GDP, unemployment, and CPI from the report."),
-            ],
-        ),
-    )
-    @staticmethod
-    def report_plot_stack(
-        cache_ids: list[str],
-        date_from: str | None,
-        date_to: str | None,
-        title: str,
-        ylabels: list[str] | None,
-        labels: list[str] | None,
-    ) -> str:
-        try:
-            loaded = [_load_series_by_cache_id(nid, date_from, date_to) for nid in cache_ids]
-            file = generate_time_series_stack(
-                time=[numpy.array(t[0]) for t in loaded],
-                values=[numpy.array(t[1]) for t in loaded],
-                title=title,
-                xlabel="Time",
-                ylabels=ylabels,
-                labels=labels,
-                plot_axis_type=_axis_type_for([t[1] for t in loaded]),
-            )
-            logger.debug(f"report_plot_stack: saved plot → {file}")
-            return f'<div class="time-series-plot"><img src="{file}"></div>'
-        except Exception as exc:
-            logger.error(f"report_plot_stack failed for cache_ids={cache_ids}: {exc}", exc_info=True)
-            raise
+            result = await render_report_plot(report_id_or_title,
+                                              owner=current_user_id())
+        except ValueError as exc:
+            # Missing, ambiguous, or nothing loadable. The message names the candidates
+            # when a title matched several, which is the model's cue to ask.
+            logger.warning(f"report_plot({report_id_or_title!r}): {exc}")
+            return str(exc)
+        return result["html"]
