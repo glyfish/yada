@@ -175,6 +175,53 @@ def _plot_file(html: str) -> Path | None:
     return path if path.is_file() else None
 
 
+def _series_key_text(key: list[dict]) -> str:
+    """The id -> name mapping, as a markdown pipe table.
+
+    The chart's legend carries bare series ids, because it has to: the median FRED title
+    is 81 characters and renders about as wide as the whole plot, and 99.4% of the
+    catalogue is over 30. So the id names the curve and this names the id.
+
+    The browser gets the same mapping as an HTML table above the chart. An MCP client
+    gets only the image, so without this a report plots as three indistinguishable
+    coloured lines.
+
+    Pipe-delimited rather than space-aligned because the App renders this in a
+    proportional font, where padding to a column width aligns nothing -- the pipes are
+    what survive. The cells are ALSO padded, so the same string still reads as a table
+    in a client that shows it as plain text, and `plot_app.py` turns it into a real
+    <table> with ruled columns.
+
+    The title goes LAST because it is the one column with no bound -- titles run to 482
+    characters -- and a variable-width field in the middle breaks the alignment of
+    everything after it.
+    """
+    if not key:
+        return ""
+
+    def _cell(value) -> str:
+        # 2,363 FRED titles contain a pipe ("39) ... Disputes with Clients | Dealers"),
+        # which would split one cell into two and hand the row an extra column. Escaped
+        # the way markdown escapes it; `plot_app.py` splits on unescaped pipes only.
+        return str(value or "").replace("|", r"\|")
+
+    twin = any(row.get("axis") for row in key)
+    header = ["ID", "Units"] + (["Axis"] if twin else []) + ["Series"]
+    rows = [[_cell(row.get("native_id")), _cell(row.get("units"))]
+            + ([_cell(row.get("axis"))] if twin else [])
+            + [_cell(row.get("title"))]
+            for row in key]
+    # Pad every column but the last; padding an unbounded title buys nothing.
+    widths = [max(len(r[i]) for r in [header, *rows]) for i in range(len(header) - 1)]
+
+    def _line(cells: list[str]) -> str:
+        padded = [c.ljust(w) for c, w in zip(cells, widths)] + [cells[-1]]
+        return "| " + " | ".join(padded) + " |"
+
+    rule = "|" + "|".join("-" * (w + 2) for w in [*widths, len(header[-1])]) + "|"
+    return "\n".join([_line(header), rule, *(_line(r) for r in rows)])
+
+
 def _as_image(path: Path) -> ImageContent:
     data = base64.b64encode(path.read_bytes()).decode()
     logger.info(f"returning {path.name} ({path.stat().st_size} bytes)")
@@ -317,6 +364,9 @@ async def plot_report(report_id_or_title: str) -> list[TextContent | ImageConten
         f"{result['report_title']} — {result['plot_type']} plot of "
         f"{result['series_count']} series (report_id {result['report_id']})"
     )
+    key = _series_key_text(result.get("key") or [])
+    if key:
+        summary = f"{summary}\n\n{key}"
 
     plot_file = _plot_file(result["html"])
     if plot_file is None:

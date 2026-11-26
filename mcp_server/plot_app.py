@@ -51,13 +51,36 @@ looks ignored, restart Goose before doubting the server.
 HTML = r"""<!doctype html>
 <html><head><meta charset="utf-8"><style>
  *{box-sizing:border-box}
- :root{--fg:#1a1a1a;--muted:#666;--line:rgba(0,0,0,.08)}
+ :root{--fg:#1a1a1a;--muted:#666;--line:rgba(0,0,0,.08);--rule:rgba(0,0,0,.22)}
  html{background:transparent}
  html,body{height:auto;min-height:100%;margin:0}
  body{font:13px/1.5 -apple-system,system-ui,sans-serif;color:var(--fg);padding:10px}
  .wrap{display:flex;flex-direction:column;gap:10px}
- .note{white-space:pre-wrap}
+ /* pre-wrap lives on the prose runs, not the whole note: inside a table it would
+    turn the markup's own indentation into visible text nodes between cells. */
+ .note{white-space:normal}
+ .note .para{white-space:pre-wrap}
+ /* The line above the series key titles the whole block, so it is centred over it.
+    Only that one: ordinary agent commentary stays left, where prose belongs. */
+ .note .caption{text-align:center;margin-bottom:6px}
  .note h2{font-size:15px;margin:0 0 4px}
+ /* The series key. The chart's legend can only carry ids -- the median FRED title is
+    81 characters, about as wide as the whole plot -- so this table is what names them,
+    and it has to be readable at a glance: ruled columns, headers centred over them. */
+ /* margin-inline auto centres the key under its centred caption and over the chart,
+    which is centred too -- the three line up as one column. */
+ .note table{border-collapse:collapse;margin:2px auto 8px;font-size:12px;
+             border:1px solid var(--rule)}
+ .note th,.note td{padding:4px 10px;border-right:1px solid var(--rule);
+                   text-align:left;vertical-align:top}
+ .note th:last-child,.note td:last-child{border-right:0}
+ .note th{text-align:center;font-weight:600;white-space:nowrap;
+          border-bottom:1px solid var(--rule)}
+ /* The fixed-width columns stay on one line; only the title is allowed to wrap, or a
+    229-character series name drags the table past the panel. */
+ .note td{white-space:nowrap}
+ .note td:last-child{white-space:normal}
+ .note tbody tr + tr td{border-top:1px solid var(--line)}
  /* Cap the chart rather than filling the feed column. The PNGs are far larger
     than they need to be -- bar charts render at dpi=300, ~2529x1967 -- so left
     at width:100% they dominate the conversation. Controlling this is the point
@@ -132,12 +155,68 @@ function escapeHtml(s){
 
 // The agent's commentary is light markdown: "## Title" and "- **bold** item".
 // Render just enough of it; anything unrecognised stays literal text.
-function renderNote(text){
-  if(!text){ note.innerHTML = ''; return; }
-  var html = escapeHtml(text)
+function inlineMd(s){
+  return escapeHtml(s)
     .replace(/^## (.+)$/gm, '<h2>$1</h2>')
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-  note.innerHTML = html;
+}
+
+// A pipe table row, and the |---|---| rule that marks the line above it as a header.
+function isRow(l){ return !!l && /^\s*\|.*\|\s*$/.test(l); }
+function isRule(l){ return !!l && /^\s*\|[\s:|-]*-[\s:|-]*\|\s*$/.test(l); }
+// Split on unescaped pipes only. Thousands of FRED titles contain a '|', which the
+// server escapes as '\|'; splitting on every pipe would give those rows an extra cell.
+function cellsOf(l){
+  return l.trim().replace(/^\|/, '').replace(/\|$/, '').split(/(?<!\\)\|/)
+          .map(function(c){ return c.trim().replace(/\\\|/g, '|'); });
+}
+
+function tableHtml(head, body){
+  var th = head.map(function(c){ return '<th>' + inlineMd(c) + '</th>'; }).join('');
+  var tr = body.map(function(r){
+    return '<tr>' + r.map(function(c){
+      return '<td>' + inlineMd(c) + '</td>';
+    }).join('') + '</tr>';
+  }).join('');
+  return '<table><thead><tr>' + th + '</tr></thead><tbody>' + tr + '</tbody></table>';
+}
+
+// The series key arrives as a markdown pipe table. Space-padded columns cannot align
+// in this page's proportional font, so the pipes are what carry the structure and the
+// table is rebuilt as real HTML here. Everything else stays prose.
+function renderNote(text){
+  if(!text){ note.innerHTML = ''; return; }
+  var lines = String(text).split('\n'), out = [], prose = [], i = 0;
+  // `caption` marks a prose run that immediately precedes a table -- the summary line
+  // a plot tool puts above its series key. That one is centred; ordinary commentary,
+  // which can run to paragraphs, is not. Tagged here rather than matched in CSS with
+  // :has(+ table) so the rule does not depend on a selector the host may not support.
+  function flush(caption){
+    // Blank lines around a table are the separator, not content: left in, pre-wrap
+    // renders them as an empty row above or below it.
+    while (prose.length && !prose[0].trim()) prose.shift();
+    while (prose.length && !prose[prose.length - 1].trim()) prose.pop();
+    if (prose.length) {
+      out.push('<div class="para' + (caption ? ' caption' : '') + '">'
+               + inlineMd(prose.join('\n')) + '</div>');
+    }
+    prose = [];
+  }
+  while (i < lines.length) {
+    if (isRow(lines[i]) && isRule(lines[i + 1])) {
+      flush(true);
+      var head = cellsOf(lines[i]);
+      i += 2;
+      var body = [];
+      while (i < lines.length && isRow(lines[i])) { body.push(cellsOf(lines[i])); i++; }
+      out.push(tableHtml(head, body));
+    } else {
+      prose.push(lines[i]);
+      i++;
+    }
+  }
+  flush(false);
+  note.innerHTML = out.join('');
 }
 
 function render(result){

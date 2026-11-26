@@ -275,6 +275,7 @@ async def render_series_plot(
         )
     elif plot_type == "twinx":
         left, right = series[0], series[1]
+        left["axis"], right["axis"] = "left", "right"
         file = generate_time_series_twinx(
             time=[left["time"], right["time"]],
             left=left["values"], right=right["values"], title=title,
@@ -286,6 +287,10 @@ async def render_series_plot(
         majority_unit = Counter(s["units"] for s in series).most_common(1)[0][0]
         left = [s for s in series if s["units"] == majority_unit]
         right = [s for s in series if s["units"] != majority_unit]
+        for s in left:
+            s["axis"] = "left"
+        for s in right:
+            s["axis"] = "right"
         file = generate_time_series_twinx_comparison(
             time=[s["time"] for s in left + right], left=[s["values"] for s in left],
             right=[s["values"] for s in right], title=title, xlabel="Time",
@@ -303,6 +308,15 @@ async def render_series_plot(
         "plot_type": plot_type,
         "series_count": len(series),
         "html": _series_table_html(series) + f'<div class="time-series-plot"><img src="{file}"></div>',
+        # The legend key, without the observation arrays. The browser reads the same
+        # mapping out of the HTML table above, but only the <img> survives a trip to an
+        # MCP client, so that door has to be handed the key separately or the chart
+        # arrives labelled with bare ids and nothing to resolve them against. `axis` is
+        # set only on a twin-axis plot, where which scale a curve reads against is the
+        # thing a legend of ids cannot express.
+        "key": [{"native_id": s["native_id"], "title": s["title"],
+                 "units": s["units"], "axis": s.get("axis", "")}
+                for s in series],
     }
 
 

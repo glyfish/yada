@@ -187,14 +187,15 @@ def register(server, plot_uri: str, plot_meta: dict) -> None:
         # The legend table render_series_plot builds never reaches an MCP client -- only
         # the first <img> survives -- so the id/title/units mapping goes in the text, or
         # the chart arrives with a legend of bare ids and no key.
-        from mcp_server.server import _as_image, _plot_file   # late: server imports us
-        key = "; ".join(
-            f"{e['native_id'] or e['cache_id'][:8]}"
-            + (f" ({e['metadata'].get('units')})" if (e.get('metadata') or {}).get("units") else "")
-            + (f" — {e['title']}" if e.get("title") else "")
-            for e in entries)
+        from mcp_server.server import (   # late: server imports us
+            _as_image, _plot_file, _series_key_text)
+        # Built from what was actually drawn, not from `entries`: a series that failed
+        # to load is absent from the chart and must be absent from its key too.
+        key = _series_key_text(result.get("key") or [])
         summary = (f"{title} — {result['plot_type']} plot of {result['series_count']} "
-                   f"series from cache: {key}")
+                   f"series from cache")
+        if key:
+            summary = f"{summary}\n\n{key}"
 
         path = _plot_file(result["html"])
         if path is None:
