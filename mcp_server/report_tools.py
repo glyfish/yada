@@ -56,11 +56,19 @@ def _row(record: dict) -> dict[str, Any]:
 
 
 def register(server) -> None:
-    """Register the six report tools."""
+    """Register the six report tools.
+
+    Every one returns `dict[str, Any]`, and the parameter matters: a bare `dict`
+    annotation generates NO output schema, and without one the server sends the reply
+    as text only and `structured_content` arrives as None. These tools return data a
+    caller indexes into -- report_id, reports[] -- so that is the difference between
+    `result.structured_content["reports"]` and a TypeError on None. `fetch_fred_series`
+    was already written this way, which is why only these six were affected.
+    """
 
     def create_report_tool(report_title: str, cache_ids: list[str],
-                           report_description: str = "",
-                           date_from: str = "", date_to: str | None = None) -> dict:
+                           report_description: str = "", date_from: str = "",
+                           date_to: str | None = None) -> dict[str, Any]:
         started = perf_counter()
         args = {"report_title": report_title, "cache_ids": cache_ids}
         try:
@@ -79,14 +87,14 @@ def register(server) -> None:
         _log("create_report", args, started, created["report_id"])
         return {"status": "ok", **_row(created)}
 
-    def list_reports() -> dict:
+    def list_reports() -> dict[str, Any]:
         started = perf_counter()
         records = ReportCache._list_reports_sync(owner=current_user_id())
         _log("list_reports", {}, started, f"{len(records)} reports")
         return {"status": "ok", "count": len(records),
                 "reports": [_row(r) for r in records]}
 
-    def search_reports(query: str) -> dict:
+    def search_reports(query: str) -> dict[str, Any]:
         started = perf_counter()
         owner = current_user_id()
         resolution = resolve_report(query, owner=owner)
@@ -107,7 +115,7 @@ def register(server) -> None:
         return {"status": "ok", "count": len(rows), "reports": rows}
 
     def add_series_to_report(report_id_or_title: str, cache_ids: list[str],
-                             extend_date_range: bool = True) -> dict:
+                             extend_date_range: bool = True) -> dict[str, Any]:
         started = perf_counter()
         args = {"report": report_id_or_title, "cache_ids": cache_ids}
         try:
@@ -126,7 +134,7 @@ def register(server) -> None:
                 **_row(change.record)}
 
     def remove_series_from_report(report_id_or_title: str,
-                                  series: list[str]) -> dict:
+                                  series: list[str]) -> dict[str, Any]:
         started = perf_counter()
         args = {"report": report_id_or_title, "series": series}
         try:
@@ -140,7 +148,7 @@ def register(server) -> None:
                 "not_in_report": change.skipped,
                 **_row(change.record)}
 
-    def delete_report(report_id: str) -> dict:
+    def delete_report(report_id: str) -> dict[str, Any]:
         started = perf_counter()
         # Owner-scoped, so this cannot reach another caller's report: an id that is
         # not theirs is simply not found, which is the same answer the store gives
