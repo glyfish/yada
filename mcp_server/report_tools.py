@@ -1,5 +1,5 @@
 """
-Report tools: create, list, search.
+Report tools: create, list, search, delete, and add/remove series.
 
 `plot_report` already existed and lives in server.py beside the other App-bound
 tools. What was missing was everything that gets a report to exist in the first
@@ -24,7 +24,9 @@ from typing import Any
 
 from mcp.types import TextContent
 
-from apps.agentic.agents.data.reports import create_report, resolve_report
+from apps.agentic.agents.data.reports import (
+    add_report_series, create_report, remove_report_series, resolve_report,
+)
 from apps.agentic.db.report_cache import ReportCache
 from apps.core.identity import current_user_id
 
@@ -54,7 +56,7 @@ def _row(record: dict) -> dict[str, Any]:
 
 
 def register(server) -> None:
-    """Register create_report, list_reports and search_reports."""
+    """Register the six report tools."""
 
     def create_report_tool(report_title: str, cache_ids: list[str],
                            report_description: str = "",
@@ -104,6 +106,40 @@ def register(server) -> None:
         _log("search_reports", {"query": query}, started, f"{len(rows)} reports")
         return {"status": "ok", "count": len(rows), "reports": rows}
 
+    def add_series_to_report(report_id_or_title: str, cache_ids: list[str],
+                             extend_date_range: bool = True) -> dict:
+        started = perf_counter()
+        args = {"report": report_id_or_title, "cache_ids": cache_ids}
+        try:
+            change = add_report_series(report_id_or_title, cache_ids,
+                                       extend_range=extend_date_range)
+        except ValueError as exc:
+            # Ambiguous title, unknown report, or a bad cache_id. All three are things
+            # the model can act on, so they come back as text, not a protocol error.
+            _log("add_series_to_report", args, started, "refused")
+            return {"status": "error", "detail": str(exc)}
+        _log("add_series_to_report", args, started,
+             f"added {len(change.changed)}, already present {len(change.skipped)}")
+        return {"status": "ok", "added": change.changed,
+                "already_present": change.skipped,
+                "date_range_extended": change.range_extended,
+                **_row(change.record)}
+
+    def remove_series_from_report(report_id_or_title: str,
+                                  series: list[str]) -> dict:
+        started = perf_counter()
+        args = {"report": report_id_or_title, "series": series}
+        try:
+            change = remove_report_series(report_id_or_title, series)
+        except ValueError as exc:
+            _log("remove_series_from_report", args, started, "refused")
+            return {"status": "error", "detail": str(exc)}
+        _log("remove_series_from_report", args, started,
+             f"removed {len(change.changed)}, not present {len(change.skipped)}")
+        return {"status": "ok", "removed": change.changed,
+                "not_in_report": change.skipped,
+                **_row(change.record)}
+
     def delete_report(report_id: str) -> dict:
         started = perf_counter()
         # Owner-scoped, so this cannot reach another caller's report: an id that is
@@ -128,6 +164,45 @@ def register(server) -> None:
             "one cannot be undone.\n"
             "The series themselves are untouched; only the report that grouped them "
             "is removed. Confirm with the user before calling this."),
+    )
+
+    server.add_tool(
+        add_series_to_report, name="add_series_to_report",
+        description=(
+            "Add cached series to a report the caller already has, and return the "
+            "report as it now stands.\n"
+            "- report_id_or_title: the id, or a fragment of the title. A fragment "
+            "matching several reports returns the candidates and changes nothing.\n"
+            "- cache_ids: ids from fetch_fred_series. Every id is checked before "
+            "anything is written, so a bad one leaves the report untouched rather than "
+            "half-updated. A series already in the report is reported back under "
+            "already_present and added once, never twice.\n"
+            "- extend_date_range: default true. A report's date range CLIPS every "
+            "series when it is plotted, so adding a series that starts earlier than "
+            "the range would otherwise draw it with its early years missing, on a "
+            "chart that looks correct. True widens the range to cover what was added; "
+            "it never narrows it. Pass false only to keep a deliberately narrow "
+            "window, and expect the new series to be clipped to it.\n"
+            "Use this when the user wants another series on an existing report. To "
+            "start a new one, use create_report."),
+    )
+
+    server.add_tool(
+        remove_series_from_report, name="remove_series_from_report",
+        description=(
+            "Remove series from one of the caller's reports, and return the report as "
+            "it now stands. The series themselves stay in the cache and on any other "
+            "report holding them; only this report's membership changes.\n"
+            "- report_id_or_title: the id, or a fragment of the title.\n"
+            "- series: which series to drop, each named by its cache_id OR by its "
+            "source id as list_reports shows it ('UNRATE'), case-insensitively. A name "
+            "that is not on the report is reported under not_in_report rather than "
+            "failing the call, unless none of them match, which changes nothing and "
+            "says what the report does hold.\n"
+            "Removing the last series is refused: a report with none cannot be "
+            "plotted. Delete the whole report with delete_report instead.\n"
+            "The date range is left as it is, so the remaining series keep the window "
+            "they were plotted with."),
     )
 
     server.add_tool(
@@ -170,4 +245,5 @@ def register(server) -> None:
             "answer, not an error."),
     )
 
-    logger.info("Report tools registered: create_report, list_reports, search_reports, delete_report")
+    logger.info("Report tools registered: create_report, list_reports, search_reports, "
+                "delete_report, add_series_to_report, remove_series_from_report")
