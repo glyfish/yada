@@ -21,6 +21,9 @@ from mcp.server.mcpserver import MCPServer
 import mcp_server.report_tools as report_tools
 
 
+#: The report tools registered unconditionally. `open_plot_report_view` is deliberately
+#: absent: it is registered only when an App page is bound to it, so a server with no
+#: picker page does not advertise a view the client cannot resolve.
 REPORT_TOOLS = [
     "create_report",
     "list_reports",
@@ -28,6 +31,7 @@ REPORT_TOOLS = [
     "delete_report",
     "add_series_to_report",
     "remove_series_from_report",
+    "set_report_metadata",
 ]
 
 
@@ -40,7 +44,9 @@ def registered():
     return {t.name: t for t in asyncio.run(server.list_tools())}
 
 
-def test_all_six_report_tools_register(registered):
+def test_every_report_tool_registers(registered):
+    """Spelled out rather than counted, so adding a tool is a deliberate edit here and
+    a tool that silently stopped registering is a failure."""
     assert sorted(registered) == sorted(REPORT_TOOLS)
 
 

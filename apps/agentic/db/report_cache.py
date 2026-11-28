@@ -10,7 +10,10 @@ from sqlalchemy import MetaData, Table, create_engine, delete, select, text, upd
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import Engine
 
-from apps.agentic.db.metadata_filter import metadata_where
+from apps.agentic.db.metadata_filter import metadata_where, source_present
+from apps.agentic.core.agents.series_metadata import (
+    USER_METADATA_KEY, user_metadata_of,
+)
 from lib.logger import get_logger
 from apps.core.environment import db_url as environment_db_url
 
@@ -158,12 +161,17 @@ class ReportCache:
             t.c.report_title,
             t.c.report_description,
             t.c.metadata,
+            t.c.time_series_info,
             t.c.time_range_from,
             t.c.time_range_to,
         )
         # A report's metadata column is the merged catalog, so the same containment
         # filter used for a cached series selects reports that contain a matching series.
         if source:
+            # The source floor goes in unconditionally: metadata_where returns None for
+            # any filter it cannot express, and treating that as "no constraint" dropped
+            # the source as well, so source='fred' could return ETF-only reports.
+            stmt = stmt.where(source_present(t.c.metadata, source))
             mw = metadata_where(t.c.metadata, source, where)
             if mw is not None:
                 stmt = stmt.where(mw)
@@ -179,6 +187,11 @@ class ReportCache:
                 "report_title": r["report_title"],
                 "report_description": r["report_description"] or "",
                 "metadata": dict(r["metadata"] or {}),
+                # Without this every listed report claims to hold zero series: `_row` in
+                # mcp_server/report_tools.py reads `time_series_info`, and the projection
+                # used to omit it, so MCP `list_reports` reported series_count=0 for a
+                # report with three series.
+                "time_series_info": list(r["time_series_info"] or []),
                 "time_range_from": str(r["time_range_from"] or ""),
                 "time_range_to": str(r["time_range_to"] or ""),
             }
@@ -252,6 +265,21 @@ class ReportCache:
 
         t = cls._table_or_raise()
         scope = cls._owned_by(owner)
+
+        # The authored block is the only part of `metadata` that is not derived from the
+        # member series, and every caller passes a freshly rebuilt catalogue --
+        # `report_metadata_from_series` takes only the series list, so it cannot carry
+        # anything forward. Reading the stored block here is what keeps a title edit or
+        # an added series from silently untagging a report; the alternative was three
+        # writers each remembering, forever. Merged per key, so setting tags does not
+        # drop a note, and an incoming key wins over the stored one.
+        incoming = dict(metadata or {})
+        previous = cls._get_by_report_id_sync(report_id, owner=owner) or {}
+        carried = {**user_metadata_of(previous.get("metadata")),
+                   **user_metadata_of(incoming)}
+        if carried:
+            incoming[USER_METADATA_KEY] = carried
+
         stmt = (
             update(t)
             .where(t.c.report_id == uid)
@@ -259,7 +287,7 @@ class ReportCache:
                 report_title=report_title,
                 report_description=report_description,
                 time_series_info=list(time_series_info),
-                metadata=metadata or {},
+                metadata=incoming,
                 time_range_from=_as_date(time_range_from),
                 time_range_to=_as_date(time_range_to),
             )

@@ -186,11 +186,21 @@ def _categories_for(conn, ids: list[int], limit: int) -> list[FredCategory]:
 
 # ----------------------------------------------------------------------------- the tools
 
+#: Widest page a caller may ask for. The picker view wants a tableful rather than the
+#: chat default of 10; measured cost over the 854,318-row catalogue is 40-340ms either
+#: way, so the ceiling is about keeping a reply readable, not about the query.
+MAX_LIMIT = 500
+
+
 def _search(query: str | None, category: str | None, frequency: str | None,
             seasonally_adjusted: bool | None, limit: int) -> FredHits:
     # Values are stringified because filters_requested is dict[str, str] -- the
     # envelope echoes what was ASKED FOR, in the form a reader can compare against
     # filters_applied, not in the argument's original type.
+    # An unclamped limit reads as a result, not an error: 0 returns no rows and the
+    # reply says "Nothing matched", which is a different and wrong answer, and a
+    # negative escapes to the client as a protocol error from the SQL layer.
+    limit = max(1, min(int(limit), MAX_LIMIT))
     requested = {k: str(v) for k, v in
                  (("query", query), ("category", category), ("frequency", frequency),
                   ("seasonally_adjusted", seasonally_adjusted))
@@ -425,9 +435,15 @@ def _roots() -> list[str]:
         return []
 
 
-def register(server) -> None:
+def register(server, picker_uri: str | None = None,
+             picker_meta: dict | None = None) -> None:
     """
-    Register search_fred and describe_fred.
+    Register search_fred, describe_fred and -- when an App page is supplied --
+    open_create_report_view.
+
+    The picker pair is threaded in rather than imported so this module stays unaware of
+    which page it is bound to, exactly as series_tools does for the chart App. Passing
+    neither simply omits the view tool, which is what a host with no App support wants.
 
     add_tool rather than the decorator, for the same reason document_tools gives: the
     descriptions carry live counts and the real top-level category names, and a decorator
@@ -450,6 +466,19 @@ def register(server) -> None:
                       limit: int = DESCRIBE_LIMIT) -> FredCategories:
         return _tool_call("describe_fred", {"category": category, "limit": limit},
                           lambda: _describe(category, limit))
+
+    def open_create_report_view(query: str | None = None, category: str | None = None,
+                                frequency: str | None = None,
+                                seasonally_adjusted: bool | None = None,
+                                limit: int = 100) -> FredHits:
+        # Same search as search_fred, same ranking, a wider default page. The only
+        # difference is the App binding on the tool definition, which is what makes the
+        # host mount the picker instead of printing rows into the chat.
+        return _tool_call("open_create_report_view",
+                          {"query": query, "category": category, "frequency": frequency,
+                           "seasonally_adjusted": seasonally_adjusted, "limit": limit},
+                          lambda: _search(query, category, frequency,
+                                          seasonally_adjusted, limit))
 
     roots = _roots()
     root_line = (f" The {len(roots)} top-level categories are "
@@ -514,5 +543,35 @@ def register(server) -> None:
             "published as `series_total`. Call this before search_fred whenever a "
             "category name is uncertain."),
     )
+
+    if picker_uri and picker_meta is not None:
+        server.add_tool(
+            open_create_report_view, name="open_create_report_view",
+            meta=picker_meta,
+            description=(
+                "Open the report-builder VIEW, pre-loaded with a FRED search, so the "
+                "user picks the series and the view saves the report itself.\n"
+                "Call this -- not search_fred -- whenever the request asks for a create "
+                "/ build / new time series report VIEW, table or picker, e.g. 'in a "
+                "create time series report view show the most popular commodities "
+                "series'. Arguments are the same as search_fred and are ranked the same "
+                "way (FRED's own popularity, highest first).\n"
+                "- category: PREFER THIS for a topic word. Measured: category="
+                "'commodities' resolves to 'Prices > Commodities' and returns crude oil, "
+                "gasoline and copper prices, while query='commodities' matches the word "
+                "in titles and returns 9,436 producer-price indices instead.\n"
+                "- query: use for a named measure, with FRED's own spelling ('gross "
+                "domestic product', not 'GDP').\n"
+                "- limit: how many rows the table gets, default 100, capped at "
+                f"{MAX_LIMIT}. A picker wants a tableful, not a chat-sized page.\n"
+                "After this call, STOP and say the view is open. Do NOT call "
+                "fetch_fred_series or create_report: the view does both when the user "
+                "clicks Create, and a report created here would duplicate theirs. The "
+                "save happens inside the view and is invisible to this conversation, so "
+                "do not report a report_id you were not given."),
+        )
+        logger.info("FRED tools registered: search_fred, describe_fred, "
+                    "open_create_report_view")
+        return
 
     logger.info("FRED tools registered: search_fred, describe_fred")

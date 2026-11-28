@@ -20,7 +20,9 @@ import uuid as _uuid
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence, TypedDict
 
-from apps.agentic.core.agents.series_metadata import report_metadata_from_series
+from apps.agentic.core.agents.series_metadata import (
+    report_metadata_from_series, user_metadata_block, user_metadata_of,
+)
 from apps.agentic.db.report_cache import ReportCache
 from apps.agentic.db.series_cache import SeriesCache
 from apps.core.identity import current_user_id
@@ -161,6 +163,8 @@ def create_report(
     cache_ids: Sequence[str],
     time_range_from: str = "",
     time_range_to: str | None = None,
+    tags: Sequence[str] | None = None,
+    note: str = "",
 ) -> dict:
     """Write a report and return {report_id, report_title, time_series_info}.
 
@@ -195,7 +199,8 @@ def create_report(
         time_series_info=time_series_info,
         time_range_from=time_range_from,
         time_range_to=time_range_to,
-        metadata=report_metadata_from_series(time_series_info),
+        metadata=report_metadata_from_series(
+            time_series_info, user=user_metadata_block(tags, note)),
         created_by=current_user_id(),
     )
     logger.debug(f"create_report: '{report_title}' → {report_id}")
@@ -207,7 +212,10 @@ def create_report(
             "report_description": report_description,
             "time_range_from": str(time_range_from),
             "time_range_to": time_range_to,
-            "time_series_info": time_series_info}
+            "time_series_info": time_series_info,
+            # What was STORED, normalized -- not what was passed. A caller that echoed
+            # its own argument would report "Energy" for a report tagged "energy".
+            "metadata": {"user": user_metadata_block(tags, note)}}
 
 
 # -------------------------------------------------------------- membership
@@ -276,6 +284,42 @@ def _write_membership(record: dict, time_series_info: list[TimeSeriesInfoEntry],
         # deleted in between. Say that rather than returning a success with no row.
         raise ValueError(f"Report {record['report_id']} could not be updated; it may "
                          f"have just been deleted.")
+    return updated
+
+
+def set_report_metadata(reference: str, tags: Sequence[str] | None = None,
+                        note: str = "", owner: str | None = None) -> dict:
+    """Set a report's authored metadata, leaving its series and text alone.
+
+    Merged per key by the store, not replaced wholesale: setting tags keeps an existing
+    note, and a call that names neither changes nothing. So this cannot clear a value,
+    only overwrite it -- which is the right default when the caller is a model acting on
+    one sentence, since "tag it energy" should not also discard a note the user dictated
+    last week.
+
+    Follows `_write_membership`: `_update_report_sync` is a whole-row replace with no
+    concept of a partial update, so the row's own title, dates and series are read off
+    the record and handed back.
+    """
+    record = resolve_report_or_raise(reference, owner=owner, action="tag")
+    entries = list(record.get("time_series_info") or [])
+    updated = ReportCache._update_report_sync(
+        report_id=str(record["report_id"]),
+        report_title=record.get("report_title") or "",
+        report_description=record.get("report_description") or "",
+        time_series_info=entries,
+        time_range_from=str(record.get("time_range_from") or ""),
+        time_range_to=(str(record["time_range_to"])
+                       if record.get("time_range_to") else None),
+        metadata=report_metadata_from_series(
+            entries, user=user_metadata_block(tags, note)),
+        owner=owner,
+    )
+    if updated is None:
+        raise ValueError(f"Report {record['report_id']} could not be updated; it may "
+                         f"have just been deleted.")
+    logger.debug(f"set_report_metadata: {record['report_id']} → "
+                 f"{user_metadata_of(updated.get('metadata'))}")
     return updated
 
 

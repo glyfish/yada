@@ -95,7 +95,9 @@ from mcp_server.fred_tools import register as register_fred_tools  # noqa: E402
 from mcp_server.series_tools import register as register_series_tools  # noqa: E402
 from mcp_server.report_tools import register as register_report_tools  # noqa: E402
 from mcp_server.request_log import install as install_request_log  # noqa: E402
-from mcp_server.plot_app import HTML as PLOT_APP_HTML, app_meta, meta_for  # noqa: E402
+from mcp_server.plot_app import HTML as PLOT_APP_HTML, app_meta, meta_for
+from mcp_server.series_picker_app import HTML as SERIES_PICKER_HTML  # noqa: E402
+from mcp_server.report_picker_app import HTML as REPORT_PICKER_HTML  # noqa: E402
 
 from lib.logger import get_logger  # noqa: E402
 
@@ -142,19 +144,64 @@ MCP_VERSION = _pkg_version("mcp")
 #: expander) and so the app can read hostContext.theme. See plan §5.4.
 PLOT_URI = "ui://yada/plot"
 
+#: The report builder: a search's hits as a multi-select table that writes the report
+#: itself. The MCP-native form of the browser's showSeriesSelectionTable.
+SERIES_PICKER_URI = "ui://yada/series-picker"
+
+#: The report picker: the caller's saved reports as a table, which hands the chosen one
+#: back to the model through `ui/message` so the ORDINARY plot path draws it. A page
+#: cannot mount another page, so this is the only route that avoids a second renderer.
+REPORT_PICKER_URI = "ui://yada/report-picker"
+
 apps = Apps()
-#: Stamped into the page so a stale build is visible at a glance rather than
-#: mistaken for a code bug: the client caches nothing, but the SERVER must be
-#: restarted for an edit to plot_app.py to take effect.
+
+#: Every App page, as (uri, html, name, title, description). A list rather than four
+#: constants because the single-App assumptions used to be spread over the module, and
+#: the second one existing is what makes them visible: a page added here is registered,
+#: stamped and checkable, and a page added anywhere else is not.
+_APP_PAGES = [
+    (PLOT_URI, PLOT_APP_HTML, "yada-plot", "yada chart",
+     "Displays a chart returned by the plot tools."),
+    (SERIES_PICKER_URI, SERIES_PICKER_HTML, "yada-series-picker",
+     "yada report builder",
+     "Select series from a search and save them as a report."),
+    (REPORT_PICKER_URI, REPORT_PICKER_HTML, "yada-report-picker",
+     "yada report picker",
+     "Pick one of the caller's saved reports and plot it."),
+]
+
+
+def _stamp(html: str) -> str:
+    """Stamp a page with a hash of itself.
+
+    So a stale build is visible at a glance rather than mistaken for a code bug: the
+    client caches nothing, but the SERVER must be restarted for an edit to a page to
+    take effect, and with two pages a restart that picked up only one is now possible.
+    """
+    return html.replace("__BUILD__", hashlib.sha256(html.encode()).hexdigest()[:6])
+
+
+#: Kept for the plot page specifically, which is what the existing tests name.
 APP_BUILD = hashlib.sha256(PLOT_APP_HTML.encode()).hexdigest()[:6]
 
-apps.add_html_resource(
-    PLOT_URI,
-    PLOT_APP_HTML.replace("__BUILD__", APP_BUILD),
-    name="yada-plot",
-    title="yada chart",
-    description="Displays a chart returned by the plot tools.",
-)
+for _uri, _html, _name, _title, _description in _APP_PAGES:
+    apps.add_html_resource(_uri, _stamp(_html), name=_name, title=_title,
+                           description=_description)
+
+#: The URIs an `add_tool`-registered tool may bind to. `@apps.tool` raises for an
+#: unregistered resource_uri (mcp/server/apps.py), but `add_tool(meta=app_meta(...))`
+#: is unchecked -- `meta` is opaque to it -- so a typo there produces a tool that
+#: advertises an App and renders nothing. Checked here instead.
+_REGISTERED_APP_URIS = frozenset(uri for uri, *_ in _APP_PAGES)
+
+
+def _bind(uri: str) -> dict:
+    """The `_meta` binding an add_tool call needs, refusing an unregistered page."""
+    if uri not in _REGISTERED_APP_URIS:
+        raise ValueError(
+            f"{uri!r} is not a registered App page; add it to _APP_PAGES. Binding a "
+            f"tool to a missing resource fails silently at render time in the client.")
+    return app_meta(uri, ["model", "app"])
 
 # `server` is constructed AFTER the tool definitions below: MCPServer collects an
 # extension's tools at construction, so decorators that run later are invisible to it.
@@ -385,9 +432,9 @@ server = MCPServer("yada", version=VERSION, extensions=[apps])
 # that is a Postgres connect and a reflect, with no Chroma scan.
 _initialize()
 register_document_tools(server)
-register_fred_tools(server)
-register_series_tools(server, PLOT_URI, app_meta(PLOT_URI, ["model", "app"]))
-register_report_tools(server)
+register_fred_tools(server, SERIES_PICKER_URI, _bind(SERIES_PICKER_URI))
+register_series_tools(server, PLOT_URI, _bind(PLOT_URI))
+register_report_tools(server, REPORT_PICKER_URI, _bind(REPORT_PICKER_URI))
 install_request_log(server)
 
 

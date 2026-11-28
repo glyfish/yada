@@ -26,7 +26,9 @@ from mcp.types import TextContent
 
 from apps.agentic.agents.data.reports import (
     add_report_series, create_report, remove_report_series, resolve_report,
+    set_report_metadata,
 )
+from apps.agentic.core.agents.series_metadata import user_metadata_of
 from apps.agentic.db.report_cache import ReportCache
 from apps.core.identity import current_user_id
 
@@ -43,6 +45,10 @@ def _log(tool: str, arguments: dict, started: float, outcome: str) -> None:
 def _row(record: dict) -> dict[str, Any]:
     """The listing projection: enough to choose a report, never its observations."""
     series = record.get("time_series_info") or []
+    # The authored block, echoed so a caller can confirm what was STORED. Without it a
+    # model that passed tags has no way to check they landed, and the values are
+    # normalized on write, so what it sent is not necessarily what is there.
+    user = user_metadata_of(record.get("metadata"))
     return {
         "report_id": str(record["report_id"]),
         "report_title": record.get("report_title") or "",
@@ -52,25 +58,30 @@ def _row(record: dict) -> dict[str, Any]:
         "time_range_from": str(record.get("time_range_from") or ""),
         "time_range_to": (str(record["time_range_to"])
                           if record.get("time_range_to") else None),
+        "tags": list(user.get("tags") or []),
+        "note": " ".join(user.get("note") or []),
     }
 
 
-def register(server) -> None:
-    """Register the six report tools.
+def register(server, picker_uri: str | None = None,
+             picker_meta: dict | None = None) -> None:
+    """Register the report tools, plus the picker opener when a page is bound.
 
     Every one returns `dict[str, Any]`, and the parameter matters: a bare `dict`
     annotation generates NO output schema, and without one the server sends the reply
     as text only and `structured_content` arrives as None. These tools return data a
     caller indexes into -- report_id, reports[] -- so that is the difference between
     `result.structured_content["reports"]` and a TypeError on None. `fetch_fred_series`
-    was already written this way, which is why only these six were affected.
+    was already written this way, which is why only the report tools were affected.
     """
 
     def create_report_tool(report_title: str, cache_ids: list[str],
                            report_description: str = "", date_from: str = "",
-                           date_to: str | None = None) -> dict[str, Any]:
+                           date_to: str | None = None,
+                           tags: list[str] | None = None,
+                           note: str = "") -> dict[str, Any]:
         started = perf_counter()
-        args = {"report_title": report_title, "cache_ids": cache_ids}
+        args = {"report_title": report_title, "cache_ids": cache_ids, "tags": tags}
         try:
             created = create_report(
                 report_title=report_title,
@@ -78,6 +89,8 @@ def register(server) -> None:
                 cache_ids=cache_ids,
                 time_range_from=date_from,
                 time_range_to=date_to,
+                tags=tags,
+                note=note,
             )
         except ValueError as exc:
             # A bad cache_id is the common case and the model can fix it, so say which
@@ -87,12 +100,27 @@ def register(server) -> None:
         _log("create_report", args, started, created["report_id"])
         return {"status": "ok", **_row(created)}
 
-    def list_reports() -> dict[str, Any]:
+    def _list(tool: str) -> dict[str, Any]:
+        """The listing both the chat tool and the picker's opener return.
+
+        One body on purpose. The two tools differ ONLY in the App binding on the tool
+        definition, which the client reads off its cached `tools/list` entry and cannot
+        decide per result -- so a view cannot be opened by a flag on `list_reports`,
+        and a second tool is the only shape that works. Two bodies would be two
+        projections of the same rows to keep in step, and the picker page indexes into
+        this one.
+        """
         started = perf_counter()
         records = ReportCache._list_reports_sync(owner=current_user_id())
-        _log("list_reports", {}, started, f"{len(records)} reports")
+        _log(tool, {}, started, f"{len(records)} reports")
         return {"status": "ok", "count": len(records),
                 "reports": [_row(r) for r in records]}
+
+    def list_reports() -> dict[str, Any]:
+        return _list("list_reports")
+
+    def open_plot_report_view() -> dict[str, Any]:
+        return _list("open_plot_report_view")
 
     def search_reports(query: str) -> dict[str, Any]:
         started = perf_counter()
@@ -147,6 +175,21 @@ def register(server) -> None:
         return {"status": "ok", "removed": change.changed,
                 "not_in_report": change.skipped,
                 **_row(change.record)}
+
+    def set_report_metadata_tool(report_id_or_title: str,
+                                 tags: list[str] | None = None,
+                                 note: str = "") -> dict[str, Any]:
+        started = perf_counter()
+        args = {"report": report_id_or_title, "tags": tags}
+        try:
+            updated = set_report_metadata(report_id_or_title, tags=tags, note=note,
+                                          owner=current_user_id())
+        except ValueError as exc:
+            # Ambiguous title or unknown report; both are things the model can act on.
+            _log("set_report_metadata", args, started, "refused")
+            return {"status": "error", "detail": str(exc)}
+        _log("set_report_metadata", args, started, "updated")
+        return {"status": "ok", **_row(updated)}
 
     def delete_report(report_id: str) -> dict[str, Any]:
         started = perf_counter()
@@ -227,6 +270,14 @@ def register(server) -> None:
             "- report_description: optional note about what it is for.\n"
             "- date_from / date_to: optional ISO dates. Leave date_to empty to keep "
             "the report tracking the latest data.\n"
+            "- tags: short labels the USER asked for, e.g. [\"energy\", \"inflation\"]. "
+            "Use the words they used; do not invent a taxonomy and do not tag a report "
+            "they said nothing about. Tags are lowercased and deduped on write, and "
+            "they are what a later search filters on, so a tag nobody asked for makes "
+            "the report findable under a name the user never said.\n"
+            "- note: a remark the user dictated about the report. Not a summary you "
+            "wrote, and not the description — report_description says what the report "
+            "is, note records what they said about it.\n"
             "Use this when the user wants to keep a set of series together, or asks "
             "to make or save a report. For a one-off chart use plot_series instead — "
             "it needs no report."),
@@ -253,5 +304,50 @@ def register(server) -> None:
             "answer, not an error."),
     )
 
-    logger.info("Report tools registered: create_report, list_reports, search_reports, "
-                "delete_report, add_series_to_report, remove_series_from_report")
+    server.add_tool(
+        set_report_metadata_tool, name="set_report_metadata",
+        description=(
+            "Set the tags or the note on one of the caller's saved reports, leaving its "
+            "series, title and dates untouched.\n"
+            "- report_id_or_title: the id, or a fragment of the title. A fragment "
+            "matching several reports returns the candidates and changes nothing.\n"
+            "- tags: the labels to store, replacing any tags already there. Pass the "
+            "full set the report should end up with, not just the new ones.\n"
+            "- note: replaces the stored note.\n"
+            "Each is merged on its own, so setting tags keeps an existing note and a "
+            "call naming neither changes nothing. This cannot clear a value, only "
+            "overwrite it.\n"
+            "Use this when the user wants to label, tag, annotate or re-tag a report "
+            "that already exists. To set them while making a report, pass tags and note "
+            "to create_report instead."),
+    )
+
+    names = ["create_report", "list_reports", "search_reports", "delete_report",
+             "add_series_to_report", "remove_series_from_report",
+             "set_report_metadata"]
+
+    # Only when a page is bound. Registered unconditionally it would advertise an App
+    # the client cannot resolve, and that fails silently at render time: the rows land
+    # in a collapsed accordion and nothing says the page was missing.
+    if picker_uri and picker_meta is not None:
+        server.add_tool(
+            open_plot_report_view, name="open_plot_report_view",
+            meta=picker_meta,
+            description=(
+                "Open the plot-report view: the caller's saved reports as a table they "
+                "pick from, which then plots the one they chose.\n"
+                "Takes no arguments — it returns every report the caller has, and the "
+                "view filters them in the browser by title, description or series id.\n"
+                "Use this when the user wants to CHOOSE which report to plot — 'in a "
+                "plot time series report view show me my reports', 'let me pick a "
+                "report to chart', or any request naming a report view. When the user "
+                "has already named one report, call plot_report directly instead; this "
+                "view is for choosing among several.\n"
+                "STOP after calling this. Do NOT call plot_report yourself: the view "
+                "asks for the plot itself once the user picks, and calling it here "
+                "would chart a report nobody chose. The user's pick arrives as a new "
+                "request naming its report_id."),
+        )
+        names.append("open_plot_report_view")
+
+    logger.info("Report tools registered: " + ", ".join(names))

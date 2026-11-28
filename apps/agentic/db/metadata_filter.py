@@ -34,6 +34,19 @@ def _flatten(where: dict | None) -> list[tuple[str, object]]:
     return out
 
 
+def source_present(metadata_col, source: str):
+    """
+    Condition that the metadata JSONB carries an entry for SOURCE at all.
+
+    Separate from ``metadata_where`` on purpose: that returns None for any filter it
+    cannot express, and callers that treated a None as "no constraint" silently dropped
+    the source too -- so ``source="fred"`` could return reports holding only ETF series.
+    A report with no entry for a source contains none of its series, whatever the
+    where-dict says, so this is the floor the where-clause narrows from.
+    """
+    return cast(metadata_col, JSONB).has_key((source or "").strip().lower())
+
+
 def metadata_where(metadata_col, source: str, where: dict | None):
     """
     Translate a document-search where-dict (from extract_etf_filters / extract_fred_filters)
